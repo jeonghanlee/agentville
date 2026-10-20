@@ -239,7 +239,8 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Turn completed | `system` record, `subtype: turn_duration`; `assistant` `stop_reason: end_turn` |
 | Thinking | `assistant` content item `thinking`; `thinkingDurationMs` |
 | Tool | `tool_use` (`id`, `name`) → `tool_result` (`tool_use_id`, `is_error`) |
-| Waiting | Not in transcripts. Candidates: `state: blocked` (`claude agents --json`), `Notification` / `PermissionRequest` hooks. |
+| Waiting | `sessions/<pid>.json` `status: waiting` with `waitingFor` present; cleared on decision. Not recorded in transcripts while open (trailing `tool_use` without `tool_result`). Outcome afterwards: `permissionDecision` (accept) or `toolDenialKind` (deny). |
+| Session status values | File: `idle`, `busy`, `shell`, `waiting`. `claude agents --json`: `status` as above or `null`; `state`: `working`, `blocked`, `null`. |
 | Usage limit | `quotaLimits` (`status`, `rateLimitType`, `resetsAt`) |
 | Error | `isApiErrorMessage`, `apiError`, `apiErrorStatus` |
 | Model, effort | `requestedModel`, `effort`, `perTurnEffort`; `attachment` `type: model` |
@@ -321,7 +322,7 @@ Follows the layout in the project handoff, with JSON Schema definitions under `s
 ## 9. Open Items
 
 - Default values: workload window, monitor mapping, process scan interval, heartbeat interval.
-- Claude Code waiting signal: meaning of `state: blocked` (requires a live permission prompt).
+- Claude Code: meaning of `state: blocked` and `status: shell`.
 - Codex app-server notification delivery to a passive client.
 - Antigravity waiting and usage-limit signals.
 - Contractor grouping when counts are large (Codex subagent threads dominate recent history).
