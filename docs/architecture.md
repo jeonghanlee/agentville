@@ -49,6 +49,11 @@ Each Host defines only itself in a user-level configuration file outside the rep
 
 - `alias` for a Project is set in Branch configuration. Default is the repository name.
 
+### 1.3.1 Room
+
+- One Room per Project. The mapping is always one-to-one.
+- The Common Office is the Room for agents outside any repository.
+
 ### 1.4 Employee
 
 An Employee is identified by:
@@ -127,5 +132,4 @@ conditions:
 
 - Name of the persistent Employee entity in the data model.
 - Canonical state names and full state model (including usage-limit waiting).
-- Room assignment.
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
