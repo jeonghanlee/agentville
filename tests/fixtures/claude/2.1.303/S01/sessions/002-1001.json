@@ -6,17 +6,18 @@
   "updatedAt": 1767225601000,
   "status": "busy",
   "statusUpdatedAt": 1767225601000,
-  "procStart": "1234567",
+  "procStart": "1000000",
   "pidDomain": "linux:<host>:pid:[1]",
   "kind": "interactive",
   "entrypoint": "cli",
   "name": "<text>",
   "nameSince": 1767225600000,
-  "nameSource": "auto",
+  "nameSource": "user",
   "tmux": "tmux-1:%1",
   "version": "2.1.303",
   "peerFeatures": [],
   "peerProtocol": 1,
   "messagingSocketPath": "/tmp/socket-1",
-  "bridgeSessionId": null
+  "bridgeSessionId": null,
+  "jobId": "<job-id>"
 }

@@ -1,12 +1,12 @@
 provider: claude
-version: "2.1.303"
+version: 2.1.303
 scenario: S14
 title: Normal exit; resume and runtime location select the returning Employee
 expect:
-  - {"presence": "on_duty", "seat": 1, "ref": "a", "after": 1}
-  - {"presence": "on_duty", "seat": 2, "ref": "b", "after": 2}
-  - {"presence": "off_duty", "seat": 1, "same_as": "a", "after": 3}
-  - {"presence": "off_duty", "seat": 2, "same_as": "b", "after": 4}
-  - {"presence": "on_duty", "seat": 2, "same_as": "b", "pid": 1002, "after": 5}
-  - {"presence": "on_duty", "seat": 1, "same_as": "a", "pid": 1004, "after": 6}
-  - {"presence": "off_duty", "seat": 2, "same_as": "b", "after": 7}
+- {presence: on_duty, seat: 1, ref: a, after: 1}
+- {presence: on_duty, seat: 2, ref: b, after: 2}
+- {presence: off_duty, seat: 1, same_as: a, after: 3}
+- {presence: off_duty, seat: 2, same_as: b, after: 4}
+- {presence: on_duty, seat: 2, same_as: b, pid: 1002, after: 5}
+- {presence: on_duty, seat: 1, same_as: a, pid: 1004, after: 6}
+- {presence: off_duty, seat: 2, same_as: b, after: 7}

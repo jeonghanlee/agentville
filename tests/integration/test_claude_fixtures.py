@@ -108,3 +108,5 @@ def test_scenario(scenario, tmp_path):
     for msg in replay.messages:
         validator.validate(msg)
     assert [m["seq"] for m in replay.messages] == list(range(1, len(replay.messages) + 1))
+    event_times = [m["event_at"] for m in replay.messages]
+    assert event_times == sorted(event_times), "event_at must not decrease"

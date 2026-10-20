@@ -22,6 +22,14 @@ class JsonlTail:
         self.path = path
         self._pos: _Position | None = None
 
+    def seek_end(self) -> None:
+        """Skip content already present; a file created later is read from its start."""
+        try:
+            st = os.stat(self.path)
+        except FileNotFoundError:
+            return
+        self._pos = _Position(st.st_ino, st.st_size)
+
     def read(self) -> Iterator[tuple[int, dict[str, Any]]]:
         """Yield (byte offset, record) for each new complete line."""
         try:

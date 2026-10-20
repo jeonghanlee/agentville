@@ -6,6 +6,7 @@ transcript ``<home>/projects/<encoded-cwd>/<sessionId>.jsonl``.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 from collections.abc import Callable
@@ -51,22 +52,28 @@ def _from_iso(value: Any) -> datetime | None:
     return None
 
 
-def proc_start_ticks(pid: int, proc_root: str = "/proc") -> str | None:
-    """Return field 22 of /proc/<pid>/stat (start time in clock ticks since boot)."""
+def _proc_stat_fields(pid: int, proc_root: str) -> list[str] | None:
+    """Return /proc/<pid>/stat fields from field 3 (state) onward."""
     try:
         with open(os.path.join(proc_root, str(pid), "stat"), encoding="ascii", errors="replace") as fh:
             stat = fh.read()
     except OSError:
         return None
     fields = stat[stat.rfind(")") + 2 :].split()
-    return fields[19] if len(fields) > 19 else None
+    return fields if len(fields) > 19 else None
 
 
-def _default_is_alive(pid: int, proc_start: str | None) -> bool:
-    ticks = proc_start_ticks(pid)
-    if ticks is None:
+def proc_start_ticks(pid: int, proc_root: str = "/proc") -> str | None:
+    """Return field 22 of /proc/<pid>/stat (start time in clock ticks since boot)."""
+    fields = _proc_stat_fields(pid, proc_root)
+    return fields[19] if fields else None
+
+
+def _default_is_alive(pid: int, proc_start: str | None, proc_root: str = "/proc") -> bool:
+    fields = _proc_stat_fields(pid, proc_root)
+    if fields is None or fields[0] == "Z":
         return False
-    return proc_start is None or ticks == str(proc_start)
+    return proc_start is None or fields[19] == str(proc_start)
 
 
 @dataclass
@@ -78,6 +85,7 @@ class _Shift:
     status: str | None
     waiting: bool
     tail: JsonlTail | None
+    proc_start: str | None = None
     model: tuple[str | None, str | None] = (None, None)
     open_tools: dict[str, str] = field(default_factory=dict)
 
@@ -99,10 +107,16 @@ class ClaudeAdapter:
         out: list[Observation] = []
         seen: set[int] = set()
         for pid, doc in self._read_session_files():
+            shift = self._shifts.get(pid)
+            if doc is None:
+                # Present but unreadable (e.g. mid-write): keep the shift until the next good read.
+                if shift is not None and self._is_alive(pid, shift.proc_start):
+                    seen.add(pid)
+                    self._read_transcript(shift, now, out)
+                continue
             if not self._is_alive(pid, doc.get("procStart")):
                 continue
             seen.add(pid)
-            shift = self._shifts.get(pid)
             if shift is not None and shift.key.native_id != self._native_id(pid, doc):
                 out.extend(self._end(shift, now))
                 shift = None
@@ -115,7 +129,7 @@ class ClaudeAdapter:
                 out.extend(self._end(self._shifts[pid], now))
         return out
 
-    def _read_session_files(self) -> list[tuple[int, dict[str, Any]]]:
+    def _read_session_files(self) -> list[tuple[int, dict[str, Any] | None]]:
         directory = os.path.join(self.home, "sessions")
         try:
             names = os.listdir(directory)
@@ -129,9 +143,11 @@ class ClaudeAdapter:
             try:
                 with open(os.path.join(directory, name), encoding="utf-8") as fh:
                     doc = json.load(fh)
-            except (OSError, json.JSONDecodeError):
+            except FileNotFoundError:
                 continue
-            if isinstance(doc, dict) and doc.get("pid") == int(stem):
+            except (OSError, json.JSONDecodeError):
+                doc = None
+            if doc is None or (isinstance(doc, dict) and doc.get("pid") == int(stem)):
                 result.append((int(stem), doc))
         return result
 
@@ -141,7 +157,7 @@ class ClaudeAdapter:
 
     def _start(self, pid: int, doc: dict[str, Any], now: datetime, out: list[Observation]) -> _Shift:
         key = ShiftKey(PROVIDER, self._native_id(pid, doc))
-        shift = _Shift(key, pid, doc.get("cwd", ""), None, None, False, None)
+        shift = _Shift(key, pid, doc.get("cwd", ""), None, None, False, None, doc.get("procStart"))
         self._shifts[pid] = shift
         started = _from_epoch_ms(doc.get("startedAt")) or now
         out.append(
@@ -166,10 +182,12 @@ class ClaudeAdapter:
         at = _from_epoch_ms(doc.get("statusUpdatedAt")) or _from_epoch_ms(doc.get("updatedAt")) or now
         session_id = doc.get("sessionId")
         if session_id and session_id != shift.session_id:
+            self._read_transcript(shift, now, out)
+            shift.open_tools.clear()
             shift.session_id = session_id
-            shift.tail = JsonlTail(
-                os.path.join(self.home, "projects", encode_cwd(shift.cwd), f"{session_id}.jsonl")
-            )
+            # History written before attach is not replayed; live state comes from the session file.
+            shift.tail = JsonlTail(self._transcript_path(shift.cwd, session_id))
+            shift.tail.seek_end()
             out.append(Observation(Kind.SESSION_STARTED, shift.key, at, now, Source.SESSION_FILE, {"session_id": session_id}))
         status = doc.get("status")
         if status == shift.status:
@@ -187,9 +205,20 @@ class ClaudeAdapter:
             Observation(Kind.SESSION_STATUS, shift.key, at, now, Source.SESSION_FILE, {"status": normalized.value, "native": status})
         )
 
+    def _transcript_path(self, cwd: str, session_id: str) -> str:
+        expected = os.path.join(self.home, "projects", encode_cwd(cwd), f"{session_id}.jsonl")
+        if os.path.exists(expected):
+            return expected
+        matches = glob.glob(os.path.join(glob.escape(self.home), "projects", "*", f"{session_id}.jsonl"))
+        return matches[0] if matches else expected
+
     def _read_transcript(self, shift: _Shift, now: datetime, out: list[Observation]) -> None:
         if shift.tail is None:
             return
+        if not os.path.exists(shift.tail.path) and shift.session_id:
+            resolved = self._transcript_path(shift.cwd, shift.session_id)
+            if resolved != shift.tail.path:
+                shift.tail = JsonlTail(resolved)
         for offset, record in shift.tail.read():
             raw = RawLocation(shift.tail.path, offset)
             at = _from_iso(record.get("timestamp")) or now
@@ -235,7 +264,7 @@ class ClaudeAdapter:
             if record.get("isApiErrorMessage"):
                 found.append((Kind.AGENT_ERROR, {"status": record.get("apiErrorStatus")}))
             model = (record.get("requestedModel") or message.get("model"), record.get("effort"))
-            if model != shift.model and any(model):
+            if not record.get("isApiErrorMessage") and model != shift.model and any(model):
                 shift.model = model
                 found.append((Kind.MODEL_CHANGED, {"model": model[0], "settings": {"effort": model[1]} if model[1] else {}}))
             for item in items:

@@ -221,6 +221,9 @@ Every observation carries observed time, event time, source (`session_file`, `se
 ### 3.3 Reading
 
 - Logs are read incrementally from the last position (inode, offset), triggered by file change notification.
+- A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start.
+- A session file that exists but cannot be parsed keeps the current shift; a shift ends only when its file is gone or its process is not alive.
+- Liveness: `/proc/<pid>/stat` exists, the process is not a zombie, and field 22 (start time in clock ticks) equals `procStart`.
 - Rotation, truncation, and partial trailing lines are handled.
 - Secrets matching token and key patterns are redacted before persistence.
 - Retention of raw observations is configurable per Branch.

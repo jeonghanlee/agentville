@@ -1,14 +1,16 @@
 provider: claude
-version: "2.1.303"
+version: 2.1.303
 scenario: S01
 title: One turn that reads a file and runs a shell command
 expect:
-  - {"presence": "on_duty", "seat": 1, "state": "idle", "after": 1}
-  - {"state": "working", "after": 2}
-  - {"state": "working", "after": 3}
-  - {"state": "working", "tool": "Read", "after": 4}
-  - {"state": "working", "tool": null, "after": 5}
-  - {"state": "working", "tool": "Bash", "workload": 2, "after": 6}
-  - {"state": "working", "tool": null, "after": 7}
-  - {"state": "idle", "states_since_start": ["unknown", "idle", "working", "completed", "idle"], "after": 8}
-  - {"state": "idle", "after": 9}
+- {presence: on_duty, seat: 1, state: idle, after: 1}
+- {state: working, after: 2}
+- {state: working, after: 3}
+- {state: working, tool: Read, after: 4}
+- {state: working, tool: null, after: 5}
+- {state: working, tool: Bash, workload: 2, after: 6}
+- {state: working, tool: null, after: 7}
+- state: idle
+  states_since_start: [unknown, idle, working, completed, idle]
+  after: 8
+- {state: idle, after: 9}
