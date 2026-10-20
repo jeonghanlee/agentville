@@ -243,6 +243,8 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Usage limit | `quotaLimits` (`status`, `rateLimitType`, `resetsAt`) |
 | Error | `isApiErrorMessage`, `apiError`, `apiErrorStatus` |
 | Model, effort | `requestedModel`, `effort`, `perTurnEffort`; `attachment` `type: model` |
+| Resume | `--resume` and `--continue` keep the same `sessionId` and append to the same file. |
+| Fork | `--fork-session` creates a new `sessionId` with no reference to the origin. |
 | Continuation | `continued-in` record in the old file (`continuedInSessionId`) |
 | Contractor | `tool_use` `name: Agent` → `toolUseResult.agentId`; `<sessionId>/subagents/agent-<agentId>.jsonl` and `.meta.json` (`toolUseId`); subagent records carry the parent `sessionId` |
 | Project | `cwd`, `gitBranch` on records |
@@ -261,12 +263,15 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Usage limit | rollout `event_msg` `token_count.rate_limits` (`primary.resets_at`) |
 | Error | status `systemError`; rollout `task_complete.error` |
 | Model, effort | rollout `thread_settings_applied`, `turn_context` |
-| Continuation, Contractor | Thread `forkedFromId`, `parentThreadId`; `state_5.sqlite` `thread_spawn_edges` |
+| Resume | Same session id; appends to the same rollout file. |
+| Fork, Contractor | Thread `forkedFromId`, `parentThreadId`; `state_5.sqlite` `thread_spawn_edges` |
 | Project | Thread `cwd`, `gitInfo` |
 | Account | Codex home (one daemon per home) |
 
 - No pid is exposed by Codex logs, sqlite state, or app-server responses.
-- The Collector acts as a read-only app-server client. No write method is called.
+- The Collector acts as a read-only app-server client. Only `thread/loaded/list` and `thread/read` are called; no method that starts, resumes, sends to, or interrupts a thread.
+- Only loaded threads are read. Reading a `notLoaded` thread is avoided until its side effects are verified.
+- Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only; waiting state is unavailable for them.
 
 #### Antigravity CLI
 
@@ -317,7 +322,7 @@ Follows the layout in the project handoff, with JSON Schema definitions under `s
 
 - Default values: workload window, monitor mapping, process scan interval, heartbeat interval.
 - Claude Code waiting signal: meaning of `state: blocked` (requires a live permission prompt).
-- Claude Code `--resume` file reference to the original session.
+- Codex app-server notification delivery to a passive client.
 - Antigravity waiting and usage-limit signals.
 - Contractor grouping when counts are large (Codex subagent threads dominate recent history).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
