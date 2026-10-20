@@ -153,7 +153,7 @@ conditions:
 | `completed` | Provider turn-completed event. | Desk | Momentary checkmark, then `idle` |
 | `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | HQ notification |
 | `limited` | Provider usage-limit event. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No HQ notification. |
-| `unknown` | Insufficient or contradictory evidence. | Desk | Pending |
+| `unknown` | Insufficient or contradictory evidence. | Desk | Dimmed, question mark overhead |
 
 ### 2.3 Idle Progression
 
@@ -184,6 +184,5 @@ conditions:
 
 ## 3. Open Items
 
-- Rendering of `unknown`.
 - Default values for workload window and monitor mapping (after M0).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
