@@ -182,7 +182,86 @@ conditions:
 - The number of monitors on an Employee's desk scales with tool execution count in a recent time window.
 - Window size and count-to-monitor mapping are defaults, configurable per Branch.
 
-## 3. Open Items
+## 3. Collector
 
-- Default values for workload window and monitor mapping (after M0).
+The Collector runs on each Branch as a systemd user service under the owning user's account. Root is never required.
+
+### 3.1 Components
+
+| Component | Responsibility | Provider-specific |
+|---|---|---|
+| Adapter | Discovers provider processes and logs; converts them into observations. | Yes |
+| Judge | Determines Employee assignment, activity state, and condition from observations. | No |
+| Store | Persists raw observations, Employee history, and `seq` (SQLite). | No |
+| Sender | Delivers messages to HQ per [protocol.md](protocol.md). | No |
+
+### 3.2 Observations
+
+An Adapter emits only the observations its provider exposes.
+
+| Observation | Content | Used for |
+|---|---|---|
+| `process.started` | pid, start time, working directory, parent pid, runtime location | On duty, Project, seat assignment |
+| `process.exited` | pid | Off duty |
+| `session.started` | session id, resumed flag, resumed session id | Seat assignment |
+| `turn.started` | | `working` or `thinking` |
+| `generation.started` / `generation.ended` | | `thinking` |
+| `tool.started` / `tool.finished` | tool name, success | `working`, workload |
+| `input.requested` | | `waiting` |
+| `turn.completed` | | `completed`, then `idle` |
+| `limit.reached` / `limit.cleared` | reset time, if known | `limited` |
+| `agent.error` | | `error` |
+| `model.changed` | model, runtime settings | Condition |
+| `account.changed` | account identity (Branch-local only) | Account attribute |
+| `subagent.started` / `subagent.ended` | subagent id, provider | Contractor |
+
+Every observation carries observed time, event time, source (`session_log`, `hook`, `process`), and raw location (log file and offset).
+
+### 3.3 Reading
+
+- Logs are read incrementally from the last position (inode, offset), triggered by file change notification.
+- Rotation, truncation, and partial trailing lines are handled.
+- Processes are discovered by periodic scan of `/proc`.
+- Secrets matching token and key patterns are redacted before persistence.
+- Retention of raw observations is configurable per Branch.
+
+## 4. HQ
+
+- Storage: SQLite (WAL). Current state per Branch and message history.
+- History retention: configurable. Default 30 days.
+- Browser API: REST for the full current state; WebSocket for changes. On reconnect, the browser fetches the full state via REST first.
+- Bound to `127.0.0.1` by default. Exposure beyond loopback requires authentication.
+
+## 5. Transport
+
+- The Collector on the HQ Host uses the same protocol over loopback.
+- Remote Branches connect outbound to HQ only. HQ never connects to a Branch.
+- Transport: HTTPS POST.
+- Authentication: per-Branch token, issued and revoked at HQ.
+
+## 6. Web UI
+
+- Navigation: Town map (Branches) → Branch building → Room. A Dashboard mode is available alongside.
+- Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
+- Inspector: shift history, sessions, attributes, recent state changes.
+- Notifications: `waiting`, `error`, reopened Branch or Project, unreachable Branch.
+- Assets: original simple pixel art. External assets only with verified licenses.
+
+## 7. Repository Layout
+
+Follows the layout in the project handoff, with JSON Schema definitions under `schemas/`.
+
+## 8. Milestones
+
+| Milestone | Scope |
+|---|---|
+| M0 | Inspect real Claude and Codex logs and process mappings on Linux. Produce anonymized fixtures. |
+| M1 | Collector: Adapters, Judge, Store. Branch-side state determination. |
+| M2 | HQ and live Dashboard. |
+| M3 | Pixel office. |
+| M4 | Hardening and release. |
+
+## 9. Open Items
+
+- Default values after M0: workload window, monitor mapping, process scan interval, heartbeat interval.
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
