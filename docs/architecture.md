@@ -39,6 +39,16 @@ Each Host defines only itself in a user-level configuration file outside the rep
 - Employees of the same Project on different Hosts are shown in the same room as remote collaboration.
 - Agents started outside any repository belong to the Common Office.
 
+#### Identification
+
+| Case | Rule |
+|---|---|
+| Repository with a Git remote | Identified automatically by the normalized remote URL (scheme, user, and `.git` suffix removed). |
+| Repository without a remote | Local Project of that Branch, identified by `(host, path)`. |
+| Fork or mirror | Grouped manually in Branch configuration. |
+
+- `alias` for a Project is set in Branch configuration. Default is the repository name.
+
 ### 1.4 Employee
 
 An Employee is identified by:
@@ -117,6 +127,5 @@ conditions:
 
 - Name of the persistent Employee entity in the data model.
 - Canonical state names and full state model (including usage-limit waiting).
-- Project identification across Hosts.
 - Room assignment.
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
