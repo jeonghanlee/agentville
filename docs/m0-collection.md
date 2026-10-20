@@ -2,107 +2,107 @@
 
 ## 1. Scope
 
-Samples establish how each provider exposes the observations listed in [architecture.md](architecture.md) §3.2. Log locations and formats are verified on the Host; nothing below is assumed correct until confirmed.
+Samples are anonymized fixtures for Adapter development and tests. Each sample captures, for one scenario, every source listed in [architecture.md](architecture.md) §3.4 that the scenario touches.
+
+Collection runs as the owning user, read-only against existing sessions. Test sessions run in a scratch directory.
 
 ## 2. Environment Record
 
-Record once per Host, per provider version:
+Recorded once per sample set:
 
 ````bash
 claude --version
 codex --version
+codex-personal app-server daemon version
+codex-work app-server daemon version
 uname -sr
 ````
 
-## 3. Log Location
+## 3. Sources
 
-Candidate locations, to be confirmed:
+| Provider | Source | Capture |
+|---|---|---|
+| Claude Code | `~/.claude/sessions/<pid>.json` | Snapshot on every change (poll at 0.5 s), with capture time |
+| Claude Code | `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` | Full file after the scenario |
+| Claude Code | `~/.claude/projects/<encoded-cwd>/<sessionId>/subagents/` | All `agent-*.jsonl` and `agent-*.meta.json` |
+| Claude Code | `claude agents --json` | Snapshot at each state change |
+| Codex | App-server `thread/loaded/list`, `thread/read` (read-only client, poll at 1 s) | Response on every status change, with capture time |
+| Codex | App-server notifications received by the read-only client | All, with receive time |
+| Codex | `<codex-home>/sessions/YYYY/MM/DD/rollout-*.jsonl` | Full file after the scenario |
+| Codex | `<codex-home>/state_5.sqlite` `threads`, `thread_spawn_edges` | Rows for the scenario's threads only |
+| All | Process view: `comm`, pid, parent chain, `/proc/<pid>/cwd` | Snapshot at each state change. No arguments, no environment. |
+| All | `tmux list-panes -a -F '#{session_name} #{pane_id} #{pane_pid} #{pane_current_path}'` | Snapshot at start |
 
-| Provider | Candidate |
-|---|---|
-| Claude Code | `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl` |
-| Codex | `~/.codex/sessions/YYYY/MM/DD/*.jsonl` |
+Never captured: `~/.claude/sessions/*.key`, credentials, process arguments, environment variables.
 
-Confirm by listing files modified during a scenario:
+## 4. Scenarios
 
-````bash
-touch /tmp/m0-mark
-# run the scenario
-find ~/.claude ~/.codex -type f -newer /tmp/m0-mark 2>/dev/null
-````
-
-Every file reported is collected, including files outside the candidate paths.
-
-## 4. Process and Runtime Record
-
-Captured while the scenario is running. Command-line arguments are excluded.
-
-````bash
-ps -eo pid,ppid,lstart,comm | grep -Ei 'claude|codex|node'
-for p in $(pgrep -f 'claude|codex'); do echo "$p $(readlink /proc/$p/cwd)"; done
-tmux list-panes -a -F '#{session_name} #{pane_id} #{pane_pid} #{pane_current_path}'
-````
-
-## 5. Scenarios
-
-Each scenario runs in a scratch repository with a Git remote, unless stated otherwise.
-
-| ID | Provider | Scenario | Target observation |
+| ID | Provider | Scenario | Target |
 |---|---|---|---|
-| S01 | both | One prompt that reads a file and runs a shell command | `turn.*`, `tool.*`, `generation.*` |
-| S02 | both | A command that requires approval; approve after 30 s | `input.requested` |
-| S03 | both | A command that fails (e.g. failing test) | `tool.finished` with failure |
-| S04 | claude | Task that launches a subagent | `subagent.*` |
+| S01 | both | One prompt that reads a file and runs a shell command | Turn, tool, thinking |
+| S02 | both | A command that hits an `ask` rule; deny once, approve once | Waiting |
+| S03 | both | A command that fails (e.g. failing test) | Tool failure stays `working` |
+| S04 | both | Task that launches a subagent | Contractor |
 | S05 | claude | Agent launches `codex` from its shell | Child-process Contractor |
-| S06 | both | Exit, then resume the same session | `session.started` with resume |
-| S07 | claude | `/clear` within one process | New session in same process |
-| S08 | both | Change model and effort mid-session | `model.changed` |
-| S09 | codex | Switch account, then resume | `account.changed` |
-| S10 | both | Two concurrent agents in the same repository, one in tmux, one without tmux | Seat assignment |
+| S06 | both | Exit, then resume; also fork | Resume, fork |
+| S07 | claude | `/clear` within one process | New session in one process |
+| S08 | both | Change model and effort mid-session | Condition |
+| S09 | codex | Same task under the personal and work homes | Account |
+| S10 | both | Two concurrent agents in one repository, one in tmux, one without tmux | Seat assignment |
 | S11 | both | Agent started outside any repository | Common Office |
-| S12 | both | Usage limit reached (collect when it occurs) | `limit.*` |
-| S13 | both | Agent-level error, e.g. network disconnected during a turn | `agent.error` |
-| S14 | both | Normal exit | `process.exited` |
+| S12 | both | Usage limit reached (collect when it occurs) | `limited` |
+| S13 | both | Agent-level error (e.g. network disconnected during a turn) | `error` |
+| S14 | both | Normal exit | Off duty |
 
-## 6. Anonymization
+Each scenario runs interactively (Claude Code session in tmux; Codex through the shared daemon) unless stated otherwise.
 
-### 6.1 Preserve
+## 5. Anonymization
 
-- JSON structure, key names, value types, line order.
-- Event and record type fields.
-- Timestamps. A constant offset may be applied to all timestamps in one sample.
-- Tool names, model names, runtime settings (effort, fast mode).
-- Error types and codes, usage-limit reset times, token counts.
-- Identifier consistency: the same original value maps to the same replacement across all files of a sample.
-- Identifier format: a UUID is replaced by a UUID, a path by a path.
+### 5.1 Preserve
 
-### 6.2 Replace
+- JSON structure, key names, value types, record order.
+- Record type, subtype, status, and state values.
+- Timestamps. One constant offset may be applied per sample.
+- Tool names, model names, runtime settings.
+- Error types and codes, rate-limit reset times, token counts.
+- Identifier consistency within a sample: one original value maps to one replacement in every file.
+- Identifier format: UUID to UUID, path to path, integer to integer.
+
+### 5.2 Replace
 
 | Content | Replacement |
 |---|---|
-| Prompt and response text | `<text:N>` where N is the original length |
+| Prompt and response text, thinking text | `<text:N>` (N = original length) |
 | Tool input and output content | `<tool-input:N>`, `<tool-output:N>` |
-| File paths | `/home/user/repo/...` with relative structure kept |
+| `waitingFor` | First token kept, rest `<text:N>` |
+| File paths and `cwd` | `/home/user/repo/...`, relative structure kept |
+| Encoded project directory names | Re-encoded from the replaced `cwd` |
 | User, host, and organization names | `user`, `host`, `org` |
-| Email addresses and account identifiers | `user@example.com`, `account-1`, `account-2` |
+| Email addresses, account and user identifiers | `user@example.com`, `account-1`, `account-2` |
 | Git remote URLs | `github.com/example/repo` |
-| Session, request, and message identifiers | Consistent generated UUIDs |
+| Session, thread, agent, request, message identifiers | Consistent generated UUIDs |
+| pid, `procStart`, `pidDomain` | Consistent small integers and placeholders |
+| tmux session names and socket paths | `tmux-1`, `/tmp/socket-1` |
 | Tokens, keys, cookies, authorization headers | `<secret>` |
 
-### 6.3 Verify
+### 5.3 Verify
 
-A sample is accepted only when the following search returns nothing:
+A sample is accepted only when this search returns nothing:
 
 ````bash
 grep -rEi "$USER|$(hostname)|@[a-z0-9.-]+\.[a-z]{2,}|/home/[^u]|sk-|ghp_|github_pat_|xox[bp]-|Bearer " <sample-dir>
 ````
 
-## 7. Sample Layout
+## 6. Sample Layout
 
 ````text
 tests/fixtures/<provider>/<version>/<scenario-id>/
-├── meta.yaml        # provider, version, scenario, timestamp offset
-├── logs/            # anonymized log files, original relative names
-├── process.txt      # anonymized §4 output
-└── tmux.txt         # anonymized §4 output, if applicable
+├── meta.yaml        # provider, version, scenario, timestamp offset, capture notes
+├── sessions/        # Claude: <pid>.json snapshots, one file per capture
+├── agents/          # Claude: claude agents --json snapshots
+├── appserver/       # Codex: responses and notifications, JSONL with capture time
+├── logs/            # transcripts, rollouts, subagent files
+├── state/           # Codex: selected sqlite rows as JSON
+├── process.jsonl    # process view snapshots
+└── tmux.txt
 ````
