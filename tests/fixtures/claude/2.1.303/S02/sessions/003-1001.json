@@ -6,7 +6,7 @@
   "updatedAt": 1767225603000,
   "status": "waiting",
   "statusUpdatedAt": 1767225603000,
-  "procStart": "100",
+  "procStart": "1234567",
   "pidDomain": "linux:<host>:pid:[1]",
   "kind": "interactive",
   "entrypoint": "cli",

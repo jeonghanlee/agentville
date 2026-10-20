@@ -6,17 +6,15 @@
   "updatedAt": 1767225610000,
   "status": "idle",
   "statusUpdatedAt": 1767225610000,
-  "procStart": "300",
+  "procStart": "3000000",
   "pidDomain": "linux:<host>:pid:[1]",
-  "kind": "interactive",
+  "kind": "bg",
   "entrypoint": "cli",
   "name": "<text>",
   "nameSince": 1767225600000,
-  "nameSource": "auto",
-  "tmux": "tmux-1:%3",
   "version": "2.1.303",
   "peerFeatures": [],
   "peerProtocol": 1,
   "messagingSocketPath": "/tmp/socket-1",
-  "bridgeSessionId": null
+  "bridgeSessionId": "<bridge-id>"
 }

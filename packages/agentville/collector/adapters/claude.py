@@ -51,8 +51,22 @@ def _from_iso(value: Any) -> datetime | None:
     return None
 
 
+def proc_start_ticks(pid: int, proc_root: str = "/proc") -> str | None:
+    """Return field 22 of /proc/<pid>/stat (start time in clock ticks since boot)."""
+    try:
+        with open(os.path.join(proc_root, str(pid), "stat"), encoding="ascii", errors="replace") as fh:
+            stat = fh.read()
+    except OSError:
+        return None
+    fields = stat[stat.rfind(")") + 2 :].split()
+    return fields[19] if len(fields) > 19 else None
+
+
 def _default_is_alive(pid: int, proc_start: str | None) -> bool:
-    return os.path.exists(f"/proc/{pid}")
+    ticks = proc_start_ticks(pid)
+    if ticks is None:
+        return False
+    return proc_start is None or ticks == str(proc_start)
 
 
 @dataclass
