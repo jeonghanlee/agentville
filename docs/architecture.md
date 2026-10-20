@@ -10,7 +10,7 @@
 | Branch | A Host. |
 | Project | One repository. |
 | Common Office | The Project for agents started outside any repository. |
-| Employee | A persistent agent identity within a Project on a Host. |
+| Employee | An `Agent`: a persistent agent identity within a Project on a Host. |
 | Contractor | An `AgentInstance` with a `parent_instance_id` (subagent). |
 | Condition | Display mapping of an Employee's model and runtime settings. |
 
@@ -56,7 +56,9 @@ Each Host defines only itself in a user-level configuration file outside the rep
 
 ### 1.4 Employee
 
-An Employee is identified by:
+An Employee is an `Agent` in the data model. Each shift is an `AgentInstance` linked to its `Agent`.
+
+An `Agent` is identified by:
 
 ```text
 (project, host, provider, seat)
@@ -130,6 +132,5 @@ conditions:
 
 ## 2. Open Items
 
-- Name of the persistent Employee entity in the data model.
 - Canonical state names and full state model (including usage-limit waiting).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
