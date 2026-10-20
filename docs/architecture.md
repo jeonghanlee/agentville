@@ -65,7 +65,7 @@ An `Agent` is identified by:
 ```
 
 - `seat` is a number distinguishing concurrent agents of the same provider in the same Project on the same Host.
-- One process lifetime is one shift of an Employee.
+- One shift of an Employee is defined per provider by its Adapter (see 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server.
 - Account and model are Employee attributes. Changes are recorded as history.
 
 #### Seat assignment
@@ -221,9 +221,61 @@ Every observation carries observed time, event time, source (`session_log`, `hoo
 
 - Logs are read incrementally from the last position (inode, offset), triggered by file change notification.
 - Rotation, truncation, and partial trailing lines are handled.
-- Processes are discovered by periodic scan of `/proc`.
 - Secrets matching token and key patterns are redacted before persistence.
 - Retention of raw observations is configurable per Branch.
+- Basic observation never modifies agent configuration. Hooks are optional enhancements.
+
+### 3.4 Provider Sources
+
+Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.163.0).
+
+#### Claude Code
+
+| Purpose | Source |
+|---|---|
+| Live sessions, shift | `~/.claude/sessions/<pid>.json` (`pid`, `procStart`, `sessionId`, `status`, `statusUpdatedAt`, `cwd`, `tmux`, `kind`). Equivalent view: `claude agents --json`. |
+| Shift identity | `(pid, procStart)` |
+| Detail | `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` |
+| Turn completed | `system` record, `subtype: turn_duration`; `assistant` `stop_reason: end_turn` |
+| Thinking | `assistant` content item `thinking`; `thinkingDurationMs` |
+| Tool | `tool_use` (`id`, `name`) → `tool_result` (`tool_use_id`, `is_error`) |
+| Waiting | Not in transcripts. Candidates: `state: blocked` (`claude agents --json`), `Notification` / `PermissionRequest` hooks. |
+| Usage limit | `quotaLimits` (`status`, `rateLimitType`, `resetsAt`) |
+| Error | `isApiErrorMessage`, `apiError`, `apiErrorStatus` |
+| Model, effort | `requestedModel`, `effort`, `perTurnEffort`; `attachment` `type: model` |
+| Continuation | `continued-in` record in the old file (`continuedInSessionId`) |
+| Contractor | `tool_use` `name: Agent` → `toolUseResult.agentId`; `<sessionId>/subagents/agent-<agentId>.jsonl` and `.meta.json` (`toolUseId`); subagent records carry the parent `sessionId` |
+| Project | `cwd`, `gitBranch` on records |
+
+#### Codex
+
+| Purpose | Source |
+|---|---|
+| Live threads, shift | App-server daemon per Codex home (`<launcher> app-server daemon version` → `socketPath`); JSON-RPC over WebSocket on the control socket: `thread/loaded/list`, `thread/read`, `thread/list` |
+| Shift identity | Thread `id` while its status is not `notLoaded` |
+| State changes | Notification `thread/status/changed` (`threadId`, `status`) |
+| Thread status | `notLoaded`, `idle`, `systemError`, `active` with `activeFlags`: `waitingOnApproval`, `waitingOnUserInput` |
+| Turn | `turn/started`, `turn/completed` |
+| Tool | `item/started`, `item/completed` |
+| Detail | `<codex-home>/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl` |
+| Usage limit | rollout `event_msg` `token_count.rate_limits` (`primary.resets_at`) |
+| Error | status `systemError`; rollout `task_complete.error` |
+| Model, effort | rollout `thread_settings_applied`, `turn_context` |
+| Continuation, Contractor | Thread `forkedFromId`, `parentThreadId`; `state_5.sqlite` `thread_spawn_edges` |
+| Project | Thread `cwd`, `gitInfo` |
+| Account | Codex home (one daemon per home) |
+
+- No pid is exposed by Codex logs, sqlite state, or app-server responses.
+- The Collector acts as a read-only app-server client. No write method is called.
+
+#### Antigravity CLI
+
+| Purpose | Source |
+|---|---|
+| Live sessions | `~/.gemini/antigravity-cli/presence/<conversation-uuid>.lock` held by a live `agy` process |
+| Detail | `brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl` (`type`, `source`, `status`: `DONE`, `ERROR`, `RUNNING`) |
+
+Antigravity waiting and usage-limit signals are not yet identified.
 
 ## 4. HQ
 
@@ -263,5 +315,9 @@ Follows the layout in the project handoff, with JSON Schema definitions under `s
 
 ## 9. Open Items
 
-- Default values after M0: workload window, monitor mapping, process scan interval, heartbeat interval.
+- Default values: workload window, monitor mapping, process scan interval, heartbeat interval.
+- Claude Code waiting signal: meaning of `state: blocked` (requires a live permission prompt).
+- Claude Code `--resume` file reference to the original session.
+- Antigravity waiting and usage-limit signals.
+- Contractor grouping when counts are large (Codex subagent threads dominate recent history).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
