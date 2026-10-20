@@ -203,11 +203,12 @@ An Adapter emits only the observations its provider exposes.
 |---|---|---|
 | `process.started` | pid, start time, working directory, parent pid, runtime location | On duty, Project, seat assignment |
 | `process.exited` | pid | Off duty |
-| `session.started` | session id, resumed flag, resumed session id | Seat assignment |
+| `session.started` | session id | Seat assignment |
+| `session.status` | normalized live status: `active`, `idle`, `waiting`, `unknown` | Activity state |
 | `turn.started` | | `working` or `thinking` |
 | `generation.started` / `generation.ended` | | `thinking` |
 | `tool.started` / `tool.finished` | tool name, success | `working`, workload |
-| `input.requested` | | `waiting` |
+| `input.requested` / `input.resolved` | reason | `waiting` |
 | `turn.completed` | | `completed`, then `idle` |
 | `limit.reached` / `limit.cleared` | reset time, if known | `limited` |
 | `agent.error` | | `error` |
@@ -215,7 +216,7 @@ An Adapter emits only the observations its provider exposes.
 | `account.changed` | account identity (Branch-local only) | Account attribute |
 | `subagent.started` / `subagent.ended` | subagent id, provider | Contractor |
 
-Every observation carries observed time, event time, source (`session_log`, `hook`, `process`), and raw location (log file and offset).
+Every observation carries observed time, event time, source (`session_file`, `session_log`, `app_server`, `hook`, `process`), and raw location (log file and offset) when read from a log.
 
 ### 3.3 Reading
 
@@ -307,7 +308,16 @@ Antigravity waiting and usage-limit signals are not yet identified.
 
 ## 7. Repository Layout
 
-Follows the layout in the project handoff, with JSON Schema definitions under `schemas/`.
+````text
+agentville/
+├── pyproject.toml
+├── schemas/protocol-v1.schema.json
+├── packages/agentville/
+│   ├── common/          # observations, protocol envelope
+│   └── collector/       # jsonl reader, project resolver, judge, adapters/
+├── tests/{unit,integration,fixtures}/
+└── docs/
+````
 
 ## 8. Milestones
 

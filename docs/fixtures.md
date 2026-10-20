@@ -49,7 +49,8 @@ Validation is repeated when a provider version changes.
 
 ````text
 tests/fixtures/<provider>/<version>/<scenario-id>/
-├── meta.yaml        # provider, version, scenario, expected states
+├── meta.yaml        # provider, version, scenario, expectations
+├── timeline.jsonl   # ordered operations replayed by the test harness
 ├── sessions/        # Claude: <pid>.json snapshots in order
 ├── agents/          # Claude: claude agents --json snapshots
 ├── appserver/       # Codex: responses and notifications, JSONL
@@ -58,4 +59,12 @@ tests/fixtures/<provider>/<version>/<scenario-id>/
 └── process.jsonl    # process view snapshots
 ````
 
-`meta.yaml` lists the expected Employee assignment and activity state sequence, which tests assert against.
+`timeline.jsonl` operations:
+
+| `op` | Effect |
+|---|---|
+| `session_write` | Copies a `sessions/` snapshot to `<home>/sessions/<pid>.json` |
+| `session_remove` | Removes `<home>/sessions/<pid>.json` (process exit) |
+| `log_append` | Appends a line range of a `logs/` file to the transcript path for `cwd` and `session` |
+
+The harness polls the Adapter after each operation and feeds the Judge. `meta.yaml` `expect` entries name the step (`after`) and the expected `seat`, `presence`, `state`, `tool`, `workload`, or state history of the selected Employee; `ref` and `same_as` assert Employee identity across steps. Every emitted message is validated against the protocol schema.

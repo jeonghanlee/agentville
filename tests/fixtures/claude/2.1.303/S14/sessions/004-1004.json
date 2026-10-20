@@ -1,0 +1,22 @@
+{
+  "pid": 1004,
+  "sessionId": "33333333-3333-4333-8333-333333333333",
+  "cwd": "/home/user/repo",
+  "startedAt": 1767225600000,
+  "updatedAt": 1767225730000,
+  "status": "idle",
+  "statusUpdatedAt": 1767225730000,
+  "procStart": "400",
+  "pidDomain": "linux:<host>:pid:[1]",
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "name": "<text>",
+  "nameSince": 1767225600000,
+  "nameSource": "auto",
+  "tmux": "tmux-1:%1",
+  "version": "2.1.303",
+  "peerFeatures": [],
+  "peerProtocol": 1,
+  "messagingSocketPath": "/tmp/socket-1",
+  "bridgeSessionId": null
+}

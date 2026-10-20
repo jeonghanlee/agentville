@@ -4,7 +4,7 @@
 
 - The Branch determines Employee assignment, activity state, and condition. HQ stores and displays the results.
 - Raw observations remain on the Branch.
-- The canonical message schema is defined in JSON Schema. Implementations conform to it.
+- The canonical message schema is `schemas/protocol-v1.schema.json` (JSON Schema 2020-12). Implementations conform to it.
 
 ## 2. Delivery
 
@@ -73,7 +73,7 @@ Carries the full current state of one Employee.
 | `session_id` | Current provider session identifier. May change within an instance. |
 | `state` | `working`, `thinking`, `waiting`, `idle`, `completed`, `error`, `limited`, `unknown` |
 | `state_since` | UTC start time of the state. Used by the UI for idle progression. |
-| `source` | `session_log`, `hook`, `process` |
+| `source` | `session_file`, `session_log`, `app_server`, `hook`, `process` |
 | `confidence` | `high`, `medium`, `low` |
 | `tool` | Tool name when `working`, e.g. `Bash`, `Edit`. |
 | `reset_at` | Usage-limit reset time when `limited`, if known. |

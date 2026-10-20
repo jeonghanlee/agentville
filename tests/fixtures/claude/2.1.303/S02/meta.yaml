@@ -1,0 +1,13 @@
+provider: claude
+version: "2.1.303"
+scenario: S02
+title: Command hitting an ask rule; deny once, approve once
+expect:
+  - {"state": "idle", "after": 1}
+  - {"state": "working", "tool": "Bash", "after": 4}
+  - {"state": "waiting", "after": 5}
+  - {"state": "idle", "after": 6}
+  - {"state": "idle", "after": 7}
+  - {"state": "waiting", "after": 11}
+  - {"state": "working", "after": 12}
+  - {"state": "idle", "after": 15}

@@ -1,0 +1,7 @@
+{"at": "2026-01-01T00:00:00.000Z", "op": "session_write", "pid": 1001, "file": "sessions/001-1001.json"}
+{"at": "2026-01-01T00:00:10.000Z", "op": "session_write", "pid": 1003, "file": "sessions/002-1003.json"}
+{"at": "2026-01-01T00:01:00.000Z", "op": "session_remove", "pid": 1001}
+{"at": "2026-01-01T00:01:10.000Z", "op": "session_remove", "pid": 1003}
+{"at": "2026-01-01T00:02:00.000Z", "op": "session_write", "pid": 1002, "file": "sessions/003-1002.json"}
+{"at": "2026-01-01T00:02:10.000Z", "op": "session_write", "pid": 1004, "file": "sessions/004-1004.json"}
+{"at": "2026-01-01T00:03:20.000Z", "op": "session_remove", "pid": 1002}

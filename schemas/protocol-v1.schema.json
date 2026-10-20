@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jeonghanlee/agentville/schemas/protocol-v1.schema.json",
+  "title": "AgentVille Branch-HQ message, schema version 1",
+  "type": "object",
+  "required": ["schema_version", "branch_id", "seq", "kind", "event_at", "sent_at", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "branch_id": {"type": "string", "minLength": 1},
+    "seq": {"type": "integer", "minimum": 0},
+    "kind": {"enum": ["snapshot", "heartbeat", "branch", "agent", "activity", "contractor"]},
+    "event_at": {"$ref": "#/$defs/timestamp"},
+    "sent_at": {"$ref": "#/$defs/timestamp"},
+    "payload": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "snapshot"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/snapshot"}}}},
+    {"if": {"properties": {"kind": {"const": "heartbeat"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/heartbeat"}}}},
+    {"if": {"properties": {"kind": {"const": "branch"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/branch"}}}},
+    {"if": {"properties": {"kind": {"const": "agent"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/agent"}}}},
+    {"if": {"properties": {"kind": {"const": "activity"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/activity"}}}},
+    {"if": {"properties": {"kind": {"const": "contractor"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/contractor"}}}}
+  ],
+  "$defs": {
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "nullable_timestamp": {"oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+    "activity_state": {"enum": ["working", "thinking", "waiting", "idle", "completed", "error", "limited", "unknown"]},
+    "source": {"enum": ["session_file", "session_log", "app_server", "hook", "process"]},
+    "confidence": {"enum": ["high", "medium", "low"]},
+
+    "branch": {
+      "type": "object",
+      "required": ["alias", "country", "time", "location", "thresholds"],
+      "additionalProperties": false,
+      "properties": {
+        "alias": {"type": "string"},
+        "country": {"type": "string"},
+        "time": {"type": "string"},
+        "location": {"type": "string"},
+        "thresholds": {
+          "type": "object",
+          "required": ["phone", "doze", "lounge", "leave"],
+          "additionalProperties": false,
+          "properties": {
+            "phone": {"type": "integer", "minimum": 0},
+            "doze": {"type": "integer", "minimum": 0},
+            "lounge": {"type": "integer", "minimum": 0},
+            "leave": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+
+    "instance": {
+      "type": "object",
+      "required": ["instance_id", "started_at", "runtime"],
+      "additionalProperties": false,
+      "properties": {
+        "instance_id": {"type": "string"},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "runtime": {"type": "object"}
+      }
+    },
+
+    "agent": {
+      "type": "object",
+      "required": ["agent_id", "project_id", "project_alias", "provider", "seat", "presence", "presence_since"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {"type": "string"},
+        "project_id": {"type": "string"},
+        "project_alias": {"type": "string"},
+        "provider": {"type": "string"},
+        "seat": {"type": "integer", "minimum": 1},
+        "alias": {"type": ["string", "null"]},
+        "presence": {"enum": ["on_duty", "off_duty", "on_leave"]},
+        "presence_since": {"$ref": "#/$defs/timestamp"},
+        "account_alias": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]},
+        "settings": {"type": "object"},
+        "condition": {"type": "string"},
+        "instance": {"oneOf": [{"$ref": "#/$defs/instance"}, {"type": "null"}]}
+      }
+    },
+
+    "activity": {
+      "type": "object",
+      "required": ["agent_id", "instance_id", "state", "state_since", "source", "confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {"type": "string"},
+        "instance_id": {"type": "string"},
+        "session_id": {"type": ["string", "null"]},
+        "state": {"$ref": "#/$defs/activity_state"},
+        "state_since": {"$ref": "#/$defs/timestamp"},
+        "source": {"$ref": "#/$defs/source"},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "tool": {"type": ["string", "null"]},
+        "reset_at": {"$ref": "#/$defs/nullable_timestamp"},
+        "workload": {"type": "integer", "minimum": 0}
+      }
+    },
+
+    "contractor": {
+      "type": "object",
+      "required": ["contractor_id", "parent_instance_id", "provider", "origin", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "contractor_id": {"type": "string"},
+        "parent_instance_id": {"type": "string"},
+        "provider": {"type": "string"},
+        "origin": {"enum": ["in_process", "child_process"]},
+        "status": {"enum": ["hired", "ended"]},
+        "state": {"$ref": "#/$defs/activity_state"},
+        "state_since": {"$ref": "#/$defs/timestamp"},
+        "tool": {"type": ["string", "null"]}
+      }
+    },
+
+    "snapshot": {
+      "type": "object",
+      "required": ["branch", "agents", "activities", "contractors"],
+      "additionalProperties": false,
+      "properties": {
+        "branch": {"$ref": "#/$defs/branch"},
+        "agents": {"type": "array", "items": {"$ref": "#/$defs/agent"}},
+        "activities": {"type": "array", "items": {"$ref": "#/$defs/activity"}},
+        "contractors": {"type": "array", "items": {"$ref": "#/$defs/contractor"}}
+      }
+    },
+
+    "heartbeat": {
+      "type": "object",
+      "required": ["interval"],
+      "additionalProperties": false,
+      "properties": {
+        "interval": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}
