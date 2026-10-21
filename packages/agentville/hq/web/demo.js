@@ -1,9 +1,9 @@
 // Synthetic display data, isolated from the HQ store and real provider sessions.
 export function demoState(now = Date.now()) {
   const ago = (seconds) => new Date(now - seconds * 1000).toISOString();
-  const branch = (branch_id, alias, reachable, location) => ({
+  const branch = (branch_id, alias, reachable, location, time) => ({
     branch_id, reachable, last_seen_at: ago(reachable ? 4 : 840), heartbeat_interval: 30,
-    branch: { alias, location, country: "", time: "", thresholds: { phone: 300, doze: 1800, lounge: 3600, leave: 604800 } },
+    branch: { alias, location, country: "", time, thresholds: { phone: 300, doze: 1800, lounge: 3600, leave: 604800 } },
   });
   const people = [
     ["milo", "Milo", "home", "agentville", "claude", "working", 96, "Bash", "extra-coffee"],
@@ -16,6 +16,7 @@ export function demoState(now = Date.now()) {
     ["luna", "Luna", "home", "agentville", "claude", "idle", 4000, "", "extra-coffee"],
     ["pip", "Pip", "home", "garden-ui", "codex", "idle", 5200, "", "lazy"],
     ["remy", "Remy", "home", "garden-ui", "claude", "error", 540, "", "normal"],
+    ["wren", "Wren", "home", "common-office", "claude", "limited", 900, "", "normal"],
   ];
   const seats = new Map();
   const agents = people.map(([id, alias, host, project, provider, , , , condition]) => {
@@ -33,14 +34,19 @@ export function demoState(now = Date.now()) {
   const activities = people.map(([id, , host, , , state, seconds, tool]) => ({
     branch_id: host, agent_id: id, instance_id: "instance-" + id, session_id: "demo-" + id,
     state, state_since: ago(seconds), tool, workload: state === "working" ? 12 : 0,
+    reset_at: state === "limited" ? new Date(now + 5400 * 1000).toISOString() : null,
     source: "session_log", confidence: "high",
   }));
+  const contractor = (parent, id, provider, state, seconds, tool = null) => ({ branch_id: parent === "sage" ? "garden" : "home",
+    contractor_id: "helper-" + id, parent_instance_id: "instance-" + parent, provider, origin: "in_process",
+    status: "hired", state, state_since: ago(seconds), tool });
   return {
-    branches: [branch("home", "Home studio", true, "A sunny corner of the world"),
-      branch("garden", "Garden studio", true, "A little further down the road"),
-      branch("night", "Night studio", false, "Taking a little time offline")],
+    branches: [branch("home", "Home studio", true, "A sunny corner of the world", "Europe/Stockholm"),
+      branch("garden", "Garden studio", true, "A little further down the road", "Asia/Seoul"),
+      branch("night", "Night studio", false, "Taking a little time offline", "America/Vancouver")],
     agents, activities,
-    contractors: [{ branch_id: "home", contractor_id: "helper", parent_instance_id: "instance-milo",
-      provider: "claude", origin: "in_process", status: "hired", state: "working", state_since: ago(240), tool: "Read" }],
+    contractors: [contractor("milo", "milo", "claude", "working", 240, "Read"),
+      contractor("sage", "sage-1", "codex", "working", 80, "exec_command"), contractor("sage", "sage-2", "claude", "waiting", 30),
+      contractor("sage", "sage-3", "claude", "idle", 300)],
   };
 }

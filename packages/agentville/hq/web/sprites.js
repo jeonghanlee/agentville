@@ -97,6 +97,12 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
     grip.style.setProperty("--left-pivot", svg.style.getPropertyValue("--left-pivot"));
     hand.before(grip); grip.append(hand,prop);
   }
+  // Study mode keeps a small book stack on the desk side of the character.
+  const books = pose === 2 ? [24,15] : pose === 1 ? [23,22] : [23,30];
+  if (condition === "study-mode") svg.insertAdjacentHTML("beforeend", '<g class="study-books" transform="translate(' + books.join(" ") + ')" stroke="#5f5440" stroke-width=".3">'
+    + '<rect y="4.8" width="8" height="2.2" rx=".3" fill="#7f9570"/><path d="M.7 5.5h6.6" stroke="#f1e8ce" stroke-width=".7"/>'
+    + '<rect x=".8" y="2.8" width="6.4" height="2" rx=".3" fill="#b67c57"/><path d="M1.4 3.5h5.2" stroke="#f1e8ce" stroke-width=".6"/>'
+    + '<rect x=".3" y=".7" width="7" height="2.1" rx=".3" fill="#8995ad" transform="rotate(-6 4 1.7)"/></g>');
   if (state === "limited") svg.insertAdjacentHTML("beforeend", '<g class="state-clock"><circle cx="27" cy="5" r="3" fill="#f2e9d0" stroke="#9e8d69" stroke-width=".7"/><path d="M27 3v2l1.5 1" fill="none" stroke="#7c745b" stroke-width=".6"/></g>');
   if (workstation && state === "working") {
     const { seat, keys } = workstation;
@@ -128,6 +134,19 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
     svg.style.setProperty("--mouse-y", (targets[2][1]-targets[1][1]) + "px");
     svg.append(svg.querySelector(".head"));
   }
+  return svg;
+}
+
+// A switched-off monitor for limited Employees whose screen is not visible in the room artwork.
+export function screenOffSprite() {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 12 11");
+  svg.setAttribute("class", "screen-off");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = '<rect x=".5" y=".5" width="11" height="7.5" rx="1" fill="#353d39" stroke="#7d8578" stroke-width=".6"/>'
+    + '<path d="M2 2.2l2.5-.8" stroke="#56605a" stroke-width=".6" stroke-linecap="round"/>'
+    + '<path d="M5 8v1.6M3.5 10h5" stroke="#7d8578" stroke-width=".8" stroke-linecap="round"/>'
+    + '<circle cx="10" cy="7" r=".45" fill="#d39a5a"/>';
   return svg;
 }
 

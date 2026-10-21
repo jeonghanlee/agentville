@@ -4,8 +4,8 @@ import { demoState } from "./demo.js";
 import { updateWorkGestures, WORK_MOTION_INTERVAL } from "./motion.js";
 import { createOfficeCats } from "./cats.js";
 import { mountFurniture } from "./furniture.js";
-import { createDaylight } from "./daylight.js";
-import { SEATED_WIDTH } from "./sprites.js";
+import { createDaylight, branchZone } from "./daylight.js";
+import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 
 const DEMO = new URLSearchParams(location.search).get("demo") === "1";
@@ -38,12 +38,19 @@ const WORKSTATIONS = {
   studio1: [[[1148,341],[1169,350],[1191,353]], [[1275,391],[1296,401],[1320,411]]],
   common: [[[196,556],[216,566],[241,573]], [[329,607],[351,616],[377,624]]],
 };
+// Visible screen glass of rear-facing desks, in office artwork pixels; front-facing desks hide their screens.
+const SCREENS = {
+  studio0: ["405,257 453,277 453,308 404,290", "555,312 605,327 605,363 555,347"],
+  studio1: ["1147,287 1190,302 1190,333 1147,317", "1270,337 1313,352 1313,385 1270,370"],
+  common: ["202,493 247,511 247,546 202,528", "328,541 378,558 378,592 328,574"],
+};
 const WAITING_SPOTS = {
   fika: [[34,79],[40,84],[46,89],[52,94],[65,82],[60,89]],
   infirmary: [[78,81],[84,78],[73,84],[78,87]],
 };
 const EMPTY = { branches: [], agents: [], activities: [], contractors: [] };
 const MAX_EVENTS = 60;
+const COMPLETED_MS = 4000, MAX_CONTRACTORS = 2;
 const MIN_ZOOM = 100, MAX_ZOOM = 175, ZOOM_STEP = 25;
 const $ = (id) => document.getElementById(id);
 const keyOf = (branch, id) => JSON.stringify([branch, id]);
@@ -52,6 +59,8 @@ let stateFilter = "all", roomFilter = "", selected = "", zoom = 100;
 let events = [], eventKeys = new Set(), reconnectTimer = null, activeSocket = null, everOpened = false, failedOpens = 0;
 const actors = new Map();
 const companions = new Map();
+const screensOff = new Map();
+const completions = new Map();
 const facilityOccupancy = new Map();
 let daylight = null;
 let furniture = null;
@@ -107,6 +116,45 @@ function age(iso, compact = true) {
   if (seconds < 86400) return Math.floor(seconds / 3600) + (compact ? "h" : " hr ago");
   return Math.floor(seconds / 86400) + (compact ? "d" : " days ago");
 }
+function displayZone() {
+  return branchZone(current.branches.find((b) => b.branch_id === branchId)?.branch?.time);
+}
+// Clock times use the displayed Branch zone, matching the heading clock.
+function clockTime(iso) {
+  const at = new Date(iso || NaN);
+  if (!Number.isFinite(at.getTime())) return "";
+  const zone = displayZone(), options = zone ? { timeZone: zone } : {};
+  const sameDay = at.toLocaleDateString("en-US", options) === new Date().toLocaleDateString("en-US", options);
+  return (sameDay ? "" : at.toLocaleDateString("en-US", { weekday: "short", ...options }) + " ")
+    + at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...options });
+}
+function resetLabel(row) {
+  const time = row.state === "limited" ? clockTime(row.activity?.reset_at) : "";
+  return time ? "Resets " + time : "";
+}
+function workloadText(row) {
+  const count = row.activity?.workload ?? 0;
+  return count + (count === 1 ? " recent tool" : " recent tools");
+}
+function contractorState(contractor) {
+  return Object.hasOwn(STATES, contractor.state) ? contractor.state : "unknown";
+}
+function contractorTool(contractor) {
+  return contractorState(contractor) === "working" ? contractor.tool || "" : "";
+}
+function providerName(provider) {
+  return provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : String(provider);
+}
+// A completed turn shows a brief checkmark even when idle follows quickly.
+function noteCompletions(all) {
+  for (const row of all) {
+    if (!row.duty || row.activity?.state !== "completed") continue;
+    if (completions.get(row.key)?.since === row.activity.state_since) continue;
+    completions.set(row.key, { since: row.activity.state_since, until: Date.now() + COMPLETED_MS });
+    setTimeout(render, COMPLETED_MS + 50);
+  }
+}
+function showsDone(row) { return (completions.get(row.key)?.until || 0) > Date.now(); }
 function idleDetail(activity, branch) {
   const seconds = Math.max(0, (Date.now() - Date.parse(activity?.state_since)) / 1000);
   const thresholds = { phone: 300, doze: 1800, lounge: 3600, ...branch?.branch?.thresholds };
@@ -129,7 +177,7 @@ function rows() {
       c.branch_id === agent.branch_id && c.parent_instance_id === agent.instance?.instance_id && c.status !== "ended");
     return {
       key: keyOf(agent.branch_id, agent.agent_id), agent, branch, activity, state, detail, duty, verified, contractors,
-      name: agent.alias || (agent.provider === "claude" ? "Claude" : agent.provider === "codex" ? "Codex" : agent.provider) + " " + agent.seat,
+      name: agent.alias || providerName(agent.provider) + " " + agent.seat,
       branchName: branch?.branch?.alias || "Unnamed branch",
       project: agent.project_alias || "Untitled project",
       since: duty && activity ? activity.state_since : agent.presence_since,
@@ -166,7 +214,7 @@ function stateLabel(row) {
   const label = !row.duty ? PRESENCE[row.agent.presence] || row.agent.presence
     : row.detail === "fika" ? "Fika" : row.detail === "phone" ? "On a break"
     : row.detail === "dozing" ? "Dozing" : STATES[row.state];
-  const unverified = row.duty && !row.verified;
+  const unverified = !row.verified;
   return el("span", { class: "state-label" + (unverified ? " unverified" : ""), style: { "--state-color": color(row.state) },
     ...(unverified ? { title: "Unverified: last observed " + label } : {}) },
     el("i", { class: "status-dot" }), label, unverified ? el("span", { class: "unverified-mark", "aria-hidden": "true" }, "?") : null,
@@ -254,7 +302,7 @@ function renderCharacters(ctx) {
   const lounge = facilityOccupancy.get(keyOf(branchId,"fika"));
   coffee?.sync([...lounge].filter(([,index]) => index !== null)
     .map(([key,index]) => [key,ROOM_LAYOUT.fika.seats[index]]),branchId);
-  const used = new Set();
+  const used = new Set(), hired = new Set(), dark = new Set();
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room];
@@ -277,7 +325,9 @@ function renderCharacters(ctx) {
       const condition = Object.hasOwn(CONDITIONS, row.agent.condition) ? row.agent.condition : "normal";
       node.className = ["agent", row.state, row.detail, condition, row.verified ? "" : "unverified",
         selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
-      node.setAttribute("aria-label", row.name + ", " + STATES[row.state] + (row.verified ? "" : " (unverified)") + ", " + row.project);
+      const reset = resetLabel(row), done = showsDone(row);
+      node.setAttribute("aria-label", row.name + ", " + STATES[row.state] + (row.verified ? "" : " (unverified)")
+        + (reset ? ", " + reset : "") + ", " + row.project);
       node.setAttribute("aria-pressed", String(row.key === selected));
       node.tabIndex = visible ? 0 : -1;
       const visit = coffee?.get(row.key);
@@ -300,43 +350,71 @@ function renderCharacters(ctx) {
       const workstation = WORKSTATIONS[room]?.[index] ? { seat, keys: WORKSTATIONS[room][index] } : null;
       const cup = coffee?.cup(row.key);
       const detail = visit ? visit.cup ? "coffee-cup" : visit.phase === "waiting" ? "coffee-wait" : "coffee-walk" : row.detail;
-      const appearance = JSON.stringify([row.state, detail, condition, desk, workstation, cup, node.dataset.queuePosition, row.contractors.length,
-        row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId]);
+      // Limited Employees switch off the visible desk screen, or show a small dark monitor when none is visible.
+      const glass = row.state === "limited" && !visit && !spot ? SCREENS[room]?.[index] : null;
+      if (glass) {
+        dark.add(row.key);
+        let screen = screensOff.get(row.key);
+        if (!screen) {
+          screen = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          screen.setAttribute("viewBox", "0 0 1536 1024");
+          screen.setAttribute("class", "screen-off-glass");
+          screen.setAttribute("aria-hidden", "true");
+          screensOff.set(row.key, screen);
+          $("world").append(screen);
+        }
+        if (screen.dataset.glass !== glass) {
+          screen.innerHTML = '<polygon points="' + glass + '"/>';
+          screen.dataset.glass = glass;
+        }
+        screen.style.zIndex = String(seat[3] - 1);
+      }
+      const appearance = JSON.stringify([row.state, detail, condition, desk, workstation, cup, node.dataset.queuePosition,
+        row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass)]);
       if (node.dataset.appearance !== appearance) {
         const name = el("span", { class: "agent-name" }, badge(row.agent.provider), row.name,
-          row.agent.branch_id === branchId ? null : el("span", { class: "remote-badge" }, row.branchName));
+          row.agent.branch_id === branchId ? null : el("span", { class: "remote-badge" }, row.branchName),
+          reset ? el("span", { class: "reset-time" }, reset) : null);
         const children = [character(row.key, row.state, detail, condition, false, desk, workstation, cup),
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
+        if (row.state === "limited" && !glass) children.push(screenOffSprite());
+        if (done) children.push(el("span", { class: "done-check" }, icon("check")));
         if (visit?.phase === "waiting") children.push(el("span", { class: "coffee-status" }, "Brewing..."));
         if (spot) children.push(el("span", { class: "queue-status" },
           (room === "infirmary" ? "Waiting for bed" : "Waiting for seat") + " / " + node.dataset.queuePosition));
         node.replaceChildren(...children);
         node.dataset.appearance = appearance;
       }
-      if (row.contractors.length) {
-        let companion = companions.get(row.key);
+      // Each Contractor shows its own activity; further Contractors collapse into "+N".
+      const shown = row.contractors.slice(0, MAX_CONTRACTORS);
+      shown.forEach((contractor, i) => {
+        const id = JSON.stringify([row.key, contractor.contractor_id]);
+        let companion = companions.get(id);
         if (!companion) {
           companion = button("", "contractor", () => selectEmployee(row.key), { "data-parent-key": row.key });
-          companions.set(row.key,companion);
+          companions.set(id, companion);
           $("characters").append(companion);
         }
-        companion.className = "contractor working" + (visible ? "" : " filtered");
-        companion.setAttribute("aria-label", row.name + ", " + row.contractors.length + " contractors");
+        hired.add(id);
+        const state = contractorState(contractor), tool = contractorTool(contractor);
+        const extra = i === shown.length - 1 ? row.contractors.length - shown.length : 0;
+        companion.className = ["contractor", state, row.verified ? "" : "unverified", visible ? "" : "filtered"].join(" ");
+        companion.setAttribute("aria-label", providerName(contractor.provider) + " contractor of " + row.name + ", " + STATES[state]
+          + (row.verified ? "" : " (unverified)") + (tool ? ", " + tool : "") + (extra ? ", " + extra + " more contractors" : ""));
         companion.tabIndex = visible ? 0 : -1;
         const foot = desk === "lying" ? [seat[0]+4.2,seat[1]+13]
           : [seat[0]+3.1,seat[1]+(visit || spot ? 0 : desk.startsWith("back") ? 2.2 : 3.6)];
-        companion.style.left = foot[0] + "%";
-        companion.style.top = foot[1] + "%";
-        companion.style.zIndex = String(Math.floor(foot[1])+1);
-        const appearance = String(row.contractors.length);
+        companion.style.left = (foot[0] + i * 2.3) + "%";
+        companion.style.top = (foot[1] + i * .9) + "%";
+        companion.style.zIndex = String(Math.floor(foot[1] + i * .9)+1);
+        const appearance = JSON.stringify([state, tool, contractor.provider, extra]);
         if (companion.dataset.appearance !== appearance) {
-          companion.replaceChildren(character(row.key + "helper", "working", "", "normal", true, "standing"));
-          if (row.contractors.length > 1) companion.append(el("small", {}, "+" + row.contractors.length));
+          companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
+            el("span", { class: "contractor-name" }, badge(contractor.provider), "Contractor / " + STATES[state], tool ? " / " + tool : null),
+            ...(extra ? [el("small", {}, "+" + extra)] : []));
           companion.dataset.appearance = appearance;
         }
-      } else if (companions.has(row.key)) {
-        companions.get(row.key).remove(); companions.delete(row.key);
-      }
+      });
     });
     if (people.length > placed.length) {
       const overflow = button("+" + (people.length - placed.length), "room-overflow", () => {
@@ -352,7 +430,10 @@ function renderCharacters(ctx) {
     if (!used.has(key)) { node.remove(); actors.delete(key); }
   }
   for (const [key,node] of companions) {
-    if (!used.has(key)) { node.remove(); companions.delete(key); }
+    if (!hired.has(key)) { node.remove(); companions.delete(key); }
+  }
+  for (const [key,node] of screensOff) {
+    if (!dark.has(key)) { node.remove(); screensOff.delete(key); }
   }
   updateWorkGestures($("characters"));
 }
@@ -376,15 +457,23 @@ function renderTeam(ctx) {
   }
   const stats = [["Status", !row.verified ? "Unverified (" + STATES[row.state] + ")" : STATES[row.state]], ["Condition", CONDITIONS[row.agent.condition] || row.agent.condition],
     ["Tool", row.state === "working" ? row.activity?.tool || "-" : "-"],
-    ["Workload", row.verified ? (row.activity?.workload ?? 0) + " / 5 min" : "-"]];
+    ["Workload", row.verified ? workloadText(row) : "-"]];
+  if (resetLabel(row)) stats.push(["Usage limit", resetLabel(row)]);
   const occupants = facilityOccupancy.get(keyOf(branchId,roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
   if (waiting) stats.push(["Place", "Waiting for " + (roomOf(row) === "infirmary" ? "bed" : "seat")]);
   $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, "IN THEIR LITTLE CORNER"),
     el("div", { class: "detail-top" }, avatar(row), el("div", {}, el("strong", {}, row.name), el("small", {}, row.project + " / " + row.branchName))),
     el("dl", { class: "detail-grid" }, ...stats.map(([name,value]) => el("div", {}, el("dt", {}, name), el("dd", {}, value)))),
+    ...(row.contractors.length ? [el("div", { class: "detail-contractors" }, el("p", { class: "detail-eyebrow" }, "CONTRACTORS"),
+      el("ul", {}, ...row.contractors.map((contractor) => {
+        const state = contractorState(contractor), tool = contractorTool(contractor);
+        return el("li", {}, badge(contractor.provider), el("span", {}, "Contractor"),
+          stateLabel({ ...row, state, detail: "", duty: true }), el("small", {}, tool || "-"));
+      })))] : []),
     el("p", { class: "detail-note" }, !row.verified ? "Last seen like this. Waiting for a fresh update."
       : row.state === "waiting" ? "A little help from you, and we're off."
+      : row.state === "limited" ? "Screen off until the usage limit resets."
       : row.detail === "fika" ? "Good ideas need a coffee break, too." : row.state === "error" ? "A little rest in the infirmary."
       : row.state === "unknown" ? "Waiting for a fresh update." : row.agent.condition === "extra-coffee" ? "Powered by a little extra coffee." : "Quietly making good things happen."));
 }
@@ -418,10 +507,10 @@ function employeeTable(all) {
   const body = all.filter(queryMatches).map((r) => el("tr", {},
     el("td", {}, r.branchName, el("br"), r.project),
     el("td", {}, badge(r.agent.provider), r.name, r.contractors.length ? " +" + r.contractors.length : ""),
-    el("td", {}, r.duty && !r.verified ? "On duty (unverified)" : PRESENCE[r.agent.presence]),
+    el("td", {}, (PRESENCE[r.agent.presence] || r.agent.presence) + (r.verified ? "" : " (unverified)")),
     el("td", {}, stateLabel(r)), el("td", {}, r.state === "working" ? r.activity?.tool || "-" : "-"),
     el("td", {}, r.duty ? CONDITIONS[r.agent.condition] || r.agent.condition : "-"),
-    el("td", {}, r.duty && r.verified ? (r.activity?.workload ?? 0) + " / 5 min" : "-"),
+    el("td", {}, r.duty && r.verified ? workloadText(r) : "-"),
     el("td", {}, age(r.since, false))));
   return el("div", { class: "data-card" }, el("h2", {}, "Your teammates"),
     el("div", { class: "table-scroll" }, el("table", {},
@@ -470,15 +559,18 @@ function renderData(all) {
   }
 }
 function updateClock() {
-  const now = new Date();
-  text("today", now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase());
-  text("local-time", now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
-  daylight?.update(now);
+  const now = new Date(), zone = displayZone(), options = zone ? { timeZone: zone } : {};
+  const branch = current.branches.find((b) => b.branch_id === branchId);
+  text("today", now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...options }).toUpperCase());
+  text("local-time", now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...options }));
+  text("clock-label", zone ? zone.replaceAll("_", " ") : "Your local time");
+  $("clock-label").title = zone ? "Local time at " + (branch?.branch?.alias || "Unnamed branch") : "";
+  daylight?.update(now, zone);
 }
 function render() {
   const focused = focusKey();
   const all = rows();
-  prepareAppearances(all.flatMap((row) => row.contractors.length ? [row.key, row.key + "helper"] : [row.key]));
+  prepareAppearances(all.flatMap((row) => [row.key, ...row.contractors.map((c) => row.key + "helper:" + c.contractor_id)]));
   if (!current.branches.some((b) => b.branch_id === branchId)) { branchId = current.branches[0]?.branch_id || ""; floor = 0; roomFilter = ""; }
   const ctx = context(all);
   const matching = ctx.present.filter(passes);
@@ -534,7 +626,9 @@ function setConnection(label, cls) {
 }
 function acceptState(state) {
   if (!state || !["branches","agents","activities","contractors"].every((key) => Array.isArray(state[key]))) return false;
-  current = state; connected = true; recordEvents(rows()); render(); return true;
+  current = state; connected = true;
+  const all = rows();
+  recordEvents(all); noteCompletions(all); render(); return true;
 }
 function connect(delay = 1000) {
   if (DEMO) return;

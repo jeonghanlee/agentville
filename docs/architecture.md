@@ -225,9 +225,14 @@ An Adapter emits only the observations its provider exposes.
 | `agent.error` | | `error` |
 | `model.changed` | model, runtime settings | Condition |
 | `account.changed` | account identity (Branch-local only) | Account attribute |
-| `subagent.started` / `subagent.ended` | subagent id, provider | Contractor |
+| `subagent.started` / `subagent.status` / `subagent.ended` | subagent id, provider, normalized status (`active`, `waiting`, `idle`, `error`, `unknown`), tool name | Contractor |
 
 Every observation carries observed time, event time, source (`session_file`, `session_log`, `app_server`, `hook`, `process`), and raw location (log file and offset) when read from a log.
+
+- Subagent observations carry the parent's shift. A Contractor's id is derived from the parent instance id and the provider subagent id; neither the provider id nor prompts, task descriptions, subagent types, or tool arguments are sent.
+- Contractors are held in memory only, included in snapshots while hired, and ended with their parent shift.
+- `limited` persists through `turn.completed` and `idle` status. It clears on `limit.cleared` (to `idle`), `turn.started`, `tool.started`, or `active` status. `reset_at` is sent while `limited`.
+- Child-process Contractors (§1.5) are not yet implemented.
 
 ### 3.3 Reading
 
@@ -267,6 +272,9 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Contractor | `tool_use` `name: Agent` → `toolUseResult.agentId`; `<sessionId>/subagents/agent-<agentId>.jsonl` and `.meta.json` (`toolUseId`); subagent records carry the parent `sessionId` |
 | Project | `cwd`, `gitBranch` on records |
 
+- Contractor: an `Agent` `tool_use` hires one, keyed by its `id`; the matching `tool_result` ends it. The subagent transcript is the `agent-*.jsonl` whose `.meta.json` `toolUseId` matches; it is read from its start. Its `tool_use` sets the tool, `tool_result` clears it, and `stop_reason: end_turn` or `turn_duration` sets `idle`. Without that file the Contractor is `working` with no tool. A session change ends open Contractors.
+- Usage limit and thinking are not yet read.
+
 #### Codex
 
 | Purpose | Source |
@@ -278,7 +286,7 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Turn | `turn/started`, `turn/completed` |
 | Tool | `item/started`, `item/completed` |
 | Detail | `<codex-home>/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl` |
-| Usage limit | rollout `event_msg` `token_count.rate_limits` (`primary.resets_at`) |
+| Usage limit | rollout `event_msg` `token_count.rate_limits`: `primary`, `secondary` (`used_percent`, `window_minutes`, `resets_at` in epoch seconds) |
 | Error | status `systemError`; rollout `task_complete.error` |
 | Model, effort | rollout `thread_settings_applied`, `turn_context` |
 | Resume | Same session id; appends to the same rollout file. |
@@ -291,10 +299,12 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - Only loaded threads are read. Reading a `notLoaded` thread is avoided until its side effects are verified.
 - `thread/loaded/list` and `thread/read` seed state on connect and after reconnect; afterwards state follows `thread/status/changed`. `optOutNotificationMethods` is never set for it.
 - Turn and tool detail come from the thread's rollout file, not from app-server notifications.
-- Threads that are not Employees: `parentThreadId` set or `source.subAgent` (future Contractors), and `threadSource: system` (internal threads, typically with a null `path`).
+- Threads that are not Employees: subagent threads (`parentThreadId` set or `source.subAgent`), and `threadSource: system` (internal threads, typically with a null `path`, ignored).
+- A loaded subagent thread is a Contractor of the shift of its `parentThreadId` (for a nested subagent, the root shift); one whose parent is not a shift is not tracked. State follows its thread status (`active` → `working`, `waitingOn*` → `waiting`, `idle`, `systemError` → `error`); the tool comes from its rollout. It ends when the thread is closed, `notLoaded`, absent at a seed, or when the parent shift ends.
+- A `token_count` with any window at `used_percent` ≥ 100 reports `limit.reached` with the latest `resets_at` of those windows; a later one with every window below 100 reports `limit.cleared`.
 - Rollout path: `Thread.path`; when null, `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl`.
 - Responses carry no `jsonrpc` field; the client does not require it. Server-to-client requests (approvals) are never answered.
-- On loss of the app-server connection, every Codex shift is reported `unknown` until the next seed.
+- On loss of the app-server connection, every Codex shift and Contractor is reported `unknown` until the next seed.
 - Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only; waiting state is unavailable for them.
 
 #### Antigravity CLI
@@ -415,7 +425,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 - Navigation: Virtual office, Dashboard, Employees, Projects, Timeline, Branches, and display settings.
 - Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
-- Employee detail: current activity, condition, tool name, workload, Project, and Branch alias.
+- Employee detail: current activity, condition, tool name, workload, Project, Branch alias, usage-limit reset time when known, and the Employee's Contractors with provider badge, activity, and tool name.
 - Status filters and Branch indicators highlight waiting Employees, errors, and unverified connections.
 - Visual style: Cyworld-inspired isometric minirooms with chibi pixel characters, as inspiration only; original artwork, no copied graphics or brand assets.
 
@@ -433,16 +443,16 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - The floor combines `office.png` with textured Employee and cat atlases rendered by `art.js` and `sprites.js`. Artwork generation inputs and asset paths are recorded in `design/office-artwork.prompt.txt` and `design/character-artwork.prompt.txt`.
 - Twelve Employee appearances combine hair colors, glasses, hats, and headphones. The complete roster receives balanced assignments before filtering, and existing assignments remain stable during the browser visit. Each appearance has matching standing, seated, rear-facing, and reclining sprites; `*-varied.png` atlases supply the six additional appearances, with generation inputs recorded in `design/employee-appearance.prompt.txt`.
 - Each Project occupies one room. The office displays two Project rooms at a time; room navigation exposes additional Projects. Common Office, Fika, and the infirmary remain available.
-- Employees from another Branch appear beside local Employees of the same Project, with a Branch alias badge. Contractors stand beside their parent with a hard hat, independently of the parent's seated, reclining, or coffee pose.
-- Activity controls character gestures. Idle thresholds select desk, phone, dozing, or Fika presentation; errors move Employees to the infirmary. The phone action takes priority over the extra-coffee prop.
+- Employees from another Branch appear beside local Employees of the same Project, with a Branch alias badge. Contractors stand beside their parent with a hard hat, independently of the parent's seated, reclining, or coffee pose. Each shown Contractor takes the pose and state mark of its own activity (an absent or unrecognized state shows as `unknown`), and its label shows the provider badge, activity, and tool name while `working`. Up to two Contractors are drawn per Employee; the last one drawn carries a "+N" count of the remainder.
+- Activity controls character gestures. Idle thresholds select desk, phone, dozing, or Fika presentation; errors move Employees to the infirmary. The phone action takes priority over the extra-coffee prop. A `completed` activity shows a checkmark over the character for 4 s from the first observation of that `state_since`, including after a following `idle`; with reduced motion the checkmark is static. A `limited` Employee shows a wall clock; the visible screen of a rear-facing desk is darkened, and other placements show a small switched-off monitor beside the character. A known `reset_at` appears as "Resets" with a time in the character label and detail. `unknown` characters are dimmed and desaturated. The `study-mode` condition adds a book stack on the desk side of the character.
 - Desk positions align seated bodies with chair cushions and working hands with keyboards and mice at every viewport and zoom level; characters scale proportionally with the artwork. Furniture and characters share a depth order. Selected Employees show an outline of body portions hidden behind furniture. The infirmary has one bed with a reclining pose. Fika has three seats. Facility seats remain reserved until the occupant leaves, including during coffee visits. Additional occupants stand in a first-arrival waiting line and take the next vacant seat or bed. The scene shows up to six standing Fika occupants and four standing infirmary occupants; further occupants remain in the count and team list, and selecting one reveals that Employee in a standing spot without changing queue order.
 - Working Employees independently alternate three typing and three mouse gestures. Cheese and Pepper independently walk, sit, groom, and nap along connected floor routes; walking animates their paws and tails.
 - Fika Employees occasionally walk to the coffee machine, wait for brewing, receive one of ten cup designs, and return to their seat. Visits affect presentation only and stop when the Employee leaves Fika. Only one Employee uses the machine at a time.
-- Window lighting follows browser-local time: morning from 05:00, day from 10:00, evening from 17:00, and night from 20:00. Night windows show a moon and stars while indoor lamps remain warm.
+- Window lighting follows the displayed Branch's local time: morning from 05:00, day from 10:00, evening from 17:00, and night from 20:00. Night windows show a moon and stars while indoor lamps remain warm. When the Branch `time` is a valid IANA time zone, the heading clock, date, window lighting, and usage-limit reset times use that zone and the clock is labeled with the zone; a missing or fictional value falls back to browser-local time labeled "Your local time".
 - Search, status filters, and room filters select the team list and highlight matching characters. Selecting a teammate opens their current details. Selection survives Project-page changes while the Employee still matches the filters. Remote participants of local Projects remain visible in shared facilities on every Project page.
-- Dashboard and Employees provide tabular views. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
+- Dashboard and Employees provide tabular views. Workload is shown as the reported count of recent tool executions ("N recent tools"); the window size is not displayed because it is not part of the payload. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
 - Display settings control name labels, reduced motion, and automatic or manually selected window light. The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
-- The browser marks activity unverified when its HQ connection is lost or the Branch is unreachable. Placement, pose, and counts keep the last observed state, dimmed and marked with "?".
+- The browser marks activity unverified when its HQ connection is lost or the Branch is unreachable. Tables mark on-duty, off-duty, and on-leave rows of such Branches alike. Placement, pose, and counts keep the last observed state, dimmed and marked with "?".
 
 ### 6.3 Synthetic demonstration mode
 

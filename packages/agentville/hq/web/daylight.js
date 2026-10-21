@@ -13,7 +13,23 @@ const WINDOWS = [
   "1026,199 1053,184 1053,326 1026,341", "1063,178 1094,160 1094,310 1063,325",
   "1374,517 1401,528 1401,625 1374,614", "1409,531 1435,542 1435,639 1409,628",
 ];
+const ZONES = new Map();
 const LAMPS = [[493,302,42],[641,361,42],[854,267,65],[1006,300,80],[1124,290,45],[165,517,45],[675,566,85],[899,454,55],[1340,583,60]];
+
+// A real IANA zone in Branch `time` drives day and night; fictional labels fall back to browser-local time.
+export function branchZone(value) {
+  if (!value || typeof value !== "string") return "";
+  if (!ZONES.has(value)) {
+    try { ZONES.set(value, new Intl.DateTimeFormat("en-US", { timeZone: value, hour: "numeric", hourCycle: "h23" })); }
+    catch { ZONES.set(value, null); }
+  }
+  return ZONES.get(value) ? value : "";
+}
+
+function hourIn(now, zone) {
+  const part = zone && ZONES.get(zone)?.formatToParts(now).find((item) => item.type === "hour");
+  return part ? Number(part.value) % 24 : now.getHours();
+}
 
 export function createDaylight(world, scene, label, symbol, setting) {
   const layer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -30,9 +46,11 @@ export function createDaylight(world, scene, label, symbol, setting) {
     + '</g></g><g class="lamp-glow">'
     + LAMPS.map(([x,y,r]) => '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="url(#lamp-light)"/>').join("") + '</g>';
   world.append(layer);
-  let active = "";
-  function update(now = new Date()) {
-    const hour = now.getHours() < 5 ? now.getHours() + 24 : now.getHours();
+  let active = "", zone = "";
+  function update(now = new Date(), timeZone = zone) {
+    zone = branchZone(timeZone);
+    const local = hourIn(now, zone);
+    const hour = local < 5 ? local + 24 : local;
     const period = PERIODS.find((item) => item.name === setting.value)
       || PERIODS.find((item) => hour >= item.start && hour < item.end);
     if (active === period.name) return;
