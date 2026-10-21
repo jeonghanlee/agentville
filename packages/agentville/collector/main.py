@@ -17,6 +17,7 @@ from agentville.collector.adapters.codex import CodexAdapter
 from agentville.collector.config import BranchConfig, load_or_create, state_dir
 from agentville.collector.judge import Judge, ProjectResolver
 from agentville.collector.project import GitProjectResolver
+from agentville.collector.roster import Roster, atomic_write
 from agentville.collector.sender import Delivery, HttpSender
 from agentville.common.observations import Observation
 from agentville.common.protocol import Envelope
@@ -56,18 +57,7 @@ class SeqStore:
             return 0
 
     def save(self, seq: int) -> None:
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        tmp = f"{self.path}.tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            fh.write(f"{seq}\n")
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, self.path)
-        fd = os.open(os.path.dirname(self.path), os.O_RDONLY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        atomic_write(self.path, f"{seq}\n")
 
 
 def build_adapters(config: BranchConfig) -> list[Adapter]:
@@ -89,6 +79,7 @@ class Collector:
         resolver: ProjectResolver,
         seq_store: SeqStore,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        roster: Roster | None = None,
     ) -> None:
         self.config = config
         self.adapters = adapters
@@ -107,7 +98,19 @@ class Collector:
             self._emit_judge,
             leave_after=timedelta(seconds=config.thresholds["leave"]),
             condition_for=config.condition_for,
+            save=self._save_roster,
         )
+        self._roster = roster
+        if roster is not None:
+            self.judge.restore(roster.load(), self._now)
+
+    def _save_roster(self, records: list[dict[str, Any]]) -> None:
+        if self._roster is None:
+            return
+        try:
+            self._roster.save(records)
+        except OSError as exc:
+            self._log(f"roster not saved: {exc}")
 
     def _send(self, kind: str, at: datetime, payload: dict[str, Any]) -> None:
         self._batch.append(self._envelope.wrap(kind, at, payload, self._now))
@@ -220,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
             build_adapters(config),
             GitProjectResolver(config.host_id),
             SeqStore(os.path.join(state_dir(), "seq")),
+            roster=Roster(os.path.join(state_dir(), "roster.json")),
         )
         while True:
             collector.tick()

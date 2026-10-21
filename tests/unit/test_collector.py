@@ -196,3 +196,62 @@ def test_hq_gap_report_triggers_snapshot(tmp_path):
     adapter.batches = [[_obs(Kind.SESSION_STATUS, T0 + timedelta(seconds=2), status="idle")]]
     collector.tick()
     assert hq.received[-1] == ["snapshot"]
+
+
+def _rostered(tmp_path, adapter, now):
+    from agentville.collector.roster import Roster
+
+    config = parse({"host": {"id": "branch-1"}})
+    out = []
+    collector = Collector(config, into(out), [adapter], Resolver(), SeqStore(str(tmp_path / "seq")),
+                          clock=lambda: now[0], roster=Roster(str(tmp_path / "roster.json")))
+    return collector, out
+
+
+def _snapshot_agents(out):
+    return [m for m in out if m["kind"] == "snapshot"][-1]["payload"]["agents"]
+
+
+def test_roster_keeps_employees_across_restart(tmp_path):
+    now = [T0]
+    adapter = ScriptedAdapter()
+    adapter.batches = [[_obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"}),
+                        _obs(Kind.SESSION_STARTED, T0, session_id="s1")],
+                       [_obs(Kind.PROCESS_EXITED, T0 + timedelta(minutes=1))]]
+    first, out = _rostered(tmp_path, adapter, now)
+    first.tick()
+    now[0] = T0 + timedelta(minutes=1)
+    first.tick()
+    agent_id = _snapshot_agents(out)[0]["agent_id"]
+    assert stat.S_IMODE(os.stat(tmp_path / "roster.json").st_mode) == 0o600
+
+    now[0] = T0 + timedelta(minutes=5)
+    resumed = ScriptedAdapter()
+    resumed.batches = [[_obs(Kind.PROCESS_STARTED, now[0], cwd="/r", session_id="s1", runtime={"type": "shell"})]]
+    second, out = _rostered(tmp_path, ScriptedAdapter(), now)
+    second.tick()
+    restored = _snapshot_agents(out)
+    assert [(a["agent_id"], a["presence"], a["presence_since"]) for a in restored] == [
+        (agent_id, "off_duty", "2026-01-01T00:01:00.000Z")]
+    second.adapters = [resumed]
+    second.tick()
+    assert [a.agent_id for a in second.judge.agents] == [agent_id]
+    assert second.judge.agents[0].instance is not None
+
+
+def test_employee_on_duty_at_last_save_is_restored_off_duty_from_restart(tmp_path):
+    now = [T0]
+    adapter = ScriptedAdapter()
+    adapter.batches = [[_obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"})]]
+    _rostered(tmp_path, adapter, now)[0].tick()
+    now[0] = T0 + timedelta(hours=2)
+    second, out = _rostered(tmp_path, ScriptedAdapter(), now)
+    second.tick()
+    assert [(a["presence"], a["presence_since"]) for a in _snapshot_agents(out)] == [("off_duty", "2026-01-01T02:00:00.000Z")]
+
+
+def test_unreadable_roster_starts_empty(tmp_path):
+    (tmp_path / "roster.json").write_text("{not json")
+    collector, out = _rostered(tmp_path, ScriptedAdapter(), [T0])
+    collector.tick()
+    assert _snapshot_agents(out) == []

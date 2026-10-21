@@ -192,8 +192,19 @@ The Collector runs on each Branch as a systemd user service under the owning use
 |---|---|---|
 | Adapter | Discovers provider processes and logs; converts them into observations. | Yes |
 | Judge | Determines Employee assignment, activity state, and condition from observations. | No |
-| Store | Persists raw observations, Employee history, and `seq` (SQLite). | No |
+| Store | Persists the Employee roster and the reserved `seq` bound in the state directory. | No |
 | Sender | Delivers messages to HQ per [protocol.md](protocol.md). | No |
+
+Store files in `$XDG_STATE_HOME/agentville/` (default `~/.local/state/agentville/`), mode 0600, replaced atomically with fsync:
+
+| File | Content |
+|---|---|
+| `seq` | Reserved upper bound of `seq` |
+| `roster.json` | Per Employee: `agent_id`, `project_id`, `project_alias`, `provider`, `seat`, `presence_since`, on-duty flag, runtime location, last 20 session ids, `account_alias`, model, settings |
+
+- The roster is saved when an Employee is emitted or a session id is recorded. It holds no activity, paths, prompts, or tool data.
+- At start, Employees are restored off duty. One that was on duty at the last save is off duty from the start time. Running processes then return to their Employees by the seat rules.
+- An unreadable roster starts empty.
 
 ### 3.2 Observations
 
@@ -228,8 +239,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 - A session file that exists but cannot be parsed keeps the current shift; a shift ends only when its file is gone or its process is not alive.
 - Liveness: `/proc/<pid>/stat` exists, the process is not a zombie, and field 22 (start time in clock ticks) equals `procStart`.
 - Rotation, truncation, and partial trailing lines are handled.
-- Secrets matching token and key patterns are redacted before persistence.
-- Retention of raw observations is configurable per Branch.
+- Raw observations are not persisted.
 - Basic observation never modifies agent configuration. Hooks are optional enhancements.
 
 ### 3.4 Provider Sources

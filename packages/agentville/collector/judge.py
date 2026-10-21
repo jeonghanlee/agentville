@@ -18,6 +18,7 @@ from agentville.common.protocol import iso
 
 WORKLOAD_WINDOW = timedelta(minutes=5)
 LEAVE_AFTER = timedelta(days=7)
+MAX_SESSIONS = 20
 
 
 class ProjectResolver(Protocol):
@@ -50,9 +51,15 @@ class Agent:
     model: str | None = None
     settings: dict[str, Any] = field(default_factory=dict)
     location: str | None = None
-    sessions: set[str] = field(default_factory=set)
+    sessions: list[str] = field(default_factory=list)
     account_alias: str | None = None
     reported_presence: str | None = None
+
+    def remember(self, session_id: str) -> None:
+        if session_id in self.sessions:
+            self.sessions.remove(session_id)
+        self.sessions.append(session_id)
+        del self.sessions[:-MAX_SESSIONS]
 
     def presence(self, now: datetime, leave_after: timedelta) -> str:
         if self.instance is not None:
@@ -68,12 +75,14 @@ class Judge:
         new_id: Callable[[], str] = lambda: str(uuid.uuid4()),
         leave_after: timedelta = LEAVE_AFTER,
         condition_for: Callable[[str, str | None, dict[str, Any]], str] = lambda provider, model, settings: "normal",
+        save: Callable[[list[dict[str, Any]]], None] = lambda records: None,
     ) -> None:
         self._resolver = resolver
         self._emit = emit
         self._new_id = new_id
         self._leave_after = leave_after
         self._condition_for = condition_for
+        self._save = save
         self.agents: list[Agent] = []
         self._by_shift: dict[ShiftKey, Agent] = {}
 
@@ -91,7 +100,8 @@ class Judge:
             case Kind.SESSION_STARTED:
                 inst.session_id = obs.data.get("session_id")
                 if inst.session_id:
-                    agent.sessions.add(inst.session_id)
+                    agent.remember(inst.session_id)
+                    self._save(self.records())
                 self._emit_activity(agent, obs.event_at)
             case Kind.SESSION_STATUS:
                 status = obs.data.get("status")
@@ -196,6 +206,43 @@ class Judge:
         payload = self.agent_payload(agent, at)
         agent.reported_presence = payload["presence"]
         self._emit("agent", at, payload)
+        self._save(self.records())
+
+    def records(self) -> list[dict[str, Any]]:
+        """Employee identities and history kept across restarts; no activity or paths."""
+        return [
+            {
+                "agent_id": a.agent_id,
+                "project_id": a.project.project_id,
+                "project_alias": a.project.alias,
+                "provider": a.provider,
+                "seat": a.seat,
+                "presence_since": iso(a.presence_since),
+                "on_duty": a.instance is not None,
+                "location": a.location,
+                "sessions": a.sessions,
+                "account_alias": a.account_alias,
+                "model": a.model,
+                "settings": a.settings,
+            }
+            for a in self.agents
+        ]
+
+    def restore(self, records: list[dict[str, Any]], now: datetime) -> None:
+        """Reload Employees as off duty; one on duty at the last save is off duty from ``now``."""
+        for r in records:
+            try:
+                since = now if r.get("on_duty") else datetime.fromisoformat(r["presence_since"].replace("Z", "+00:00"))
+                agent = Agent(str(r["agent_id"]), Project(str(r["project_id"]), str(r["project_alias"])),
+                              str(r["provider"]), int(r["seat"]), since)
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+            agent.location = r.get("location") if isinstance(r.get("location"), str) else None
+            agent.sessions = [s for s in r.get("sessions") or [] if isinstance(s, str)][-MAX_SESSIONS:]
+            agent.account_alias = r.get("account_alias") if isinstance(r.get("account_alias"), str) else None
+            agent.model = r.get("model") if isinstance(r.get("model"), str) else None
+            agent.settings = r["settings"] if isinstance(r.get("settings"), dict) else {}
+            self.agents.append(agent)
 
     def refresh_presence(self, now: datetime) -> None:
         """Emit Employees whose time-based presence changed (off duty to on leave)."""
@@ -229,6 +276,8 @@ class Judge:
     def snapshot(self, now: datetime) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Agent payloads for all Employees and activity payloads for those on duty."""
         agents = [self.agent_payload(a, now) for a in self.agents]
+        for agent, payload in zip(self.agents, agents, strict=True):
+            agent.reported_presence = payload["presence"]
         activities = [self.activity_payload(a, now) for a in self.agents if a.instance is not None]
         return agents, activities
 
