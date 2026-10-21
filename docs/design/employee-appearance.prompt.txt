@@ -1,0 +1,46 @@
+Assets: packages/agentville/hq/web/employees-varied.png, packages/agentville/hq/web/sleeping-varied.png, packages/agentville/hq/web/coffee-standing-varied.png
+Source: OpenAI built-in image generation tool, edit mode
+Purpose: Six additional Employee appearances, consistent across all poses.
+
+Employee appearance variant prompt:
+Use case: precise-object-edit.
+Asset type: transparent game sprite atlas for an existing cozy office game.
+Input image 1 is the edit target. Keep its exact 1536 by 1024 canvas, exact 6 columns by 3 rows arrangement, exact sprite positions, scale, body poses, head silhouettes, hands, clothing, shoes, lighting, textured pixel-painterly rendering and transparent background.
+Change ONLY hair colors and eyeglasses, consistently down each column across all three poses.
+Column 1: ivory platinum/silver short tousled hair, dark brown rectangular eyeglasses, existing terracotta sweater.
+Column 2: muted plum-purple bob hair, small round bronze eyeglasses, existing sage sweater.
+Column 3: dusty rose-pink hair in the same two buns, NO glasses, existing blue-gray sweater.
+Column 4: silver-gray curly hair, retain round gold eyeglasses and brown skin, existing lavender sweater.
+Column 5: bright honey-blond hair under the existing olive beanie, dark square eyeglasses, existing mustard sweater.
+Column 6: muted blue-black hair under the existing sage headphones, thin black round eyeglasses, existing teal sweater.
+In front views, glasses must sit naturally over both eyes. In rear views, only a visible temple arm or lens edge may appear beside the face, NEVER glasses on the back of the head.
+Keep skin colors unchanged. Preserve exact individual outlines, hand locations and hip/foot positions so this is a compatible alternate sprite atlas. No added props. No scenery, floor, cast shadow, text, labels, grid lines or watermark. Preserve genuine alpha transparency.
+
+Sleeping appearance variant prompt:
+Use case: precise-object-edit.
+Asset type: transparent reclining employee sprite atlas.
+Image 1 is the edit target sleeping atlas. Image 2 is the appearance reference only.
+Keep image 1 exact 1536x1024 canvas, 3 columns by 2 rows arrangement, exact sprite positions, silhouettes, scale, lying poses, closed eyes, skin colors, clothes, hands, shoes, textured painterly pixel style and transparent background.
+Change ONLY hair colors and eyeglasses so its six people match the six columns of image 2, in reading order.
+Top left: ivory platinum/silver tousled hair and dark brown rectangular eyeglasses, terracotta sweater.
+Top middle: muted plum-purple bob and round bronze glasses, sage sweater.
+Top right: dusty rose-pink twin buns, no glasses, blue-gray sweater.
+Bottom left: silver-gray curls, existing gold round glasses and brown skin, lavender sweater.
+Bottom middle: honey-blond hair, existing olive beanie, dark square eyeglasses, mustard sweater.
+Bottom right: blue-black hair, existing sage headphones, thin black round eyeglasses, teal sweater.
+All six are still lying down sleeping with closed eyes. Preserve the exact body and head geometry, feet and hands placement, dimensions, texture and alpha. No scenery, bedding, floor, extra props, text, labels, grid or watermark.
+
+Coffee appearance variant prompt:
+Use case: precise-object-edit.
+Asset type: transparent rear-facing standing employee sprite atlas.
+Image 1 is the edit target coffee-standing atlas. Image 2 is the appearance reference only.
+Keep image 1 exact 1536x1024 canvas, 3 columns by 2 rows arrangement, exact sprite positions, silhouettes, scale, standing poses facing away toward northeast, skin colors, clothes, hands, shoes, textured painterly pixel style and transparent background.
+Change ONLY hair colors and eyeglasses so its six people match the six columns of image 2 in reading order.
+Top left: ivory platinum/silver tousled hair and dark brown rectangular eyeglasses, terracotta sweater.
+Top middle: muted plum-purple bob and round bronze glasses, sage sweater.
+Top right: dusty rose-pink twin buns, no glasses, blue-gray sweater.
+Bottom left: silver-gray curls, existing gold round glasses and brown skin, lavender sweater.
+Bottom middle: honey-blond hair, existing olive beanie, dark square eyeglasses, mustard sweater.
+Bottom right: blue-black hair, existing sage headphones, thin black round eyeglasses, teal sweater.
+For these rear views show only natural small visible temple arms or lens edge next to the face, NEVER draw glasses on the back of a head.
+Preserve exact body and head geometry, feet and hand placement, dimensions, texture and alpha. No scenery, floor, extra props, cups, text, labels, grid or watermark.

@@ -390,19 +390,39 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 ## 6. Web UI
 
-- Navigation: Town map (Branches) → Branch building → Room. A Dashboard mode is available alongside.
+- Navigation: Virtual office, Dashboard, Employees, Projects, Timeline, Branches, and display settings.
 - Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
-- Inspector: shift history, sessions, attributes, recent state changes.
-- Notifications: `waiting`, `error`, reopened Branch or Project, unreachable Branch.
+- Employee detail: current activity, condition, tool name, workload, Project, and Branch alias.
+- Status filters and Branch indicators highlight waiting Employees, errors, and unverified connections.
 - Visual style: Cyworld-inspired isometric minirooms with chibi pixel characters, as inspiration only; original artwork, no copied graphics or brand assets.
 
-### 6.1 Dashboard
+### 6.1 Workspace and live data
 
-- Served by HQ at `/` (static HTML, CSS, and JavaScript; no build step).
+- Served by HQ at `/` (static HTML, CSS, JavaScript, and bundled artwork; no build step). The initial view is the virtual office.
 - Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after every ingest, and every 10 s. The page reconnects with backoff up to 30 s.
 - With a viewer token, the page reads it from the URL fragment (`#token=...`) and passes it as the `token` query parameter of the socket.
 - Idle detail (at desk, phone, dozing, fika) is computed in the page from `state_since` and the Branch thresholds.
 - Branch-provided text is rendered as text only, never as markup.
+
+### 6.2 Virtual office presentation
+
+- The floor combines `office.png` with textured Employee and cat atlases rendered by `art.js` and `sprites.js`. Artwork generation inputs and asset paths are recorded in `design/office-artwork.prompt.txt` and `design/character-artwork.prompt.txt`.
+- Twelve Employee appearances combine hair colors, glasses, hats, and headphones. The complete roster receives balanced assignments before filtering, and existing assignments remain stable during the browser visit. Each appearance has matching standing, seated, rear-facing, and reclining sprites; `*-varied.png` atlases supply the six additional appearances, with generation inputs recorded in `design/employee-appearance.prompt.txt`.
+- Each Project occupies one room. The office displays two Project rooms at a time; room navigation exposes additional Projects. Common Office, Fika, and the infirmary remain available.
+- Employees from another Branch appear beside local Employees of the same Project, with a Branch alias badge. Contractors stand beside their parent with a hard hat, independently of the parent's seated, reclining, or coffee pose.
+- Activity controls character gestures. Idle thresholds select desk, phone, dozing, or Fika presentation; errors move Employees to the infirmary. The phone action takes priority over the extra-coffee prop.
+- Desk positions align seated bodies with chair cushions and working hands with keyboards and mice at every viewport and zoom level; characters scale proportionally with the artwork. Furniture and characters share a depth order. Selected Employees show an outline of body portions hidden behind furniture. The infirmary has one bed with a reclining pose. Fika has three seats. Facility seats remain reserved until the occupant leaves, including during coffee visits. Additional occupants stand in a first-arrival waiting line and take the next vacant seat or bed. The scene shows up to six standing Fika occupants and four standing infirmary occupants; further occupants remain in the count and team list, and selecting one reveals that Employee in a standing spot without changing queue order.
+- Working Employees independently alternate three typing and three mouse gestures. Cheese and Pepper independently walk, sit, groom, and nap along connected floor routes; walking animates their paws and tails.
+- Fika Employees occasionally walk to the coffee machine, wait for brewing, receive one of ten cup designs, and return to their seat. Visits affect presentation only and stop when the Employee leaves Fika. Only one Employee uses the machine at a time.
+- Window lighting follows browser-local time: morning from 05:00, day from 10:00, evening from 17:00, and night from 20:00. Night windows show a moon and stars while indoor lamps remain warm.
+- Search, status filters, and room filters select the team list and highlight matching characters. Selecting a teammate opens their current details. Selection survives Project-page changes while the Employee still matches the filters. Remote participants of local Projects remain visible in shared facilities on every Project page.
+- Dashboard and Employees provide tabular views. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
+- Display settings control name labels, reduced motion, and automatic or manually selected window light. The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
+- The browser marks activity unverified when its HQ connection is lost. It preserves the last received state while reconnecting.
+
+### 6.3 Synthetic demonstration mode
+
+The `/?demo=1` URL loads fictional teammates from `demo.js` and displays a Demo label. It does not open a live socket or write to HQ. Display settings switch between Demo and live views.
 
 ## 7. Repository Layout
 
@@ -412,7 +432,7 @@ agentville/
 ├── packages/agentville/
 │   ├── common/          # observations, protocol envelope, schemas/protocol-v1.schema.json
 │   ├── collector/       # jsonl reader, project resolver, judge, adapters/, config, sender, run loop
-│   └── hq/              # store, API, entry point, web/ (Dashboard)
+│   └── hq/              # store, API, entry point, web/ (office and Dashboard)
 ├── tests/{unit,integration,fixtures}/
 └── docs/
 ````
