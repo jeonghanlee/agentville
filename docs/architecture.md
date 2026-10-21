@@ -333,7 +333,8 @@ thresholds: {phone: 300, doze: 1800, lounge: 3600, leave: 604800}
 providers:
   claude: {home: ~/.claude}
   codex:
-    - {home: ~/.codex, account_alias: codex}
+    - {home: ~/.codex, account_alias: personal}
+    - {home: ~/.codex-work, account_alias: work}
 conditions:
   - {provider: claude, fast_mode: true, condition: extra-coffee}
   - {provider: "*", effort: high, condition: study-mode}
@@ -341,7 +342,7 @@ conditions:
 collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ````
 
-- Codex homes present at first start are listed automatically.
+- Codex homes present at first start are listed automatically: `~/.codex` as `personal`, `~/.codex-work` as `work`.
 - Values are validated at start: `heartbeat_interval` ≥ 1, thresholds ≥ 0 with `phone` ≤ `doze` ≤ `lounge`. A file holding `hq.token` must not be accessible by group or others.
 - A loopback HQ is contacted without environment proxies.
 - Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns.

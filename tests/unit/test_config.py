@@ -10,11 +10,12 @@ from agentville.collector.config import load_or_create, parse
 def test_first_start_creates_private_config_with_stable_id(tmp_path):
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
+    (home / ".codex-work").mkdir()
     path = tmp_path / "cfg" / "config.yaml"
     first = load_or_create(str(path), str(home))
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
     assert first.host_id
-    assert [c.account_alias for c in first.codex_homes] == ["codex"]
+    assert [c.account_alias for c in first.codex_homes] == ["personal", "work"]
     assert first.claude_home == str(home / ".claude")
     second = load_or_create(str(path), str(home))
     assert second.host_id == first.host_id

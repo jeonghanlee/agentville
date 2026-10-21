@@ -99,11 +99,14 @@ class BranchConfig:
         return "normal"
 
 
+DEFAULT_CODEX_HOMES = ((".codex", "personal"), (".codex-work", "work"))
+
+
 def _default_document(home: str) -> dict[str, Any]:
     codex = [
-        {"home": path, "account_alias": os.path.basename(path).lstrip(".")}
-        for path in (os.path.join(home, ".codex"), os.path.join(home, ".codex-work"))
-        if os.path.isdir(path)
+        {"home": path, "account_alias": alias}
+        for name, alias in DEFAULT_CODEX_HOMES
+        if os.path.isdir(path := os.path.join(home, name))
     ]
     return {
         "host": {
