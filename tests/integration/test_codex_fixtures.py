@@ -7,20 +7,26 @@ import pytest
 
 from agentville.collector.adapters.codex import CodexAdapter
 from agentville.collector.appserver import AppServerError
+from agentville.collector.config import account_alias
 from agentville.collector.judge import Judge
-from agentville.collector.project import Project
 from agentville.common.protocol import Envelope
-from tests.integration.expectations import check, check_messages, load_scenario
+from tests.integration.expectations import (
+    CONDITION_FOR,
+    FixtureResolver,
+    check,
+    check_messages,
+    find_agent,
+    load_scenario,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "codex"
 FIXTURE_HOME = "/home/user/.codex"
-PROJECT = Project("github.com/example/repo", "repo")
 
 
-class FixedResolver:
-    def resolve(self, cwd):
-        return PROJECT
+def fixture_home(number):
+    """Fixture path of Codex home ``number``, as written by the generator."""
+    return FIXTURE_HOME if number == 1 else f"{FIXTURE_HOME}-{number}"
 
 
 class FakeDaemon:
@@ -90,53 +96,65 @@ class FakeConnection:
 
 
 class Replay:
-    def __init__(self, scenario: Path, home: Path):
+    """Replays a scenario against one Codex home per ``home`` number used in the timeline (default 1).
+
+    Each home has its own daemon and Adapter with the account alias a new configuration gives it.
+    """
+
+    def __init__(self, scenario: Path, root: Path, homes: int = 1):
         self.scenario = scenario
-        self.home = home
         self.now = None
         self.messages = []
-        self.daemon = FakeDaemon()
+        self.homes = {n: root / ("home" if n == 1 else f"home-{n}") for n in range(1, homes + 1)}
+        self.daemons = {n: FakeDaemon() for n in self.homes}
+        self.adapters = [
+            CodexAdapter(str(home), connect=self.daemons[n].connect, clock=lambda: self.now,
+                         account_alias=account_alias("codex", n))
+            for n, home in self.homes.items()
+        ]
         envelope = Envelope("branch-test")
-        self.adapter = CodexAdapter(str(home), connect=self.daemon.connect, clock=lambda: self.now)
         self.judge = Judge(
-            FixedResolver(), lambda kind, at, payload: self.messages.append(envelope.wrap(kind, at, payload, self.now))
+            FixtureResolver(),
+            lambda kind, at, payload: self.messages.append(envelope.wrap(kind, at, payload, self.now)),
+            condition_for=CONDITION_FOR,
         )
 
-    def _thread(self, data):
-        if data.get("path"):
-            data["path"] = data["path"].replace(FIXTURE_HOME, str(self.home))
+    def _thread(self, data, number):
+        prefix = fixture_home(number) + "/"
+        if (data.get("path") or "").startswith(prefix):
+            data["path"] = f"{self.homes[number]}/{data['path'][len(prefix):]}"
         return data
 
     def apply(self, op):
         self.now = datetime.fromisoformat(op["at"].replace("Z", "+00:00"))
         kind = op["op"]
+        number = op.get("home", 1)
+        daemon = self.daemons[number]
         if kind == "appserver_thread":
-            thread = self._thread(json.loads((self.scenario / op["file"]).read_text()))
-            self.daemon.threads[thread["id"]] = thread
-            self.daemon._load(thread["id"])
+            thread = self._thread(json.loads((self.scenario / op["file"]).read_text()), number)
+            daemon.threads[thread["id"]] = thread
+            daemon._load(thread["id"])
         elif kind == "appserver_notify":
             message = json.loads((self.scenario / op["file"]).read_text())
             if "thread" in message["params"]:
-                self._thread(message["params"]["thread"])
-            self.daemon.apply(message["method"], message["params"])
+                self._thread(message["params"]["thread"], number)
+            daemon.apply(message["method"], message["params"])
         elif kind == "appserver_disconnect":
-            if self.daemon.connection is not None:
-                self.daemon.connection.broken = True
+            if daemon.connection is not None:
+                daemon.connection.broken = True
         elif kind == "log_append":
             lines = (self.scenario / op["file"]).read_text().splitlines(keepends=True)
-            target = self.home / op["path"]
+            target = self.homes[number] / op["path"]
             target.parent.mkdir(parents=True, exist_ok=True)
             start, end = op["lines"]
             with open(target, "a") as fh:
                 fh.writelines(lines[start:end])
-        for obs in self.adapter.poll():
-            self.judge.apply(obs)
+        for adapter in self.adapters:
+            for obs in adapter.poll():
+                self.judge.apply(obs)
 
     def agent(self, exp):
-        if "seat" not in exp and not any(k in exp for k in ("state", "presence", "tool", "workload", "states_since_start", "ref", "same_as",
-                                                     "contractors", "reset_at")):
-            return None
-        return next(a for a in self.judge.agents if a.seat == exp.get("seat", 1))
+        return find_agent(self.judge.agents, exp)
 
 
 def _scenarios():
@@ -146,7 +164,7 @@ def _scenarios():
 @pytest.mark.parametrize("scenario", _scenarios(), ids=lambda p: f"{p.parent.name}-{p.name}")
 def test_scenario(scenario, tmp_path):
     ops, expectations = load_scenario(scenario)
-    replay = Replay(scenario, tmp_path / "home")
+    replay = Replay(scenario, tmp_path, homes=max(op.get("home", 1) for op in ops))
     refs = {}
     for step, op in enumerate(ops, start=1):
         replay.apply(op)

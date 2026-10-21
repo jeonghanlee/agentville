@@ -1,0 +1,17 @@
+provider: codex
+version: 0.163.0
+scenario: S09
+title: The same task under two Codex homes is done by two Employees, one per account
+expect:
+- {seat: 1, ref: a, account_alias: codex-account-1, after: 1}
+- {seat: 2, ref: b, account_alias: codex-account-2, presence: on_duty, agent_count: 2, after: 2}
+- {seat: 1, state: working, tool: exec_command, after: 8}
+- {seat: 2, state: working, tool: exec_command, after: 8}
+- {seat: 1, state: idle, after: 10}
+- {seat: 2, state: working, tool: exec_command, after: 10}
+- {seat: 2, state: idle, account_alias: codex-account-2, after: 12}
+- {seat: 1, presence: off_duty, same_as: a, after: 13}
+- {seat: 2, presence: off_duty, same_as: b, after: 14}
+- {seat: 1, presence: on_duty, same_as: a, account_alias: codex-account-2, after: 15}
+- {seat: 2, presence: off_duty, after: 15}
+- {seat: 2, presence: on_duty, same_as: b, account_alias: codex-account-1, agent_count: 2, after: 16}

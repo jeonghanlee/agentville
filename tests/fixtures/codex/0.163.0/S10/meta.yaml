@@ -1,0 +1,18 @@
+provider: codex
+version: 0.163.0
+scenario: S10
+title: Two concurrent threads in one repository; app-server shifts carry no runtime location
+expect:
+- {seat: 1, ref: a, location: null, presence: on_duty, after: 1}
+- {seat: 2, ref: b, location: null, presence: on_duty, after: 2}
+- {seat: 1, state: working, after: 3}
+- {seat: 2, state: idle, after: 3}
+- {seat: 1, state: working, tool: null, after: 5}
+- {seat: 2, state: working, tool: exec_command, after: 5}
+- {seat: 1, presence: off_duty, same_as: a, after: 6}
+- {seat: 2, presence: on_duty, after: 6}
+- {seat: 1, presence: on_duty, same_as: a, session_id: 019a0000-0000-7000-8000-00000000000c, after: 7}
+- {seat: 2, presence: off_duty, same_as: b, after: 8}
+- {seat: 1, presence: off_duty, same_as: a, after: 9}
+- {seat: 1, presence: on_duty, same_as: a, session_id: 019a0000-0000-7000-8000-00000000000d, after: 10}
+- {seat: 2, presence: off_duty, agent_count: 2, after: 10}

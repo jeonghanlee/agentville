@@ -13,6 +13,7 @@ import yaml
 VERSION = "2.1.303"
 BASE = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 CWD = "/home/user/repo"
+OUTSIDE = "/home/user/notes"
 TICKS_AT_BASE = 1_000_000
 TICKS_PER_SECOND = 100
 
@@ -54,6 +55,7 @@ class Scenario:
         self.counter = 0
         self.last_uuid = {}
         self.started = {}
+        self.cwds = {}
 
     def next_id(self, prefix):
         self.counter += 1
@@ -66,13 +68,14 @@ class Scenario:
     # Session files.
 
     def session(self, at, pid, session_id, status, tmux="tmux-1:%1", waiting_for=None,
-                kind="interactive", name_source="user", bridge=None, job_id=None):
+                kind="interactive", name_source="user", bridge=None, job_id=None, cwd=CWD):
         start = self.started.setdefault(pid, at)
+        self.cwds.setdefault(session_id, cwd)
         self.snap += 1
         doc = {
             "pid": pid,
             "sessionId": session_id,
-            "cwd": CWD,
+            "cwd": cwd,
             "startedAt": ms(start),
             "updatedAt": ms(at),
             "status": status,
@@ -113,18 +116,22 @@ class Scenario:
         base = {"sessionId": session_id, "timestamp": iso(at)}
         if chained:
             u = self.uid()
+            cwd = self.cwds.get(session_id, CWD)
             base = {
                 "uuid": u,
                 "parentUuid": self.last_uuid.get(session_id),
                 "sessionId": session_id,
                 "timestamp": iso(at),
-                "cwd": CWD,
+                "cwd": cwd,
                 "gitBranch": "master",
                 "isSidechain": False,
                 "userType": "external",
                 "entrypoint": "cli",
                 "version": VERSION,
             }
+            if cwd != CWD:
+                # Outside a repository there is no branch.
+                del base["gitBranch"]
             self.last_uuid[session_id] = u
         return base
 
@@ -149,7 +156,7 @@ class Scenario:
             record.update(spec)
             log.append(record)
         self.timeline.append(
-            {"at": iso(at), "op": "log_append", "cwd": CWD, "session": session_id,
+            {"at": iso(at), "op": "log_append", "cwd": self.cwds.get(session_id, CWD), "session": session_id,
              "file": f"logs/{session_id}.jsonl", "lines": [start, len(log)]}
         )
 
@@ -208,7 +215,7 @@ def prompt():
             "message": {"role": "user", "content": "<text>"}}
 
 
-def assistant(scenario, blocks, stop, model_on_all=False):
+def assistant(scenario, blocks, stop, model_on_all=False, model="model-a", effort="high"):
     """One record per content block; split records share message.id and stop_reason."""
     message_id = scenario.next_id("msg_")
     request_id = scenario.next_id("req_")
@@ -217,14 +224,14 @@ def assistant(scenario, blocks, stop, model_on_all=False):
         record = {
             "type": "assistant",
             "requestId": request_id,
-            "effort": "high",
-            "perTurnEffort": "high",
+            "effort": effort,
+            "perTurnEffort": effort,
             "_snake_session": True,
             "message": {
                 "id": message_id,
                 "type": "message",
                 "role": "assistant",
-                "model": "model-a",
+                "model": model,
                 "content": [block],
                 "stop_reason": stop,
                 "stop_sequence": None,
@@ -236,11 +243,18 @@ def assistant(scenario, blocks, stop, model_on_all=False):
             },
         }
         if index == 0 or model_on_all:
-            record["requestedModel"] = "model-a"
+            record["requestedModel"] = model
         if block["type"] == "thinking":
             record["thinkingDurationMs"] = 100
         out.append(record)
     return out
+
+
+def api_error(scenario):
+    """Assistant record standing in for a failed API request."""
+    records = assistant(scenario, [text()], "stop_sequence")
+    records[0].update({"isApiErrorMessage": True, "apiError": "<text>", "apiErrorStatus": 500})
+    return records
 
 
 def thinking():
@@ -302,6 +316,8 @@ def epilogue():
 SA = "11111111-1111-4111-8111-111111111111"
 SB = "22222222-2222-4222-8222-222222222222"
 SC = "33333333-3333-4333-8333-333333333333"
+SD = "44444444-4444-4444-8444-444444444444"
+SE = "55555555-5555-4555-8555-555555555555"
 AGENT_1 = "a000000000000001"
 
 
@@ -373,6 +389,153 @@ def s04(root):
     s.save()
 
 
+def turn(s, at, session_id, pid, tools=(), **assistant_kw):
+    """Prompt, optional tool calls, final answer, and the session file going busy then idle."""
+    s.records(t(at), session_id, [prompt()])
+    s.session(t(at), pid, session_id, "busy")
+    for offset, (tid, name) in enumerate(tools, start=1):
+        s.records(t(at + offset), session_id, assistant(s, [tool_use(tid, name)], "tool_use", **assistant_kw))
+        s.records(t(at + offset), session_id, [tool_result(tid)])
+    s.records(t(at + len(tools) + 1), session_id, assistant(s, [text()], "end_turn", **assistant_kw) + [turn_done()])
+    s.session(t(at + len(tools) + 1), pid, session_id, "idle")
+
+
+def s03(root):
+    s = Scenario(root, "S03", "A failing command keeps the Employee working; the retry succeeds")
+    s.session(t(0), 1001, SA, "idle"); s.check(state="idle")
+    s.records(t(1), SA, [prompt()])
+    s.session(t(1), 1001, SA, "busy"); s.check(state="working")
+    s.records(t(2), SA, assistant(s, [tool_use("toolu_01", "Bash")], "tool_use")); s.check(state="working", tool="Bash")
+    s.records(t(3), SA, [tool_result("toolu_01", error=True, result_as_string=True)])
+    s.check(state="working", tool=None, workload=1)
+    s.records(t(4), SA, assistant(s, [thinking(), tool_use("toolu_02", "Bash")], "tool_use"))
+    s.check(state="working", tool="Bash", workload=2)
+    s.records(t(5), SA, [tool_result("toolu_02", error=False, result_as_string=True)]); s.check(state="working", tool=None)
+    s.records(t(6), SA, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(6), 1001, SA, "idle")
+    s.check(state="idle", states_since_start=["unknown", "idle", "working", "completed", "idle"])
+    s.save()
+
+
+# Not generated: a resume of a session first seen during the same Collector run replays its whole
+# history (see the S06 note in docs/fixtures.md). Add s06 to the build list once that is fixed.
+def s06(root):
+    s = Scenario(root, "S06", "Resume returns to the session's Employee; fork takes a free or new seat")
+    s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1"); s.check(seat=1, ref="a", session_id=SA)
+    s.session(t(1), 1002, SB, "idle", tmux="tmux-1:%2"); s.check(seat=2, ref="b", session_id=SB)
+    turn(s, 2, SA, 1001)
+    turn(s, 5, SB, 1002); s.check(seat=2, state="idle")
+    s.remove(t(60), 1001); s.check(seat=1, presence="off_duty", same_as="a")
+    s.remove(t(61), 1002); s.check(seat=2, presence="off_duty", same_as="b")
+    # --resume SB from the pane seat 1 last used: the session outranks location and the lowest free seat.
+    s.session(t(120), 1003, SB, "idle", tmux="tmux-1:%1")
+    s.check(pid=1003, seat=2, presence="on_duty", same_as="b", session_id=SB, state="idle")
+    s.check(seat=1, presence="off_duty", same_as="a")
+    # The resumed session appends to the same transcript; only the new records are read.
+    s.records(t(121), SB, [prompt()]); s.check(pid=1003, state="working")
+    s.session(t(121), 1003, SB, "busy")
+    s.records(t(122), SB, assistant(s, [tool_use("toolu_11", "Read")], "tool_use")); s.check(pid=1003, state="working", tool="Read")
+    s.records(t(123), SB, [tool_result("toolu_11")])
+    s.records(t(124), SB, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(124), 1003, SB, "idle"); s.check(pid=1003, state="idle", workload=1)
+    # --fork-session from SB: a new session id with no reference to SB takes the lowest free seat.
+    s.session(t(130), 1004, SD, "idle", tmux="tmux-1:%4")
+    s.check(pid=1004, seat=1, presence="on_duty", same_as="a", session_id=SD)
+    s.records(t(131), SD, [prompt()]); s.check(pid=1004, state="working")
+    s.check(pid=1003, state="idle")
+    # A fork while every seat is taken opens a new seat.
+    s.session(t(140), 1005, SE, "idle", tmux=None); s.check(pid=1005, seat=3, presence="on_duty", ref="e", session_id=SE)
+    s.check(agent_count=3)
+    s.save()
+
+
+def s07(root):
+    s = Scenario(root, "S07", "/clear starts a new session in the same process and shift")
+    s.session(t(0), 1001, SA, "idle"); s.check(seat=1, ref="a", shift_ref="s", session_id=SA)
+    turn(s, 1, SA, 1001, tools=[("toolu_01", "Read")]); s.check(state="idle", workload=1)
+    s.session(t(10), 1001, SB, "idle")
+    s.check(seat=1, same_as="a", same_shift_as="s", session_id=SB, state="idle", workload=1, agent_count=1)
+    s.records(t(11), SB, [prompt()]); s.check(state="working", same_shift_as="s")
+    s.session(t(11), 1001, SB, "busy")
+    s.records(t(12), SB, assistant(s, [tool_use("toolu_02", "Bash")], "tool_use")); s.check(state="working", tool="Bash", workload=2)
+    s.records(t(13), SB, [tool_result("toolu_02")])
+    s.records(t(14), SB, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(14), 1001, SB, "idle")
+    s.check(state="idle", same_shift_as="s",
+            states_since_start=["unknown", "idle", "working", "completed", "idle", "working", "completed", "idle"])
+    s.remove(t(20), 1001); s.check(presence="off_duty", same_as="a", agent_count=1)
+    s.save()
+
+
+def s08(root):
+    s = Scenario(root, "S08", "Model and effort changes map to conditions by the default rules")
+    s.session(t(0), 1001, SA, "idle"); s.check(model=None, effort=None, condition="normal")
+    turn(s, 1, SA, 1001); s.check(model="model-a", effort="high", condition="study-mode")
+    turn(s, 10, SA, 1001, model="model-c", effort="low"); s.check(model="model-c", effort="low", condition="lazy")
+    turn(s, 20, SA, 1001, model="model-c", effort="medium"); s.check(model="model-c", effort="medium", condition="normal")
+    turn(s, 30, SA, 1001, model="model-a", effort="xhigh"); s.check(model="model-a", effort="xhigh", condition="study-mode")
+    s.save()
+
+
+def s10(root):
+    s = Scenario(root, "S10", "Two concurrent agents in one repository, one in tmux; seats return by runtime location")
+    s.session(t(0), 1001, SA, "idle", tmux=None); s.check(seat=1, ref="a", location=None, presence="on_duty")
+    s.session(t(1), 1002, SB, "idle", tmux="tmux-1:%1"); s.check(seat=2, ref="b", location="tmux-1:%1", presence="on_duty")
+    s.records(t(2), SA, [prompt()])
+    s.session(t(2), 1001, SA, "busy"); s.check(seat=1, state="working"); s.check(seat=2, state="idle")
+    s.records(t(3), SB, [prompt()])
+    s.session(t(3), 1002, SB, "busy")
+    s.records(t(4), SB, assistant(s, [tool_use("toolu_01", "Bash")], "tool_use"))
+    s.check(seat=1, state="working", tool=None); s.check(seat=2, state="working", tool="Bash")
+    s.remove(t(60), 1001); s.check(seat=1, presence="off_duty", same_as="a")
+    s.remove(t(61), 1002); s.check(seat=2, presence="off_duty", same_as="b")
+    # New sessions after restart: the tmux pane selects seat 2 over the lower free seat 1.
+    s.session(t(120), 1003, SC, "idle", tmux="tmux-1:%1"); s.check(pid=1003, seat=2, same_as="b", presence="on_duty")
+    s.session(t(121), 1004, SD, "idle", tmux=None); s.check(pid=1004, seat=1, same_as="a", presence="on_duty")
+    s.check(agent_count=2)
+    s.save()
+
+
+def s11(root):
+    s = Scenario(root, "S11", "An agent outside any repository works in the Common Office")
+    s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1")
+    s.check(project="github.com/example/repo", seat=1, ref="r", presence="on_duty")
+    s.session(t(1), 1002, SB, "idle", tmux="tmux-1:%2", cwd=OUTSIDE)
+    s.check(project="common-office", seat=1, ref="c", presence="on_duty", state="idle")
+    s.records(t(2), SB, [prompt()])
+    s.session(t(2), 1002, SB, "busy"); s.check(project="common-office", state="working")
+    s.records(t(3), SB, assistant(s, [tool_use("toolu_01", "Bash")], "tool_use"))
+    s.check(project="common-office", state="working", tool="Bash"); s.check(project="github.com/example/repo", state="idle")
+    s.records(t(4), SB, [tool_result("toolu_01")])
+    s.records(t(5), SB, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(5), 1002, SB, "idle"); s.check(project="common-office", state="idle", same_as="c")
+    s.remove(t(60), 1002); s.check(project="common-office", seat=1, presence="off_duty", same_as="c")
+    s.check(project="github.com/example/repo", seat=1, presence="on_duty", same_as="r", agent_count=2)
+    s.save()
+
+
+def s13(root):
+    s = Scenario(root, "S13", "API error: error persists through turn end and idle until activity resumes")
+    s.session(t(0), 1001, SA, "idle"); s.check(state="idle")
+    s.records(t(1), SA, [prompt()])
+    s.session(t(1), 1001, SA, "busy"); s.check(state="working")
+    s.records(t(2), SA, api_error(s)); s.check(state="error", model=None)
+    s.records(t(3), SA, [turn_done()]); s.check(state="error")
+    s.session(t(3), 1001, SA, "idle"); s.check(state="error")
+    s.records(t(30), SA, [prompt()]); s.check(state="working")
+    s.session(t(30), 1001, SA, "busy"); s.check(state="working")
+    s.records(t(31), SA, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(31), 1001, SA, "idle")
+    s.check(state="idle", model="model-a",
+            states_since_start=["unknown", "idle", "working", "error", "working", "completed", "idle"])
+    s.records(t(40), SA, [prompt()])
+    s.session(t(40), 1001, SA, "busy")
+    s.records(t(41), SA, api_error(s)); s.check(state="error", model="model-a")
+    s.session(t(41), 1001, SA, "idle"); s.check(state="error")
+    s.remove(t(50), 1001); s.check(presence="off_duty")
+    s.save()
+
+
 def s14(root):
     s = Scenario(root, "S14", "Normal exit; resume and runtime location select the returning Employee")
     s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1"); s.check(presence="on_duty", seat=1, ref="a")
@@ -387,5 +550,5 @@ def s14(root):
 
 
 if __name__ == "__main__":
-    for build in (s01, s02, s04, s14):
+    for build in (s01, s02, s03, s04, s07, s08, s10, s11, s13, s14):
         build(sys.argv[1])

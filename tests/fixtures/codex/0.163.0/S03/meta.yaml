@@ -1,0 +1,13 @@
+provider: codex
+version: 0.163.0
+scenario: S03
+title: A failing command keeps the Employee working; the retry succeeds
+expect:
+- {state: idle, after: 1}
+- {state: working, tool: exec_command, after: 3}
+- {state: working, tool: null, workload: 1, after: 4}
+- {state: working, tool: exec_command, workload: 2, after: 5}
+- {state: working, tool: null, after: 6}
+- state: idle
+  states_since_start: [unknown, idle, working, completed, idle]
+  after: 8

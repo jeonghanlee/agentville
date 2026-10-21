@@ -16,7 +16,7 @@
 | Record order and state transitions | As observed (e.g. `status: waiting` with `waitingFor`, then `idle` on decision) |
 | Text fields | Fixed placeholders, e.g. `<text>` |
 | Identifiers | Generated UUIDs, small integers for pid |
-| Paths | `/home/user/repo/...` |
+| Paths | `/home/user/repo/...`; `/home/user/notes` for a directory outside any repository |
 | Timestamps | Fixed base time with relative offsets |
 
 ## 3. Validation Against Real Structure
@@ -47,7 +47,16 @@ Validation is repeated when a provider version changes.
 | S13 | both | Agent-level error | `error` |
 | S14 | both | Normal exit | Off duty |
 
-Generated: Claude S01, S02, S04, S14; Codex S01, S02, S04, S12, S14. Claude S12 awaits verification of its live usage-limit source; S05 awaits child-process Contractor support.
+Generated: Claude S01, S02, S03, S04, S07, S08, S10, S11, S13, S14; Codex S01, S02, S03, S04, S08, S09, S10, S11, S12, S13, S14. Claude S12 awaits verification of its live usage-limit source; S05 awaits child-process Contractor support.
+
+S06 is written in both generators but not generated: resuming a session first seen during the same Collector run reads its transcript (Claude: first record not older than attach) or rollout (Codex: `createdAt` not older than attach) from the start, so the earlier history is replayed on the new shift with past event times. It is generated once that is fixed.
+
+Notes on what the generated scenarios can show:
+
+- Codex S03: the failure is only in the tool output text, which is not read; the Employee stays `working` either way.
+- Codex S10: app-server shifts carry no runtime location, so a thread in tmux cannot be told apart; seats follow the session and the lowest free seat.
+- S11: outside a repository, Claude records omit `gitBranch`; Codex `gitInfo` and `session_meta.git` are null.
+- S13: the Claude error record (`isApiErrorMessage`, `apiError`, `apiErrorStatus`) and Codex `task_complete.error` value are placeholders; the Adapters read only their presence.
 
 ## 5. Layout
 
@@ -75,6 +84,8 @@ tests/fixtures/<provider>/<version>/<scenario-id>/
 | `appserver_notify` | Codex: applies a notification (`thread/started`, `thread/status/changed`, `thread/closed`) to the fake daemon and delivers it |
 | `appserver_disconnect` | Codex: breaks the current app-server connection |
 
-For Codex, `log_append` uses `path` relative to the Codex home. Thread `path` values under `/home/user/.codex` are rewritten to the test home.
+For Codex, `log_append` uses `path` relative to the Codex home. An operation with `home: <n>` applies to Codex home `n` (default 1); the harness runs one daemon and Adapter per home, with account alias `codex-account-<n>`. Thread `path` values under `/home/user/.codex` (home 1) or `/home/user/.codex-<n>` are rewritten to that test home.
 
-The harness polls the Adapter after each operation and feeds the Judge. `meta.yaml` `expect` entries name the step (`after`) and the expected `seat`, `presence`, `state`, `tool`, `workload`, `reset_at`, hired `contractors` (state and tool), or state history of the selected Employee, and the count of ended Contractors (`contractors_ended`); `ref` and `same_as` assert Employee identity across steps. Every emitted message is validated against the protocol schema and must not contain fixture placeholders for text, tool input or output, home paths, or provider tool ids.
+The harness resolves `/home/user/repo` and its subdirectories to the Project `github.com/example/repo` and any other directory to the Common Office, and maps conditions with the default rules of a new Branch configuration.
+
+The harness polls the Adapters after each operation and feeds the Judge. `meta.yaml` `expect` entries name the step (`after`) and the expected `seat`, `project`, `presence`, `state`, `tool`, `workload`, `reset_at`, `session_id`, runtime `location`, `account_alias`, `model`, `effort`, `condition`, hired `contractors` (state and tool), or state history of the selected Employee, and the number of Employees (`agent_count`) and of ended Contractors (`contractors_ended`). The Employee is selected by `pid` (Claude), else by `seat` (default 1) within `project` when given. `ref` and `same_as` assert Employee identity across steps; `shift_ref` and `same_shift_as` assert the same shift. Every emitted message is validated against the protocol schema and must not contain fixture placeholders for text, tool input or output, home paths, or provider tool ids.

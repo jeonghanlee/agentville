@@ -1,0 +1,18 @@
+provider: codex
+version: 0.163.0
+scenario: S13
+title: Turn and thread errors persist through turn end and idle until activity resumes
+expect:
+- {state: idle, after: 1}
+- {state: working, after: 3}
+- {state: error, tool: null, after: 4}
+- {state: error, after: 5}
+- {state: working, after: 6}
+- state: idle
+  states_since_start: [unknown, idle, working, error, working, completed, idle]
+  after: 8
+- {state: error, after: 11}
+- {state: error, after: 12}
+- {state: working, after: 13}
+- {state: error, after: 14}
+- {presence: off_duty, after: 15}

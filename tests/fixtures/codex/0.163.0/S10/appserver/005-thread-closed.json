@@ -1,0 +1,6 @@
+{
+  "method": "thread/closed",
+  "params": {
+    "threadId": "019a0000-0000-7000-8000-00000000000a"
+  }
+}

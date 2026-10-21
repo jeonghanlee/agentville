@@ -5,11 +5,37 @@ from pathlib import Path
 
 import jsonschema
 
+from agentville.collector.config import parse
+from agentville.collector.project import COMMON_OFFICE, Project
 from agentville.common.protocol import load_schema
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = load_schema()
+REPO = "/home/user/repo"
+PROJECT = Project("github.com/example/repo", "repo")
+# The default condition rules a new Branch configuration starts with.
+CONDITION_FOR = parse({"host": {"id": "branch-test"}}).condition_for
+
+
+class FixtureResolver:
+    """The fixture repository is one Project; any other directory is outside a repository."""
+
+    def resolve(self, cwd):
+        return PROJECT if cwd == REPO or cwd.startswith(REPO + "/") else COMMON_OFFICE
+
+
+# Keys that check the Judge as a whole; an expectation with only these selects no Employee.
+GLOBAL_KEYS = {"after", "agent_count", "contractors_ended"}
+
+
+def find_agent(agents, exp):
+    """The Employee at ``seat`` (default 1) in ``project`` (default: any), or None without per-Employee keys."""
+    if set(exp) <= GLOBAL_KEYS:
+        return None
+    return next(
+        a for a in agents if a.seat == exp.get("seat", 1) and exp.get("project", a.project.project_id) == a.project.project_id
+    )
 
 
 def load_scenario(scenario: Path):
@@ -44,6 +70,20 @@ def check(replay, step, exp, refs, select):
         return
     if "seat" in exp:
         assert agent.seat == exp["seat"], where
+    if "project" in exp:
+        assert agent.project.project_id == exp["project"], where
+    if "session_id" in exp:
+        assert agent.instance is not None and agent.instance.session_id == exp["session_id"], where
+    if "location" in exp:
+        assert agent.location == exp["location"], where
+    if "account_alias" in exp:
+        assert agent.account_alias == exp["account_alias"], where
+    if "model" in exp:
+        assert agent.model == exp["model"], where
+    if "effort" in exp:
+        assert agent.settings.get("effort") == exp["effort"], where
+    if "condition" in exp:
+        assert judge.agent_payload(agent, replay.now)["condition"] == exp["condition"], where
     if "presence" in exp:
         assert agent.presence(replay.now, judge._leave_after) == exp["presence"], where
     if "state" in exp:
@@ -63,6 +103,10 @@ def check(replay, step, exp, refs, select):
         refs[exp["ref"]] = agent.agent_id
     if "same_as" in exp:
         assert agent.agent_id == refs[exp["same_as"]], where
+    if "shift_ref" in exp:
+        refs[exp["shift_ref"]] = agent.instance.instance_id
+    if "same_shift_as" in exp:
+        assert agent.instance is not None and agent.instance.instance_id == refs[exp["same_shift_as"]], where
 
 
 # Placeholders for prompts, tool input, and provider identifiers that must stay on the Branch.

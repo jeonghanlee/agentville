@@ -1,0 +1,21 @@
+{
+  "pid": 1004,
+  "sessionId": "44444444-4444-4444-8444-444444444444",
+  "cwd": "/home/user/repo",
+  "startedAt": 1767225721000,
+  "updatedAt": 1767225721000,
+  "status": "idle",
+  "statusUpdatedAt": 1767225721000,
+  "procStart": "1012100",
+  "pidDomain": "linux:<host>:pid:[1]",
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "name": "<text>",
+  "nameSince": 1767225721000,
+  "nameSource": "user",
+  "version": "2.1.303",
+  "peerFeatures": [],
+  "peerProtocol": 1,
+  "messagingSocketPath": "/tmp/socket-1",
+  "bridgeSessionId": null
+}
