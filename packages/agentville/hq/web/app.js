@@ -61,6 +61,7 @@ const actors = new Map();
 const companions = new Map();
 const screensOff = new Map();
 const completions = new Map();
+const lastStates = new Map();
 const facilityOccupancy = new Map();
 let daylight = null;
 let furniture = null;
@@ -146,9 +147,13 @@ function providerName(provider) {
   return provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : String(provider);
 }
 // A completed turn shows a brief checkmark even when idle follows quickly.
+// Completed and idle can arrive together, so working or thinking turning idle also counts as a finished turn.
 function noteCompletions(all) {
   for (const row of all) {
-    if (!row.duty || row.activity?.state !== "completed") continue;
+    const previous = lastStates.get(row.key);
+    lastStates.set(row.key, row.state);
+    const finished = row.state === "completed" || (row.state === "idle" && (previous === "working" || previous === "thinking"));
+    if (!row.duty || !finished) continue;
     if (completions.get(row.key)?.since === row.activity.state_since) continue;
     completions.set(row.key, { since: row.activity.state_since, until: Date.now() + COMPLETED_MS });
     setTimeout(render, COMPLETED_MS + 50);

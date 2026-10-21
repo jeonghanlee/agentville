@@ -67,7 +67,8 @@ export function mountFurniture(world) {
         }
       });
       revision++;
-      clone.querySelectorAll(".state-symbol, .state-clock").forEach((node) => node.remove());
+      // Only the character is outlined; state marks and props such as books, mugs, phones, and steam are left out.
+      clone.querySelectorAll(".state-symbol, .state-clock, .study-books, .hand-prop, .brewing-steam").forEach((node) => node.remove());
       clone.setAttribute("class","outline-character");
       clone.setAttribute("x",(bounds.x-floor.x)*1536/floor.width);
       clone.setAttribute("y",(bounds.y-floor.y)*1024/floor.height);
