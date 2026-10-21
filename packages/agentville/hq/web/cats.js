@@ -1,4 +1,5 @@
 import { catArtwork } from "./art.js";
+import { t } from "./i18n.js";
 
 // Connected floor positions follow the open aisle and the edge of the lounge rug.
 const FLOOR = [
@@ -48,17 +49,25 @@ export function createOfficeCats(root) {
     node.dataset.facing = Math.random() < .5 ? "left" : "right";
     node.style.setProperty("--cat-blink", between(BLINK_PERIOD).toFixed(3) + "s");
     node.setAttribute("role", "img");
-    node.setAttribute("aria-label", name + ", office cat");
     const label = document.createElement("span");
     label.className = "cat-name";
-    label.textContent = name;
     node.append(catArtwork(coat), label);
     root.append(node);
-    const cat = { node, point, previous: -1, target: null, x: FLOOR[point].x,
+    const cat = { node, label, name, point, previous: -1, target: null, x: FLOOR[point].x,
       y: FLOOR[point].y, state: "sit", remaining: between(RESTS[0].duration) };
     place(cat);
     return cat;
   });
+
+  // Cat names are interface strings, so they follow the selected language.
+  function relabel() {
+    for (const cat of cats) {
+      const name = t("cat." + cat.name);
+      cat.label.textContent = name;
+      cat.node.setAttribute("aria-label", t("cat.label", { name }));
+    }
+  }
+  relabel();
 
   function place(cat) {
     cat.node.style.left = cat.x.toFixed(3) + "%";
@@ -125,4 +134,5 @@ export function createOfficeCats(root) {
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+  return { relabel };
 }

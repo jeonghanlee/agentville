@@ -118,8 +118,9 @@ def test_live_socket_requires_viewer_token_when_set(tmp_path):
 def test_dashboard_is_served(tmp_path):
     client = _client(tmp_path)
     page = client.get("/")
-    assert page.status_code == 200 and "AGENTVILLE" in page.text
+    assert page.status_code == 200 and "AgentVille" in page.text
     assert client.get("/app.js").status_code == 200
+    assert client.get("/i18n.js").status_code == 200
 
 
 def test_ingest_rejects_browser_requests(tmp_path):

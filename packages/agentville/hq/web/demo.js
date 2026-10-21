@@ -11,7 +11,7 @@ export function demoState(now = Date.now()) {
     ["theo", "Theo", "home", "agentville", "claude", "thinking", 45, "", "study-mode"],
     ["sage", "Sage", "garden", "agentville", "codex", "working", 225, "apply_patch", "normal"],
     ["ivy", "Ivy", "home", "garden-ui", "claude", "idle", 720, "", "normal"],
-    ["otto", "Otto", "home", "garden-ui", "codex", "idle", 2460, "", "lazy"],
+    ["otto", "Otto", "home", "garden-ui", "codex", "idle", 2460, "", "light"],
     ["noah", "Noah", "home", "common-office", "codex", "working", 32, "exec_command", "normal"],
     ["luna", "Luna", "home", "agentville", "claude", "idle", 4000, "", "extra-coffee"],
     ["pip", "Pip", "home", "garden-ui", "codex", "idle", 5200, "", "lazy"],
@@ -41,9 +41,9 @@ export function demoState(now = Date.now()) {
     contractor_id: "helper-" + id, parent_instance_id: "instance-" + parent, provider, origin: "in_process",
     status: "hired", state, state_since: ago(seconds), tool });
   return {
-    branches: [branch("home", "Home studio", true, "A sunny corner of the world", "Europe/Stockholm"),
-      branch("garden", "Garden studio", true, "A little further down the road", "Asia/Seoul"),
-      branch("night", "Night studio", false, "Taking a little time offline", "America/Vancouver")],
+    branches: [branch("home", "Home studio", true, "Stockholm", "Europe/Stockholm"),
+      branch("garden", "Garden studio", true, "Seoul", "Asia/Seoul"),
+      branch("night", "Night studio", false, "Vancouver", "America/Vancouver")],
     agents, activities,
     contractors: [contractor("milo", "milo", "claude", "working", 240, "Read"),
       contractor("sage", "sage-1", "codex", "working", 80, "exec_command"), contractor("sage", "sage-2", "claude", "waiting", 30),

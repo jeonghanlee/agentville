@@ -7,25 +7,18 @@ import { mountFurniture } from "./furniture.js";
 import { createDaylight, branchZone } from "./daylight.js";
 import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
+import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 
 const DEMO = new URLSearchParams(location.search).get("demo") === "1";
 const TOKEN = takeToken();
 const COMMON = "common-office";
-const STATES = {
-  working: "Working", thinking: "Thinking", waiting: "Waiting", idle: "Idle",
-  completed: "Done", error: "Error", limited: "Limited", unknown: "Unknown",
-};
-const PRESENCE = { on_duty: "On duty", off_duty: "Off duty", on_leave: "On leave" };
-const CONDITIONS = { normal: "Feeling good", "extra-coffee": "Extra coffee", "study-mode": "Study mode", lazy: "Taking it easy" };
-const VIEWS = [
-  ["office", "Virtual office", "house", "A good day to build.", "Different minds. Shared space. Good things in the making."],
-  ["dashboard", "Dashboard", "grid", "The bigger picture.", "A clear view of the work happening across your branches."],
-  ["employees", "Employees", "people", "Meet your little team.", "Every teammate, every project, all in one place."],
-  ["projects", "Projects", "folder", "Room for good ideas.", "One project, one room. A place for every kind of work."],
-  ["timeline", "Timeline", "clock", "Life around the office.", "Current activity and changes observed during this visit."],
-  ["branches", "Branches", "branches", "A world of little offices.", "Different places, connected through one workspace."],
-  ["settings", "Settings", "settings", "", ""],
-];
+const STATES = ["working", "thinking", "waiting", "idle", "completed", "error", "limited", "unknown"];
+const PRESENCE = ["on_duty", "off_duty", "on_leave"];
+// "lazy" is the legacy name of "light"; both keep the same label and pose.
+const CONDITIONS = ["normal", "extra-coffee", "study-mode", "light", "lazy"];
+// Labels, titles, and descriptions come from the dictionary as nav.<id>, view.<id>.title, and view.<id>.description.
+const VIEWS = [["office", "house"], ["dashboard", "grid"], ["employees", "people"], ["projects", "folder"],
+  ["timeline", "clock"], ["branches", "branches"], ["settings", "settings"]];
 const ROOM_LAYOUT = {
   studio0: { color: "#adba88", seats: [[26.5,36.5,"back",38],[36,42,"back",44],[32.4,26.2,"front",25],[42.5,32.2,"front",30]], overflow: [44,47] },
   studio1: { color: "#b8a4c8", seats: [[75.2,37.8,"back",41],[83.8,43.4,"back",47]], overflow: [76,50] },
@@ -66,6 +59,8 @@ const facilityOccupancy = new Map();
 let daylight = null;
 let furniture = null;
 let coffee = null;
+let cats = null;
+let connection = ["connection.connecting", ""];
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -104,7 +99,18 @@ function button(label, cls, fn, attrs = {}) {
   return node;
 }
 function text(id, value) { $(id).textContent = value; }
-function color(state) { return "var(--" + (Object.hasOwn(STATES, state) ? state : "idle") + ")"; }
+function known(state) { return STATES.includes(state); }
+function color(state) { return "var(--" + (known(state) ? state : "idle") + ")"; }
+function stateName(state) { return t("state." + (known(state) ? state : "unknown")); }
+function presenceName(presence) { return PRESENCE.includes(presence) ? t("presence." + presence) : presence; }
+function conditionName(condition) {
+  return CONDITIONS.includes(condition) ? t("condition." + (condition === "lazy" ? "light" : condition)) : condition;
+}
+// Every room except the Common Office is one repository.
+function repositoryTag(projectId) {
+  return projectId === COMMON ? null : el("span", { class: "room-kind" }, t("room.repository"));
+}
+function branchName(branch) { return branch?.branch?.alias || t("branch.unnamed"); }
 function badge(provider) {
   return el("span", { class: "provider" + (provider === "codex" ? " codex" : "") },
     provider === "claude" ? "CL" : provider === "codex" ? "CX" : String(provider).slice(0, 2).toUpperCase());
@@ -112,33 +118,34 @@ function badge(provider) {
 function age(iso, compact = true) {
   const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
   if (!Number.isFinite(seconds)) return "-";
-  if (seconds < 60) return compact ? "now" : "just now";
-  if (seconds < 3600) return Math.floor(seconds / 60) + (compact ? "m" : " min ago");
-  if (seconds < 86400) return Math.floor(seconds / 3600) + (compact ? "h" : " hr ago");
-  return Math.floor(seconds / 86400) + (compact ? "d" : " days ago");
+  if (seconds < 60) return t(compact ? "age.now" : "age.justNow");
+  if (seconds < 3600) return t(compact ? "age.m" : "age.minutes", { n: Math.floor(seconds / 60) });
+  if (seconds < 86400) return t(compact ? "age.h" : "age.hours", { n: Math.floor(seconds / 3600) });
+  const days = Math.floor(seconds / 86400);
+  return t(compact ? "age.d" : days === 1 ? "age.day" : "age.days", { n: days });
 }
 function displayZone() {
   return branchZone(current.branches.find((b) => b.branch_id === branchId)?.branch?.time);
 }
-// Clock times use the displayed Branch zone, matching the heading clock.
+// Clock times use the displayed Branch zone, matching the heading clock, in the selected language's locale.
 function clockTime(iso) {
   const at = new Date(iso || NaN);
   if (!Number.isFinite(at.getTime())) return "";
   const zone = displayZone(), options = zone ? { timeZone: zone } : {};
   const sameDay = at.toLocaleDateString("en-US", options) === new Date().toLocaleDateString("en-US", options);
-  return (sameDay ? "" : at.toLocaleDateString("en-US", { weekday: "short", ...options }) + " ")
-    + at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...options });
+  return (sameDay ? "" : at.toLocaleDateString(locale(), { weekday: "short", ...options }) + " ")
+    + at.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit", ...options });
 }
 function resetLabel(row) {
   const time = row.state === "limited" ? clockTime(row.activity?.reset_at) : "";
-  return time ? "Resets " + time : "";
+  return time ? t("reset", { time }) : "";
 }
 function workloadText(row) {
-  const count = row.activity?.workload ?? 0;
-  return count + (count === 1 ? " recent tool" : " recent tools");
+  const n = row.activity?.workload ?? 0;
+  return t(n === 1 ? "workload.one" : "workload.other", { n });
 }
 function contractorState(contractor) {
-  return Object.hasOwn(STATES, contractor.state) ? contractor.state : "unknown";
+  return known(contractor.state) ? contractor.state : "unknown";
 }
 function contractorTool(contractor) {
   return contractorState(contractor) === "working" ? contractor.tool || "" : "";
@@ -176,15 +183,15 @@ function rows() {
     const activity = activities.get(keyOf(agent.branch_id, agent.agent_id));
     const duty = agent.presence === "on_duty";
     const verified = (DEMO || connected) && Boolean(branch?.reachable);
-    const state = duty ? (activity && Object.hasOwn(STATES, activity.state) ? activity.state : "unknown") : "idle";
+    const state = duty ? (activity && known(activity.state) ? activity.state : "unknown") : "idle";
     const detail = state === "idle" && duty ? idleDetail(activity, branch) : "";
     const contractors = current.contractors.filter((c) =>
       c.branch_id === agent.branch_id && c.parent_instance_id === agent.instance?.instance_id && c.status !== "ended");
     return {
       key: keyOf(agent.branch_id, agent.agent_id), agent, branch, activity, state, detail, duty, verified, contractors,
       name: agent.alias || providerName(agent.provider) + " " + agent.seat,
-      branchName: branch?.branch?.alias || "Unnamed branch",
-      project: agent.project_alias || "Untitled project",
+      branchName: branchName(branch),
+      project: agent.project_alias || t("project.unnamed"),
       since: duty && activity ? activity.state_since : agent.presence_since,
     };
   }).sort((a,b) => a.agent.project_id.localeCompare(b.agent.project_id) || a.agent.seat - b.agent.seat || a.key.localeCompare(b.key));
@@ -196,7 +203,7 @@ function roomOf(row) {
 }
 function queryMatches(row) {
   const query = $("search").value.trim().toLowerCase();
-  return !query || [row.name, row.project, row.agent.provider, row.branchName, STATES[row.state],
+  return !query || [row.name, row.project, row.agent.provider, row.branchName, stateName(row.state),
     row.state === "working" ? row.activity?.tool : ""].filter(Boolean).join(" ").toLowerCase().includes(query);
 }
 function passes(row) {
@@ -216,14 +223,18 @@ function context(all) {
   return { local, projects, page, present, office };
 }
 function stateLabel(row) {
-  const label = !row.duty ? PRESENCE[row.agent.presence] || row.agent.presence
-    : row.detail === "fika" ? "Fika" : row.detail === "phone" ? "On a break"
-    : row.detail === "dozing" ? "Dozing" : STATES[row.state];
+  const label = !row.duty ? presenceName(row.agent.presence)
+    : row.detail && row.detail !== "at desk" ? t("idle." + row.detail) : stateName(row.state);
   const unverified = !row.verified;
   return el("span", { class: "state-label" + (unverified ? " unverified" : ""), style: { "--state-color": color(row.state) },
-    ...(unverified ? { title: "Unverified: last observed " + label } : {}) },
+    ...(unverified ? { title: t("state.unverifiedTitle", { label }) } : {}) },
     el("i", { class: "status-dot" }), label, unverified ? el("span", { class: "unverified-mark", "aria-hidden": "true" }, "?") : null,
-    unverified ? el("span", { class: "sr-only" }, " (unverified)") : null);
+    unverified ? el("span", { class: "sr-only" }, t("state.unverifiedSuffix")) : null);
+}
+function statusText(row) {
+  const label = row.state === "idle" && row.detail ? t("idle.value", { state: stateName("idle"), detail: t("idle." + row.detail) })
+    : stateName(row.state);
+  return row.verified ? label : t("state.unverifiedValue", { label });
 }
 function countBadge(list) {
   return el("b", list.some((r) => r.duty && !r.verified) ? { class: "unverified-count" } : {}, list.length);
@@ -256,18 +267,19 @@ function renderFilters(ctx) {
   }
   $("filters").replaceChildren(...states.map((s) => button([
     s === "all" ? null : el("i", { class: "status-dot", style: { background: color(s) } }),
-    s === "all" ? "Everyone" : STATES[s],
+    s === "all" ? t("filters.all") : stateName(s),
     countBadge(ctx.present.filter((r) => s === "all" || r.state === s)),
   ], "filter", () => { stateFilter = s; render(); },
   { "aria-pressed": String(s === stateFilter), "data-focus-key": "filter-" + s, "data-filter": s })));
 }
 function renderRooms(ctx) {
-  const rooms = ctx.page.map((p,i) => ({ ...p, id: projectRoom(p.id), color: ROOM_LAYOUT["studio" + i].color }));
-  rooms.push({ id: "common", name: "Common office", color: ROOM_LAYOUT.common.color },
-    { id: "fika", name: "Fika lounge", color: ROOM_LAYOUT.fika.color },
-    { id: "infirmary", name: "Infirmary", color: ROOM_LAYOUT.infirmary.color });
+  const rooms = ctx.page.map((p,i) => ({ ...p, id: projectRoom(p.id), color: ROOM_LAYOUT["studio" + i].color, repository: true }));
+  rooms.push({ id: "common", name: t("room.common"), color: ROOM_LAYOUT.common.color },
+    { id: "fika", name: t("room.fika"), color: ROOM_LAYOUT.fika.color },
+    { id: "infirmary", name: t("room.infirmary"), color: ROOM_LAYOUT.infirmary.color });
   $("rooms").replaceChildren(...rooms.map((room) => button([
     el("i", { class: "room-square", style: { "--room-color": room.color } }), room.name,
+    room.repository ? el("small", { class: "room-kind" }, t("room.repository")) : null,
     countBadge(ctx.present.filter((r) => roomOf(r) === room.id)),
   ], "room-tab", () => { roomFilter = roomFilter === room.id ? "" : room.id; render(); },
   { "aria-pressed": String(roomFilter === room.id), "data-focus-key": "room-" + room.id })));
@@ -327,12 +339,12 @@ function renderCharacters(ctx) {
       used.add(row.key);
       node.dataset.employeeKey = row.key;
       const visible = passes(row);
-      const condition = Object.hasOwn(CONDITIONS, row.agent.condition) ? row.agent.condition : "normal";
+      const condition = CONDITIONS.includes(row.agent.condition) ? row.agent.condition : "normal";
       node.className = ["agent", row.state, row.detail, condition, row.verified ? "" : "unverified",
         selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
       const reset = resetLabel(row), done = showsDone(row);
-      node.setAttribute("aria-label", row.name + ", " + STATES[row.state] + (row.verified ? "" : " (unverified)")
-        + (reset ? ", " + reset : "") + ", " + row.project);
+      node.setAttribute("aria-label", row.name + ", " + stateName(row.state) + (row.verified ? "" : t("state.unverifiedSuffix"))
+        + (done && row.state !== "completed" ? ", " + stateName("completed") : "") + (reset ? ", " + reset : "") + ", " + row.project);
       node.setAttribute("aria-pressed", String(row.key === selected));
       node.tabIndex = visible ? 0 : -1;
       const visit = coffee?.get(row.key);
@@ -374,7 +386,7 @@ function renderCharacters(ctx) {
         }
         screen.style.zIndex = String(seat[3] - 1);
       }
-      const appearance = JSON.stringify([row.state, detail, condition, desk, workstation, cup, node.dataset.queuePosition,
+      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, node.dataset.queuePosition,
         row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass)]);
       if (node.dataset.appearance !== appearance) {
         const name = el("span", { class: "agent-name" }, badge(row.agent.provider), row.name,
@@ -383,10 +395,10 @@ function renderCharacters(ctx) {
         const children = [character(row.key, row.state, detail, condition, false, desk, workstation, cup),
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
-        if (done) children.push(el("span", { class: "done-check" }, icon("check")));
-        if (visit?.phase === "waiting") children.push(el("span", { class: "coffee-status" }, "Brewing..."));
+        if (done) children.push(el("span", { class: "done-check", title: stateName("completed") }, icon("check")));
+        if (visit?.phase === "waiting") children.push(el("span", { class: "coffee-status" }, t("coffee.brewing")));
         if (spot) children.push(el("span", { class: "queue-status" },
-          (room === "infirmary" ? "Waiting for bed" : "Waiting for seat") + " / " + node.dataset.queuePosition));
+          t(room === "infirmary" ? "queue.bed" : "queue.seat") + " / " + node.dataset.queuePosition));
         node.replaceChildren(...children);
         node.dataset.appearance = appearance;
       }
@@ -404,18 +416,18 @@ function renderCharacters(ctx) {
         const state = contractorState(contractor), tool = contractorTool(contractor);
         const extra = i === shown.length - 1 ? row.contractors.length - shown.length : 0;
         companion.className = ["contractor", state, row.verified ? "" : "unverified", visible ? "" : "filtered"].join(" ");
-        companion.setAttribute("aria-label", providerName(contractor.provider) + " contractor of " + row.name + ", " + STATES[state]
-          + (row.verified ? "" : " (unverified)") + (tool ? ", " + tool : "") + (extra ? ", " + extra + " more contractors" : ""));
+        companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
+          + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
         companion.tabIndex = visible ? 0 : -1;
         const foot = desk === "lying" ? [seat[0]+4.2,seat[1]+13]
           : [seat[0]+3.1,seat[1]+(visit || spot ? 0 : desk.startsWith("back") ? 2.2 : 3.6)];
         companion.style.left = (foot[0] + i * 2.3) + "%";
         companion.style.top = (foot[1] + i * .9) + "%";
         companion.style.zIndex = String(Math.floor(foot[1] + i * .9)+1);
-        const appearance = JSON.stringify([state, tool, contractor.provider, extra]);
+        const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra]);
         if (companion.dataset.appearance !== appearance) {
           companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
-            el("span", { class: "contractor-name" }, badge(contractor.provider), "Contractor / " + STATES[state], tool ? " / " + tool : null),
+            el("span", { class: "contractor-name" }, badge(contractor.provider), t("contractor") + " / " + stateName(state), tool ? " / " + tool : null),
             ...(extra ? [el("small", {}, "+" + extra)] : []));
           companion.dataset.appearance = appearance;
         }
@@ -425,7 +437,7 @@ function renderCharacters(ctx) {
       const overflow = button("+" + (people.length - placed.length), "room-overflow", () => {
         roomFilter = room.startsWith("studio") ? projectRoom(ctx.page[Number(room.slice(-1))].id) : room;
         render();
-      }, { "aria-label": "Show all teammates in this room" });
+      }, { "aria-label": t("room.showAll") });
       overflow.style.left = layout.overflow[0] + "%";
       overflow.style.top = layout.overflow[1] + "%";
       $("characters").append(overflow);
@@ -453,96 +465,97 @@ function renderTeam(ctx) {
     el("span", { class: "teammate-state" }, stateLabel(row), el("time", { datetime: row.since }, age(row.since)))],
     "teammate", () => selectEmployee(row.key),
     { "aria-pressed": String(row.key === selected), "data-focus-key": "team-" + row.key }))
-    : [el("div", { class: "empty-list" }, ctx.present.length ? "No teammates match this view." : "A quiet moment in the office.")]));
+    : [el("div", { class: "empty-list" }, t(ctx.present.length ? "team.noMatch" : "team.none"))]));
   const row = ctx.present.find((r) => r.key === selected);
   if (!row) {
-    $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, "A LITTLE HELLO"),
-      el("p", { class: "detail-note" }, "Choose a teammate to see how their day is going."));
+    $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, t("detail.eyebrow")),
+      el("p", { class: "detail-note" }, t("detail.select")));
     return;
   }
-  const stats = [["Status", !row.verified ? "Unverified (" + STATES[row.state] + ")" : STATES[row.state]], ["Condition", CONDITIONS[row.agent.condition] || row.agent.condition],
-    ["Tool", row.state === "working" ? row.activity?.tool || "-" : "-"],
-    ["Workload", row.verified ? workloadText(row) : "-"]];
-  if (resetLabel(row)) stats.push(["Usage limit", resetLabel(row)]);
+  const stats = [[t("detail.status"), statusText(row)], [t("detail.condition"), conditionName(row.agent.condition)],
+    [t("detail.tool"), row.state === "working" ? row.activity?.tool || "-" : "-"],
+    [t("detail.workload"), row.verified ? workloadText(row) : "-"]];
+  if (resetLabel(row)) stats.push([t("detail.limit"), resetLabel(row)]);
   const occupants = facilityOccupancy.get(keyOf(branchId,roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
-  if (waiting) stats.push(["Place", "Waiting for " + (roomOf(row) === "infirmary" ? "bed" : "seat")]);
-  $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, "IN THEIR LITTLE CORNER"),
-    el("div", { class: "detail-top" }, avatar(row), el("div", {}, el("strong", {}, row.name), el("small", {}, row.project + " / " + row.branchName))),
+  if (waiting) stats.push([t("detail.place"), t(roomOf(row) === "infirmary" ? "queue.bed" : "queue.seat")]);
+  const note = !row.verified ? t("detail.unverified") : row.state === "limited" ? t("detail.limited")
+    : row.state === "unknown" ? t("detail.unknown") : "";
+  const observed = clockTime(row.branch?.last_seen_at);
+  $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, t("detail.eyebrow")),
+    el("div", { class: "detail-top" }, avatar(row), el("div", {}, el("strong", {}, row.name),
+      el("small", {}, row.project, " ", repositoryTag(row.agent.project_id), " / " + row.branchName))),
     el("dl", { class: "detail-grid" }, ...stats.map(([name,value]) => el("div", {}, el("dt", {}, name), el("dd", {}, value)))),
-    ...(row.contractors.length ? [el("div", { class: "detail-contractors" }, el("p", { class: "detail-eyebrow" }, "CONTRACTORS"),
+    ...(row.contractors.length ? [el("div", { class: "detail-contractors" }, el("p", { class: "detail-eyebrow" }, t("contractor.upper")),
       el("ul", {}, ...row.contractors.map((contractor) => {
         const state = contractorState(contractor), tool = contractorTool(contractor);
-        return el("li", {}, badge(contractor.provider), el("span", {}, "Contractor"),
+        return el("li", {}, badge(contractor.provider), el("span", {}, t("contractor")),
           stateLabel({ ...row, state, detail: "", duty: true }), el("small", {}, tool || "-"));
       })))] : []),
-    el("p", { class: "detail-note" }, !row.verified ? "Last seen like this. Waiting for a fresh update."
-      : row.state === "waiting" ? "A little help from you, and we're off."
-      : row.state === "limited" ? "Screen off until the usage limit resets."
-      : row.detail === "fika" ? "Good ideas need a coffee break, too." : row.state === "error" ? "A little rest in the infirmary."
-      : row.state === "unknown" ? "Waiting for a fresh update." : row.agent.condition === "extra-coffee" ? "Powered by a little extra coffee." : "Quietly making good things happen."));
+    ...(note ? [el("p", { class: "detail-note" }, note)] : []),
+    ...(observed ? [el("p", { class: "detail-note" }, t("detail.lastObserved", { time: observed }))] : []));
 }
+function eventLabel(event) { return t("event." + event.kind); }
 function eventNode(event) {
   const symbol = { working: "spark", thinking: "spark", waiting: "hand", idle: "coffee", error: "heart", completed: "check", unknown: "branches", limited: "clock" }[event.state] || "clock";
   return el("div", { class: "event" }, el("span", { class: "event-icon" }, icon(symbol)),
-    el("div", {}, el("p", {}, el("strong", {}, event.name), " " + event.label),
+    el("div", {}, el("p", {}, el("strong", {}, event.name), " " + eventLabel(event)),
       el("small", {}, event.project + " / " + age(event.at, false))));
 }
 function visibleEvents() {
   const q = $("search").value.trim().toLowerCase();
-  return events.filter((e) => !q || [e.name,e.project,e.label].join(" ").toLowerCase().includes(q));
+  return events.filter((e) => !q || [e.name,e.project,eventLabel(e)].join(" ").toLowerCase().includes(q));
 }
 function recordEvents(all) {
   for (const row of all) {
     const key = JSON.stringify([row.key,row.agent.presence,row.activity?.state,row.since]);
     if (eventKeys.has(key)) continue;
     eventKeys.add(key);
-    const label = !row.duty ? "is " + PRESENCE[row.agent.presence]?.toLowerCase() + "."
-      : { working: "is making things happen.", thinking: "is thinking it through.", waiting: "is waiting for you.",
-        idle: "is taking a breather.", error: "is in the infirmary.", limited: "is waiting for a reset.",
-        unknown: "has an unverified status.", completed: "finished a turn." }[row.state];
-    events.push({ name: row.name, project: row.project, state: row.state, label, at: row.since });
+    // Events keep a dictionary kind, so a language change relabels past entries.
+    const kind = !row.duty ? (PRESENCE.includes(row.agent.presence) ? row.agent.presence : "unknown") : row.state;
+    events.push({ name: row.name, project: row.project, state: row.state, kind, at: row.since });
   }
   events.sort((a,b) => Date.parse(b.at) - Date.parse(a.at));
   events = events.slice(0, MAX_EVENTS);
   if (eventKeys.size > 1000) eventKeys = new Set(all.map((r) => JSON.stringify([r.key,r.agent.presence,r.activity?.state,r.since])));
 }
 function employeeTable(all) {
-  const heading = ["Branch / Room", "Employee", "Presence", "Activity", "Tool", "Condition", "Workload", "Since"];
+  const heading = ["table.room", "table.colleague", "table.presence", "table.activity", "table.tool", "table.condition", "table.workload", "table.since"];
   const body = all.filter(queryMatches).map((r) => el("tr", {},
-    el("td", {}, r.branchName, el("br"), r.project),
+    el("td", {}, r.branchName, el("br"), r.project, " ", repositoryTag(r.agent.project_id)),
     el("td", {}, badge(r.agent.provider), r.name, r.contractors.length ? " +" + r.contractors.length : ""),
-    el("td", {}, (PRESENCE[r.agent.presence] || r.agent.presence) + (r.verified ? "" : " (unverified)")),
+    el("td", {}, presenceName(r.agent.presence) + (r.verified ? "" : t("state.unverifiedSuffix"))),
     el("td", {}, stateLabel(r)), el("td", {}, r.state === "working" ? r.activity?.tool || "-" : "-"),
-    el("td", {}, r.duty ? CONDITIONS[r.agent.condition] || r.agent.condition : "-"),
+    el("td", {}, r.duty ? conditionName(r.agent.condition) : "-"),
     el("td", {}, r.duty && r.verified ? workloadText(r) : "-"),
     el("td", {}, age(r.since, false))));
-  return el("div", { class: "data-card" }, el("h2", {}, "Your teammates"),
+  return el("div", { class: "data-card" }, el("h2", {}, t("table.title")),
     el("div", { class: "table-scroll" }, el("table", {},
-      el("thead", {}, el("tr", {}, heading.map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, body.length ? body : el("tr", {}, el("td", { colspan: 8 }, "No teammates match this view."))))));
+      el("thead", {}, el("tr", {}, heading.map((h) => el("th", { scope: "col" }, t(h))))),
+      el("tbody", {}, body.length ? body : el("tr", {}, el("td", { colspan: 8 }, t("team.noMatch")))))));
 }
 function renderData(all) {
   const root = $("data-view");
   if (view === "employees") root.replaceChildren(employeeTable(all));
   if (view === "dashboard") {
-    const metrics = [["Branches", current.branches], ["On duty", all.filter((r) => r.duty)],
-      ["Waiting for you", all.filter((r) => r.duty && r.state === "waiting")], ["In the infirmary", all.filter((r) => r.duty && r.state === "error")]];
+    const metrics = [[t("metric.branches"), current.branches], [t("metric.onDuty"), all.filter((r) => r.duty)],
+      [t("metric.waiting"), all.filter((r) => r.duty && r.state === "waiting")], [t("metric.error"), all.filter((r) => r.duty && r.state === "error")]];
     root.replaceChildren(el("div", { class: "dashboard-summary" }, metrics.map(([title,list]) => {
       const unverified = list.some((r) => r.duty && !r.verified);
       return el("div", { class: "metric" + (unverified ? " unverified" : "") }, el("span", {}, title), el("strong", {}, list.length),
-        unverified ? el("small", {}, "Unverified") : null);
+        unverified ? el("small", {}, t("state.unverified")) : null);
     })), employeeTable(all));
   }
-  if (view === "timeline") root.replaceChildren(el("div", { class: "data-card" }, el("h2", {}, "Recent activity"),
-    el("div", { class: "timeline-list" }, visibleEvents().length ? visibleEvents().map(eventNode) : el("p", { class: "empty-list" }, "Activity will appear as teammates check in."))));
+  if (view === "timeline") root.replaceChildren(el("div", { class: "data-card" }, el("h2", {}, t("timeline.title")),
+    el("div", { class: "timeline-list" }, visibleEvents().length ? visibleEvents().map(eventNode) : el("p", { class: "empty-list" }, t("activity.none")))));
   if (view === "projects") {
     const projects = [...new Map(all.filter(queryMatches).map((r) => [r.agent.project_id, r.project])).entries()];
     root.replaceChildren(el("div", { class: "data-grid" }, projects.length ? projects.map(([id,name]) => {
       const members = all.filter((r) => r.agent.project_id === id);
       return el("article", { class: "project-card" }, icon("folder"), el("h2", {}, name),
-        el("p", {}, members.filter((r) => r.duty).length + " on duty / " + new Set(members.map((r) => r.agent.branch_id)).size + " branches"),
-        button("Visit room", "secondary-button", () => {
+        id === COMMON ? null : el("p", { class: "room-kind" }, t("room.repository")),
+        el("p", {}, t("project.counts", { duty: members.filter((r) => r.duty).length, branches: new Set(members.map((r) => r.agent.branch_id)).size })),
+        button(t("project.open"), "secondary-button", () => {
           branchId = members[0].agent.branch_id;
           const ctx = context(all);
           const index = ctx.projects.findIndex((p) => p.id === id);
@@ -550,26 +563,26 @@ function renderData(all) {
           roomFilter = id === COMMON ? "common" : projectRoom(id); stateFilter = "all";
           setView("office");
         }));
-    }) : el("p", { class: "empty-list" }, "Projects appear when a teammate checks in.")));
+    }) : el("p", { class: "empty-list" }, t("project.none"))));
   }
   if (view === "branches") {
     const query = $("search").value.trim().toLowerCase();
     const branches = current.branches.filter((b) => !query || (b.branch?.alias || "").toLowerCase().includes(query));
     root.replaceChildren(el("div", { class: "data-grid" }, branches.length ? branches.map((b) =>
-      el("article", { class: "branch-card" }, icon("house"), el("h2", {}, b.branch?.alias || "Unnamed branch"),
-        el("p", {}, b.reachable && (DEMO || connected) ? "Connected to HQ" : "Connection unverified"),
-        el("p", {}, all.filter((r) => r.agent.branch_id === b.branch_id && r.duty).length + " on duty / last contact " + age(b.last_seen_at, false)),
-        button("Visit office", "secondary-button", () => { branchId = b.branch_id; floor = 0; roomFilter = ""; stateFilter = "all"; setView("office"); })))
-      : el("p", { class: "empty-list" }, "No branches match this view.")));
+      el("article", { class: "branch-card" }, icon("house"), el("h2", {}, branchName(b)),
+        el("p", {}, t(b.reachable && (DEMO || connected) ? "branch.reporting" : "branch.unreachable")),
+        el("p", {}, t("branch.counts", { duty: all.filter((r) => r.agent.branch_id === b.branch_id && r.duty).length, age: age(b.last_seen_at, false) })),
+        button(t("branch.open"), "secondary-button", () => { branchId = b.branch_id; floor = 0; roomFilter = ""; stateFilter = "all"; setView("office"); })))
+      : el("p", { class: "empty-list" }, t("branch.noMatch"))));
   }
 }
 function updateClock() {
   const now = new Date(), zone = displayZone(), options = zone ? { timeZone: zone } : {};
   const branch = current.branches.find((b) => b.branch_id === branchId);
-  text("today", now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...options }).toUpperCase());
-  text("local-time", now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...options }));
-  text("clock-label", zone ? zone.replaceAll("_", " ") : "Your local time");
-  $("clock-label").title = zone ? "Local time at " + (branch?.branch?.alias || "Unnamed branch") : "";
+  text("today", now.toLocaleDateString(locale(), { weekday: "short", month: "short", day: "numeric", ...options }).toUpperCase());
+  text("local-time", now.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit", ...options }));
+  text("clock-label", zone ? zone.replaceAll("_", " ") : t("clock.browser"));
+  $("clock-label").title = zone ? t("clock.branch", { branch: branchName(branch) }) : "";
   daylight?.update(now, zone);
 }
 function render() {
@@ -584,50 +597,54 @@ function render() {
     selected = onFloor.find((r) => r.state === "working")?.key || onFloor[0]?.key || matching[0]?.key || "";
   }
   $("branch-select").replaceChildren(...(current.branches.length ? current.branches.map((b) =>
-    el("option", { value: b.branch_id }, b.branch?.alias || "Unnamed branch")) : [el("option", { value: "" }, "Your office")]));
+    el("option", { value: b.branch_id }, branchName(b))) : [el("option", { value: "" }, t("branch.none"))]));
   $("branch-select").value = branchId;
   $("branch-select").disabled = !current.branches.length;
   const branch = current.branches.find((b) => b.branch_id === branchId);
-  text("branch-subtitle", branch ? (branch.branch?.location || "A place for your team") : "Waiting for the first teammate");
+  text("branch-subtitle", branch ? (branch.branch?.location || t("branch.noLocation")) : t("branch.waiting"));
   const available = branch?.reachable && (DEMO || connected);
   $("office-open").classList.toggle("unreachable", !available);
-  $("office-open").replaceChildren(el("i", { class: "status-dot" }), available ? "Office is open" : "Office is quiet");
+  $("office-open").replaceChildren(el("i", { class: "status-dot" }), t(available ? "branch.reporting" : "branch.noReport"));
   const projects = new Set(all.filter((r) => r.agent.project_id !== COMMON).map((r) => r.agent.project_id));
-  $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "on duty"],
-    ["folder", projects.size, "projects"], ["branches", current.branches.length, "branches"]].map(([symbol,n,label]) =>
-    el("span", { class: "summary-item" }, icon(symbol), el("strong", {}, n), label)));
+  $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "summary.onDuty"],
+    ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
+    el("span", { class: "summary-item" }, icon(symbol), el("strong", {}, n), t(label))));
   renderFilters(ctx); renderRooms(ctx); renderCharacters(ctx); renderTeam(ctx);
   $("scene-empty").hidden = ctx.present.length > 0;
   $("scene").classList.toggle("is-empty", ctx.present.length === 0);
-  text("office-footer-text", ctx.present.length + " teammates / " + ctx.projects.length + " project rooms");
+  const first = !current.branches.length;
+  text("empty-title", t(first ? "empty.firstTitle" : "empty.dutyTitle"));
+  text("empty-text", t(first ? "empty.firstText" : "empty.dutyText"));
+  text("office-footer-text", connected || DEMO ? t("footer.counts", { present: ctx.present.length, rooms: ctx.projects.length }) : t("footer.waiting"));
   $("recent-activity").replaceChildren(...(visibleEvents().length ? visibleEvents().slice(0,4).map(eventNode)
-    : [el("p", { class: "empty-list" }, "Waiting for a little activity.")]));
+    : [el("p", { class: "empty-list" }, t("activity.none"))]));
   $("branch-statuses").replaceChildren(...current.branches.map((b) =>
     el("span", { class: "branch-status" + (b.reachable && (DEMO || connected) ? "" : " unreachable") },
-      el("i", { class: "status-dot" }), b.branch?.alias || "Unnamed branch",
+      el("i", { class: "status-dot" }), branchName(b),
       el("time", { datetime: b.last_seen_at },
-        (b.reachable && (DEMO || connected) ? "last contact " : "unverified / ") + age(b.last_seen_at)))));
+        t(b.reachable && (DEMO || connected) ? "branch.lastReport" : "branch.lost", { age: age(b.last_seen_at) })))));
   if (view !== "office") renderData(all);
   updateClock();
   restoreFocus(focused);
 }
 function setView(next) {
   if (next === "settings") { $("settings-dialog").showModal(); return; }
-  const config = VIEWS.find(([id]) => id === next);
-  if (!config) return;
+  if (!VIEWS.some(([id]) => id === next)) return;
   view = next;
   document.querySelectorAll(".nav-button").forEach((n) => {
     if (n.dataset.view === view) n.setAttribute("aria-current", "page"); else n.removeAttribute("aria-current");
   });
-  text("breadcrumb-view", config[1]); text("page-title", config[3]); text("page-description", config[4]);
-  text("page-eyebrow", view === "office" ? "WELCOME TO YOUR LITTLE WORLD" : "YOUR WORKSPACE, AT A GLANCE");
+  text("breadcrumb-view", t("nav." + view)); text("page-title", t("view." + view + ".title"));
+  text("page-description", t("view." + view + ".description"));
+  text("page-eyebrow", t(view === "office" ? "view.office.eyebrow" : "view.other.eyebrow"));
   $("office-view").hidden = view !== "office"; $("activity-card").hidden = view !== "office";
   $("data-view").hidden = view === "office";
   render();
 }
-function setConnection(label, cls) {
+function setConnection(key, cls) {
+  connection = [key, cls];
   $("connection").className = "connection " + cls;
-  $("connection").replaceChildren(el("i", { class: "status-dot" }), label);
+  $("connection").replaceChildren(el("i", { class: "status-dot" }), t(key));
 }
 function acceptState(state) {
   if (!state || !["branches","agents","activities","contractors"].every((key) => Array.isArray(state[key]))) return false;
@@ -646,18 +663,18 @@ function connect(delay = 1000) {
       const message = JSON.parse(event.data);
       if (message.type === "state" && acceptState(message.state)) {
         delay = 1000;
-        setConnection("Live workspace", "live");
+        setConnection("connection.live", "live");
       }
-    } catch { setConnection("Invalid update", "disconnected"); }
+    } catch { setConnection("connection.invalid", "disconnected"); }
   });
   socket.addEventListener("close", (event) => {
     if (activeSocket !== socket) return;
     connected = false; render();
-    if (event.code === 4401) { setConnection("Viewer token required", "disconnected"); return; }
-    if (event.code === 4403) { setConnection("Connection refused by HQ", "disconnected"); return; }
+    if (event.code === 4401) { setConnection("connection.token", "disconnected"); return; }
+    if (event.code === 4403) { setConnection("connection.refused", "disconnected"); return; }
     // A socket that never opens may be a rejected token or a wrong HQ address; keep retrying.
-    if (!everOpened && ++failedOpens >= 5) setConnection("Can't reach HQ. Check the viewer token or address", "disconnected");
-    else setConnection("Reconnecting", "disconnected");
+    if (!everOpened && ++failedOpens >= 5) setConnection("connection.unreachable", "disconnected");
+    else setConnection("connection.reconnecting", "disconnected");
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(() => connect(Math.min(delay * 2, 30000)), delay);
   });
@@ -670,7 +687,7 @@ function changeMode() {
 function labels(enabled) {
   $("world").classList.toggle("show-labels", enabled);
   $("labels-toggle").setAttribute("aria-pressed", String(enabled));
-  $("labels-toggle").setAttribute("aria-label", enabled ? "Hide names until selected" : "Show all names");
+  $("labels-toggle").setAttribute("aria-label", t(enabled ? "labels.hide" : "labels.show"));
   $("setting-labels").checked = enabled;
 }
 function changeZoom(value) {
@@ -679,10 +696,27 @@ function changeZoom(value) {
   text("zoom-reset", zoom + "%");
   $("zoom-out").disabled = zoom === MIN_ZOOM; $("zoom-in").disabled = zoom === MAX_ZOOM;
 }
+// Static strings, navigation, and mode text are rebuilt in place when the language changes.
+function applyLanguage() {
+  translateDocument();
+  $("setting-language").value = currentLanguage();
+  $("navigation").replaceChildren(...VIEWS.map(([id,symbol]) =>
+    button([icon(symbol), el("span", {}, t("nav." + id))], "nav-button", () => setView(id),
+      { "data-view": id, "aria-label": t("nav." + id), title: t("nav." + id),
+        ...(id === view ? { "aria-current": "page" } : {}) })));
+  text("workspace-name", t(DEMO ? "workspace.demo" : "workspace.local"));
+  text("workspace-mode", t(DEMO ? "workspace.toLive" : "workspace.live"));
+  $("owner-avatar").title = t(DEMO ? "workspace.demo" : "workspace.local");
+  text("settings-mode", t(DEMO ? "settings.demo" : "settings.live"));
+  text("settings-mode-description", t(DEMO ? "settings.demoHelp" : "settings.liveHelp"));
+  text("settings-mode-toggle", t(DEMO ? "settings.toLive" : "settings.toDemo"));
+  setConnection(...connection);
+  labels($("labels-toggle").getAttribute("aria-pressed") === "true");
+  daylight?.relabel(); cats?.relabel();
+  setView(view);
+}
 document.querySelectorAll("[data-icon]").forEach((node) => node.replaceChildren(icon(node.dataset.icon)));
-$("navigation").replaceChildren(...VIEWS.map(([id,label,symbol]) =>
-  button([icon(symbol), el("span", {}, label)], "nav-button", () => setView(id),
-    { "data-view": id, "aria-label": label, title: label })));
+$("setting-language").addEventListener("change", (event) => { setLanguage(event.target.value); applyLanguage(); });
 document.querySelector(".brand").href = location.pathname + location.search + location.hash;
 $("search").addEventListener("input", render);
 $("branch-select").addEventListener("change", (event) => { branchId = event.target.value; floor = 0; roomFilter = ""; stateFilter = "all"; render(); });
@@ -709,16 +743,14 @@ daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.q
 coffee = createCoffeeBreaks($("characters"),render);
 if (DEMO) {
   acceptState(demoState());
-  setConnection("Demo workspace", "demo");
-  text("workspace-name", "Demo workspace"); text("workspace-mode", "Switch to your live HQ");
-  text("settings-mode", "Demo workspace");
-  text("settings-mode-description", "These are fictional teammates. Your HQ data is not changed.");
-  text("settings-mode-toggle", "Open live workspace"); $("demo-note").hidden = false;
+  connection = ["connection.demo", "demo"];
+  $("demo-note").hidden = false;
 }
-changeZoom(100); setView("office");
+changeZoom(100);
+cats = createOfficeCats($("characters"));
+applyLanguage();
 furniture = mountFurniture($("world"));
 furniture.update();
-createOfficeCats($("characters"));
 if (!DEMO) connect();
 setInterval(render, 30000);
 setInterval(updateClock, 1000);

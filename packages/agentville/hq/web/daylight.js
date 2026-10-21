@@ -1,10 +1,11 @@
 import { icon } from "./art.js";
+import { t } from "./i18n.js";
 
 const PERIODS = [
-  { name: "morning", start: 5, end: 10, label: "A little morning sunshine", icon: "sun" },
-  { name: "day", start: 10, end: 17, label: "Daylight at the office", icon: "sun" },
-  { name: "evening", start: 17, end: 20, label: "A warm evening glow", icon: "sun" },
-  { name: "night", start: 20, end: 29, label: "A quiet night at the office", icon: "moon" },
+  { name: "morning", start: 5, end: 10, icon: "sun" },
+  { name: "day", start: 10, end: 17, icon: "sun" },
+  { name: "evening", start: 17, end: 20, icon: "sun" },
+  { name: "night", start: 20, end: 29, icon: "moon" },
 ];
 const WINDOWS = [
   "363,91 391,77 391,191 363,206", "398,73 432,56 432,177 398,192",
@@ -56,10 +57,12 @@ export function createDaylight(world, scene, label, symbol, setting) {
     if (active === period.name) return;
     active = period.name;
     scene.dataset.daylight = active;
-    label.textContent = period.label;
+    label.textContent = t("daylight." + active);
     symbol.replaceChildren(icon(period.icon));
   }
   setting.addEventListener("change", () => update());
   update();
-  return { update };
+  // A language change rewrites the period caption without waiting for the next period.
+  function relabel() { if (active) label.textContent = t("daylight." + active); }
+  return { update, relabel };
 }
