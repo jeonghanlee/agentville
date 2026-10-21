@@ -293,6 +293,42 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 
 Antigravity waiting and usage-limit signals are not yet identified.
 
+### 3.5 Configuration
+
+`$XDG_CONFIG_HOME/agentville/config.yaml` (default `~/.config/agentville/config.yaml`), mode 0600, created on first start. `host.id` is generated once and never rewritten.
+
+````yaml
+host:
+  id: <uuid>
+  alias: <hostname>
+  country: ""
+  time: <local time zone>
+  location: ""
+hq:
+  url: http://127.0.0.1:8470
+thresholds: {phone: 300, doze: 1800, lounge: 3600, leave: 604800}
+providers:
+  claude: {home: ~/.claude}
+  codex:
+    - {home: ~/.codex, account_alias: codex}
+conditions:
+  - {provider: claude, fast_mode: true, condition: extra-coffee}
+  - {provider: "*", effort: high, condition: study-mode}
+  - {provider: "*", effort: low, condition: lazy}
+collector: {poll_interval: 1.0, heartbeat_interval: 30}
+````
+
+- Codex homes present at first start are listed automatically.
+- Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns.
+
+### 3.6 Run Loop
+
+- Each tick polls every Adapter, applies observations to the Judge, and emits messages.
+- The first tick emits a `snapshot` instead of individual changes. A `heartbeat` is emitted every `heartbeat_interval`.
+- `seq` is persisted in `$XDG_STATE_HOME/agentville/seq` (default `~/.local/state/agentville/seq`).
+- Until the Sender exists, messages are written as JSONL to stdout or a file (`agentville-collector --output`).
+- Service: `deploy/systemd/agentville-collector.service` (systemd user unit).
+
 ## 4. HQ
 
 - Storage: SQLite (WAL). Current state per Branch and message history.

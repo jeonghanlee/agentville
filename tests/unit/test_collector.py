@@ -1,0 +1,87 @@
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import jsonschema
+
+from agentville.collector.config import parse
+from agentville.collector.main import Collector, SeqStore, main
+from agentville.collector.project import Project
+from agentville.common.observations import Kind, Observation, ShiftKey, Source
+
+SCHEMA = json.loads((Path(__file__).resolve().parents[2] / "schemas" / "protocol-v1.schema.json").read_text())
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+class Resolver:
+    def resolve(self, cwd):
+        return Project("github.com/example/repo", "repo")
+
+
+class ScriptedAdapter:
+    def __init__(self):
+        self.batches = []
+
+    def poll(self):
+        return self.batches.pop(0) if self.batches else []
+
+
+def _obs(kind, at, **data):
+    return Observation(kind, ShiftKey("claude", "1:1"), at, at, Source.SESSION_FILE, data)
+
+
+def _collector(tmp_path, adapter, clock):
+    config = parse({"host": {"id": "branch-1"}, "collector": {"heartbeat_interval": 30},
+                    "conditions": [{"provider": "*", "effort": "high", "condition": "study-mode"}]})
+    out = []
+    collector = Collector(config, out.append, [adapter], Resolver(), SeqStore(str(tmp_path / "seq")), clock=clock)
+    return collector, out
+
+
+def test_first_tick_sends_snapshot_then_changes(tmp_path):
+    now = [T0]
+    adapter = ScriptedAdapter()
+    adapter.batches = [
+        [_obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"}),
+         _obs(Kind.SESSION_STATUS, T0, status="idle")],
+        [_obs(Kind.MODEL_CHANGED, T0 + timedelta(seconds=1), model="m", settings={"effort": "high"})],
+    ]
+    collector, out = _collector(tmp_path, adapter, lambda: now[0])
+    collector.tick()
+    assert [m["kind"] for m in out] == ["snapshot", "heartbeat"]
+    snapshot = out[0]["payload"]
+    assert len(snapshot["agents"]) == 1 and snapshot["activities"][0]["state"] == "idle"
+    now[0] = T0 + timedelta(seconds=1)
+    collector.tick()
+    assert out[-1]["kind"] == "agent" and out[-1]["payload"]["condition"] == "study-mode"
+    now[0] = T0 + timedelta(seconds=31)
+    collector.tick()
+    assert out[-1]["kind"] == "heartbeat"
+    validator = jsonschema.Draft202012Validator(SCHEMA)
+    for message in out:
+        validator.validate(message)
+    assert [m["seq"] for m in out] == list(range(1, len(out) + 1))
+
+
+def test_sequence_resumes_after_restart(tmp_path):
+    collector, out = _collector(tmp_path, ScriptedAdapter(), lambda: T0)
+    collector.tick()
+    last = out[-1]["seq"]
+    collector2, out2 = _collector(tmp_path, ScriptedAdapter(), lambda: T0)
+    collector2.tick()
+    assert out2[0]["seq"] == last + 1
+
+
+def test_cli_once_writes_valid_messages(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    output = tmp_path / "messages.jsonl"
+    assert main(["--once", "--output", str(output)]) == 0
+    messages = [json.loads(line) for line in output.read_text().splitlines()]
+    assert [m["kind"] for m in messages] == ["snapshot", "heartbeat"]
+    validator = jsonschema.Draft202012Validator(SCHEMA)
+    for message in messages:
+        validator.validate(message)
+    assert (tmp_path / "config" / "agentville" / "config.yaml").exists()
+    assert (tmp_path / "state" / "agentville" / "seq").read_text().strip() == "2"

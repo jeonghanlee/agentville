@@ -51,6 +51,7 @@ class Agent:
     settings: dict[str, Any] = field(default_factory=dict)
     location: str | None = None
     sessions: set[str] = field(default_factory=set)
+    account_alias: str | None = None
 
     def presence(self, now: datetime, leave_after: timedelta) -> str:
         if self.instance is not None:
@@ -65,11 +66,13 @@ class Judge:
         emit: Callable[[str, datetime, dict[str, Any]], None],
         new_id: Callable[[], str] = lambda: str(uuid.uuid4()),
         leave_after: timedelta = LEAVE_AFTER,
+        condition_for: Callable[[str, str | None, dict[str, Any]], str] = lambda provider, model, settings: "normal",
     ) -> None:
         self._resolver = resolver
         self._emit = emit
         self._new_id = new_id
         self._leave_after = leave_after
+        self._condition_for = condition_for
         self.agents: list[Agent] = []
         self._by_shift: dict[ShiftKey, Agent] = {}
 
@@ -138,6 +141,8 @@ class Judge:
         location = runtime.get("location")
         agent = self._assign(project, obs.shift.provider, data.get("session_id"), location, obs.event_at)
         agent.location = location
+        if data.get("account_alias"):
+            agent.account_alias = data["account_alias"]
         agent.presence_since = obs.event_at
         agent.instance = Instance(self._new_id(), obs.shift, obs.event_at, runtime, state_since=obs.event_at)
         self._by_shift[obs.shift] = agent
@@ -200,14 +205,20 @@ class Judge:
             "alias": None,
             "presence": agent.presence(now, self._leave_after),
             "presence_since": iso(agent.presence_since),
-            "account_alias": None,
+            "account_alias": agent.account_alias,
             "model": agent.model,
             "settings": agent.settings,
-            "condition": "normal",
+            "condition": self._condition_for(agent.provider, agent.model, agent.settings),
             "instance": None
             if inst is None
             else {"instance_id": inst.instance_id, "started_at": iso(inst.started_at), "runtime": inst.runtime},
         }
+
+    def snapshot(self, now: datetime) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Agent payloads for all Employees and activity payloads for those on duty."""
+        agents = [self.agent_payload(a, now) for a in self.agents]
+        activities = [self.activity_payload(a, now) for a in self.agents if a.instance is not None]
+        return agents, activities
 
     def activity_payload(self, agent: Agent, now: datetime) -> dict[str, Any]:
         inst = agent.instance

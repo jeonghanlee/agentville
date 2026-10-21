@@ -18,6 +18,9 @@ test = [
     "jsonschema>=4",
 ]
 
+[project.scripts]
+agentville-collector = "agentville.collector.main:main"
+
 [tool.setuptools.packages.find]
 where = ["packages"]
 

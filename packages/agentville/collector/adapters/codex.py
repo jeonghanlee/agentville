@@ -60,8 +60,10 @@ class CodexAdapter:
         home: str,
         connect: Callable[[], RpcConnection] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        account_alias: str | None = None,
     ) -> None:
         self.home = home
+        self.account_alias = account_alias
         self._connect = connect or self._default_connect
         self._clock = clock
         self._conn: RpcConnection | None = None
@@ -171,7 +173,12 @@ class CodexAdapter:
                 shift,
                 now,
                 now,
-                {"cwd": thread.get("cwd", ""), "session_id": thread_id, "runtime": {"type": "app_server"}},
+                {
+                    "cwd": thread.get("cwd", ""),
+                    "session_id": thread_id,
+                    "runtime": {"type": "app_server"},
+                    "account_alias": self.account_alias,
+                },
             )
         )
         out.append(self._obs(Kind.SESSION_STARTED, shift, now, now, {"session_id": thread_id}))
