@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS branches (
     payload TEXT,
     last_seq INTEGER,
     last_seen_at TEXT NOT NULL,
-    heartbeat_interval INTEGER
+    heartbeat_interval INTEGER,
+    last_sent_at TEXT
 );
 CREATE TABLE IF NOT EXISTS agents (
     branch_id TEXT NOT NULL,
@@ -79,6 +80,9 @@ class Store:
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(branches)")}
+        if "last_sent_at" not in columns:
+            self._db.execute("ALTER TABLE branches ADD COLUMN last_sent_at TEXT")
         self._lock = threading.Lock()
         self.totals = IngestResult()
 
@@ -112,8 +116,14 @@ class Store:
     def _apply(self, message: dict[str, Any], now: datetime, result: IngestResult) -> None:
         branch_id, seq, kind = message["branch_id"], message["seq"], message["kind"]
         if kind == "snapshot":
-            row = self._db.execute("SELECT last_seq FROM branches WHERE branch_id = ?", (branch_id,)).fetchone()
+            row = self._db.execute(
+                "SELECT last_seq, last_sent_at FROM branches WHERE branch_id = ?", (branch_id,)
+            ).fetchone()
             if row and row[0] is not None and seq <= row[0]:
+                if row[1] is not None and _parse(message["sent_at"]) < _parse(row[1]):
+                    # A delayed snapshot from before the current numbering.
+                    result.stale += 1
+                    return
                 # The Branch lost its sequence state; its snapshot starts a new numbering.
                 self._db.execute("DELETE FROM messages WHERE branch_id = ? AND seq >= ?", (branch_id, seq))
         inserted = self._db.execute(
@@ -135,6 +145,9 @@ class Store:
             elif seq != last_seq + 1:
                 result.need_snapshot = True
         self._touch(branch_id, now, seq)
+        sent = self._db.execute("SELECT last_sent_at FROM branches WHERE branch_id = ?", (branch_id,)).fetchone()[0]
+        if sent is None or _parse(sent) < _parse(message["sent_at"]):
+            self._db.execute("UPDATE branches SET last_sent_at = ? WHERE branch_id = ?", (message["sent_at"], branch_id))
         payload = message["payload"]
         if kind == "snapshot":
             self._replace(branch_id, payload)

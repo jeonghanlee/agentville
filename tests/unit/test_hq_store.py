@@ -102,3 +102,25 @@ def test_branch_without_heartbeat_uses_default_interval(tmp_path):
     s.ingest("b1", [Envelope("b1").wrap("snapshot", T0, snapshot([], []), T0)], T0)
     assert s.state(T0 + timedelta(seconds=90))["branches"][0]["reachable"]
     assert not s.state(T0 + timedelta(seconds=91))["branches"][0]["reachable"]
+
+
+def test_delayed_snapshot_does_not_replace_newer_state(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    late = env.wrap("snapshot", T0, snapshot([agent("old")], []), T0)
+    s.ingest("b1", [env.wrap("snapshot", T0, snapshot([agent("new")], []), T0 + timedelta(seconds=6))], T0)
+    result = s.ingest("b1", [late], T0)
+    assert (result.accepted, result.stale) == (0, 1)
+    assert [a["agent_id"] for a in s.state(T0)["agents"]] == ["new"]
+
+
+def test_existing_database_gains_last_sent_column(tmp_path):
+    import sqlite3
+
+    path = str(tmp_path / "hq.sqlite3")
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE branches (branch_id TEXT PRIMARY KEY, payload TEXT, last_seq INTEGER, "
+               "last_seen_at TEXT NOT NULL, heartbeat_interval INTEGER)")
+    db.commit()
+    db.close()
+    s, env = Store(path), Envelope("b1")
+    assert s.ingest("b1", [env.wrap("snapshot", T0, snapshot([], []), T0)], T0).accepted == 1

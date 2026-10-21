@@ -11,9 +11,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from importlib import resources
 from typing import Any
+from urllib.parse import urlsplit
 
 import jsonschema
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -21,13 +23,22 @@ from agentville.common.protocol import load_schema
 from agentville.hq.store import Store, now_utc
 
 LOOPBACK = frozenset({"127.0.0.1", "::1"})
+LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 MAX_BATCH = 1000
 MAX_BODY = 4 * 1024 * 1024
 LIVE_REFRESH = 10.0
+SEND_TIMEOUT = 5.0
 
 
 def _bearer_matches(request: Request, token: str) -> bool:
     return hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}")
+
+
+def _hostname(netloc: str) -> str | None:
+    try:
+        return urlsplit("//" + netloc).hostname
+    except ValueError:
+        return None
 
 
 def create_app(
@@ -39,39 +50,50 @@ def create_app(
     trust_loopback: bool = True,
     viewer_token: str | None = None,
     live_refresh: float = LIVE_REFRESH,
+    hosts: frozenset[str] | None = LOCAL_HOSTS,
+    send_timeout: float = SEND_TIMEOUT,
 ) -> FastAPI:
     """Build the HQ app.
 
     ``tokens`` maps branch_id to its bearer token. With ``trust_loopback``, a Branch
     connecting from loopback needs no token; disable it behind a local reverse proxy.
     ``viewer_token``, when set, is required on every read endpoint.
+    ``hosts`` lists the accepted Host header names (DNS rebinding guard); None accepts any.
     """
     tokens = tokens or {}
     validator = jsonschema.Draft202012Validator(load_schema())
     last_prune: list[datetime] = []
 
-    viewers: set[WebSocket] = set()
+    viewers: set[Any] = set()
+    changed = asyncio.Event()
+
+    async def send(socket: Any, message: dict[str, Any]) -> None:
+        try:
+            await asyncio.wait_for(socket.send_json(message), send_timeout)
+        except Exception:  # noqa: BLE001 - a broken or stalled viewer is dropped
+            viewers.discard(socket)
+            with contextlib.suppress(Exception):
+                await socket.close()
 
     async def broadcast() -> None:
         if not viewers:
             return
         state = await run_in_threadpool(store.state, clock())
         message = {"type": "state", "state": state}
-        for socket in list(viewers):
-            try:
-                await socket.send_json(message)
-            except Exception:  # noqa: BLE001 - a broken viewer is dropped
-                viewers.discard(socket)
+        await asyncio.gather(*(send(socket, message) for socket in list(viewers)))
 
-    async def refresh_loop() -> None:
-        # Reachability and idle progression are time-based; refresh viewers periodically.
+    async def broadcast_loop() -> None:
+        # Ingest only signals a change; bursts coalesce into one broadcast, and
+        # reachability and idle progression are refreshed periodically.
         while True:
-            await asyncio.sleep(live_refresh)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(changed.wait(), live_refresh)
+            changed.clear()
             await broadcast()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        task = asyncio.create_task(refresh_loop())
+        task = asyncio.create_task(broadcast_loop())
         yield
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -79,6 +101,16 @@ def create_app(
         store.close()
 
     app = FastAPI(title="AgentVille HQ", version="0.0.1", lifespan=lifespan)
+    app.state.viewers = viewers
+
+    def host_allowed(netloc: str) -> bool:
+        return hosts is None or _hostname(netloc) in hosts
+
+    @app.middleware("http")
+    async def check_host(request: Request, call_next: Callable[[Request], Any]) -> Any:
+        if not host_allowed(request.headers.get("host", "")):
+            return PlainTextResponse("invalid host", status_code=400)
+        return await call_next(request)
 
     def authorize_branch(request: Request, branch_id: str) -> None:
         expected = tokens.get(branch_id)
@@ -111,12 +143,19 @@ def create_app(
 
     @app.post("/api/v1/ingest/messages")
     async def ingest(request: Request) -> dict[str, Any]:
+        # Collectors send no Origin; a browser always does on cross-site POST.
+        if "origin" in request.headers:
+            raise HTTPException(status_code=403, detail="browser requests are not accepted")
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+            raise HTTPException(status_code=415, detail="application/json required")
         length = request.headers.get("content-length")
         if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
             raise HTTPException(status_code=413, detail="body too large")
-        raw = await request.body()
-        if len(raw) > MAX_BODY:
-            raise HTTPException(status_code=413, detail="body too large")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > MAX_BODY:
+                raise HTTPException(status_code=413, detail="body too large")
         try:
             body = json.loads(raw)
         except ValueError as exc:
@@ -130,11 +169,17 @@ def create_app(
         branch_id = ids[0]
         authorize_branch(request, branch_id)
         result = await run_in_threadpool(ingest_batch, branch_id, messages)
-        await broadcast()
+        changed.set()
         return result
 
     @app.websocket("/ws/v1/live")
     async def live(socket: WebSocket) -> None:
+        host = socket.headers.get("host", "")
+        origin = socket.headers.get("origin")
+        # Browsers apply no CORS to WebSockets; accept only same-origin pages.
+        if not host_allowed(host) or (origin is not None and urlsplit(origin).netloc.lower() != host.lower()):
+            await socket.close(code=4403)
+            return
         if viewer_token is not None and not hmac.compare_digest(socket.query_params.get("token", ""), viewer_token):
             await socket.close(code=4401)
             return

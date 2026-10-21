@@ -12,7 +12,7 @@ from datetime import timedelta
 import uvicorn
 import yaml
 
-from agentville.hq.app import create_app
+from agentville.hq.app import LOCAL_HOSTS, create_app
 from agentville.hq.store import Store
 
 
@@ -54,6 +54,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--viewer-token-file", help="file holding the bearer token required on read endpoints")
     parser.add_argument("--allow-remote", action="store_true", help="permit binding to a non-loopback address")
     parser.add_argument("--no-trust-loopback", action="store_true", help="require tokens from loopback Branches too (reverse proxy)")
+    parser.add_argument("--server-name", action="append", default=[],
+                        help="additional Host header name accepted on a loopback bind (reverse proxy); repeatable")
     parser.add_argument("--retention-days", type=int, default=30)
     args = parser.parse_args(argv)
 
@@ -72,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
         retention=timedelta(days=args.retention_days),
         trust_loopback=not (remote or args.no_trust_loopback),
         viewer_token=viewer_token,
+        # A remote bind requires tokens on every path, so the Host guard applies to loopback binds only.
+        hosts=None if remote else LOCAL_HOSTS | frozenset(args.server_name),
     )
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0

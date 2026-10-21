@@ -352,6 +352,7 @@ Messages of one batch are applied in `seq` order:
 |---|---|
 | `(branch_id, seq)` already stored | Duplicate; ignored |
 | `snapshot` | Replaces all current state of the Branch. A snapshot whose `seq` is not above the last applied `seq` (Branch lost its sequence state) also discards stored messages from that `seq` on and restarts the numbering. |
+| `snapshot` with `seq` not above the last applied and `sent_at` earlier than the latest applied `sent_at` | Delayed snapshot; stale, not applied |
 | `seq` lower than the last applied | Stale; stored, not applied |
 | `seq` not equal to last + 1, or no state for the Branch | Applied; response asks for a snapshot |
 | `agent` with no instance | Employee updated; its activity removed |
@@ -377,7 +378,11 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - A Branch connecting from loopback needs no token, unless `--no-trust-loopback` is set (required behind a local reverse proxy).
 - Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token, mode 0600). The Branch sets the same value as `hq.token` in its configuration.
 - Binding to a non-loopback address requires `--allow-remote` and `--viewer-token-file`; read endpoints then require the viewer token, and loopback Branches need tokens too.
-- Messages are schema-validated after authorization. Request bodies are limited to 4 MiB.
+- Messages are schema-validated after authorization. Request bodies are limited to 4 MiB, counted while reading.
+- Ingest accepts only `Content-Type: application/json` and rejects requests carrying an `Origin` header, so a web page cannot submit messages through the trusted loopback path.
+- On a loopback bind, requests whose `Host` is not `127.0.0.1`, `::1`, `localhost`, or a `--server-name` value are rejected (DNS rebinding guard).
+- `WS /ws/v1/live` accepts a browser only when its `Origin` matches the request `Host`.
+- Ingest responds after storing; viewer updates are sent in the background, coalesced, with a 5 s send limit per viewer. A viewer that exceeds it is disconnected.
 - The Collector refuses to send a token over plain HTTP to a non-loopback HQ and does not follow redirects.
 - On shutdown HQ checkpoints the WAL and closes the database.
 
@@ -399,7 +404,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 ### 6.1 Workspace and live data
 
 - Served by HQ at `/` (static HTML, CSS, JavaScript, and bundled artwork; no build step). The initial view is the virtual office.
-- Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after every ingest, and every 10 s. The page reconnects with backoff up to 30 s.
+- Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after ingest (bursts coalesced), and every 10 s. The page reconnects with backoff up to 30 s.
 - With a viewer token, the page reads it from the URL fragment (`#token=...`) and passes it as the `token` query parameter of the socket.
 - Idle detail (at desk, phone, dozing, fika) is computed in the page from `state_since` and the Branch thresholds.
 - Branch-provided text is rendered as text only, never as markup.
