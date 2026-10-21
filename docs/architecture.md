@@ -477,5 +477,6 @@ agentville/
 - Claude Code: meaning of `state: blocked` and `status: shell`.
 - Codex: live observation of `waitingOnApproval`, `waitingOnUserInput`, and `systemError`.
 - Antigravity waiting and usage-limit signals.
+- Claude account switching: not yet in use; the source and the alias mapping are decided when it is adopted. Codex accounts are identified by Codex home.
 - Contractor grouping when counts are large (Codex subagent threads dominate recent history).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
