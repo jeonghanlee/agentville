@@ -5,6 +5,6 @@ title: Model and effort changes map to conditions by the default rules
 expect:
 - {model: model-b, effort: medium, condition: normal, after: 1}
 - {model: model-b, effort: high, condition: study-mode, after: 4}
-- {model: model-c, effort: low, condition: lazy, after: 7}
+- {model: model-c, effort: low, condition: light, after: 7}
 - {model: model-c, effort: xhigh, condition: study-mode, after: 10}
 - {model: model-b, effort: medium, condition: normal, after: 13}

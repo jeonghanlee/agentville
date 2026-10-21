@@ -113,7 +113,7 @@ conditions:
     condition: extra-coffee
   - provider: codex
     effort: low
-    condition: lazy
+    condition: light
 ```
 
 ### 1.7 Handover Between Providers
@@ -340,7 +340,7 @@ providers:
 conditions:
   - {provider: claude, fast_mode: true, condition: extra-coffee}
   - {provider: "*", effort: high, condition: study-mode}
-  - {provider: "*", effort: low, condition: lazy}
+  - {provider: "*", effort: low, condition: light}
 collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ````
 

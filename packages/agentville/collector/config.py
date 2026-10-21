@@ -21,7 +21,7 @@ DEFAULT_CONDITIONS: list[dict[str, Any]] = [
     {"provider": "claude", "fast_mode": True, "condition": "extra-coffee"},
     {"provider": "*", "effort": "high", "condition": "study-mode"},
     {"provider": "*", "effort": "xhigh", "condition": "study-mode"},
-    {"provider": "*", "effort": "low", "condition": "lazy"},
+    {"provider": "*", "effort": "low", "condition": "light"},
 ]
 
 

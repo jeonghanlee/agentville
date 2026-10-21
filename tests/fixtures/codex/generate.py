@@ -343,7 +343,7 @@ def s08(root):
     s = Scenario(root, "S08", "Model and effort changes map to conditions by the default rules")
     s.load(t(0), thread(TA, IDLE)); s.check(model="model-b", effort="medium", condition="normal")
     turn(s, 1, TA, "turn-1", effort="high"); s.check(model="model-b", effort="high", condition="study-mode")
-    turn(s, 10, TA, "turn-2", model="model-c", effort="low"); s.check(model="model-c", effort="low", condition="lazy")
+    turn(s, 10, TA, "turn-2", model="model-c", effort="low"); s.check(model="model-c", effort="low", condition="light")
     turn(s, 20, TA, "turn-3", model="model-c", effort="xhigh"); s.check(model="model-c", effort="xhigh", condition="study-mode")
     turn(s, 30, TA, "turn-4", model="model-b", effort="medium"); s.check(model="model-b", effort="medium", condition="normal")
     s.save()

@@ -60,7 +60,7 @@
 ### Condition (모델 + 설정)
 - extra-coffee: 커피 마시며 작업
 - study-mode: 열공 모드
-- lazy: 느긋함
+- light: 가볍게 (낮은 effort)
 
 ## 5. 데이터 노출 금지
 
