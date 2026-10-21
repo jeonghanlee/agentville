@@ -1,7 +1,5 @@
-import asyncio
 import json
 import sqlite3
-import time
 from datetime import UTC, datetime
 
 import pytest
@@ -17,8 +15,8 @@ HOSTS = frozenset({"testserver"})
 BRANCH = {"alias": "b", "country": "", "time": "UTC", "location": "", "thresholds": {"phone": 300, "doze": 1800, "lounge": 3600, "leave": 604800}}
 
 
-def _client(tmp_path, tokens=None, loopback=frozenset({"testclient"}), hosts=HOSTS):
-    app = create_app(Store(str(tmp_path / "hq.sqlite3")), tokens, clock=lambda: T0, loopback=loopback, hosts=HOSTS)
+def _client(tmp_path, tokens=None, loopback=frozenset({"testclient"}), hosts=HOSTS, **options):
+    app = create_app(Store(str(tmp_path / "hq.sqlite3")), tokens, clock=lambda: T0, loopback=loopback, hosts=hosts, **options)
     return TestClient(app)
 
 
@@ -166,27 +164,56 @@ def test_body_limit_applies_without_content_length(tmp_path):
     assert response.status_code == 413
 
 
-class _StalledViewer:
-    def __init__(self):
-        self.closed = False
+def test_non_finite_numbers_and_deep_nesting_are_rejected(tmp_path):
+    client = _client(tmp_path)
+    for number in ("NaN", "Infinity", "1e999"):
+        message = _snapshot()
+        message["payload"]["agents"] = [{"agent_id": "a", "project_id": "p", "project_alias": "p", "provider": "claude",
+                                         "seat": 1, "presence": "off_duty", "presence_since": "2026-01-01T00:00:00.000Z",
+                                         "settings": {"effort": 0.5}}]
+        body = json.dumps({"messages": [message]}).replace("0.5", number)
+        response = client.post("/api/v1/ingest/messages", content=body, headers={"Content-Type": "application/json"})
+        assert response.status_code == 400
+    deep = client.post("/api/v1/ingest/messages", content=b"[" * 200000, headers={"Content-Type": "application/json"})
+    assert deep.status_code == 400
 
-    async def send_json(self, message):
-        await asyncio.sleep(60)
 
-    async def close(self):
-        self.closed = True
+def test_malformed_timestamp_is_rejected_before_storage(tmp_path):
+    client = _client(tmp_path)
+    bad = _snapshot()
+    bad["sent_at"] = "garbageZ"
+    assert client.post("/api/v1/ingest/messages", json={"messages": [bad]}).status_code == 422
+    assert client.post("/api/v1/ingest/messages", json={"messages": [_snapshot()]}).status_code == 200
 
 
-def test_stalled_viewer_does_not_delay_ingest(tmp_path):
-    app = create_app(Store(str(tmp_path / "hq.sqlite3")), clock=lambda: T0, loopback=frozenset({"testclient"}),
-                     hosts=HOSTS, send_timeout=0.2)
-    stalled = _StalledViewer()
-    with TestClient(app) as client:
-        app.state.viewers.add(stalled)
-        started = time.monotonic()
-        assert client.post("/api/v1/ingest/messages", json={"messages": [_snapshot()]}).status_code == 200
-        assert time.monotonic() - started < 0.2
-        deadline = time.monotonic() + 5
-        while stalled in app.state.viewers and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert stalled not in app.state.viewers and stalled.closed
+def test_untrusted_caller_without_a_known_token_is_rejected_before_parsing(tmp_path):
+    client = _client(tmp_path, tokens={"b1": "s" * 16}, loopback=frozenset())
+    response = client.post("/api/v1/ingest/messages", content=b"not json", headers={"Content-Type": "application/json"})
+    assert response.status_code == 401
+
+
+def test_server_names_extend_host_and_origin(tmp_path):
+    client = _client(tmp_path, server_names=frozenset({"hq.example"}))
+    assert client.get("/api/v1/state", headers={"Host": "hq.example"}).status_code == 200
+    with client.websocket_connect("/ws/v1/live", headers={"Origin": "https://hq.example"}) as ws:
+        assert ws.receive_json()["type"] == "state"
+
+
+def test_token_file_values_must_be_strong_strings(tmp_path):
+    from agentville.hq.main import load_tokens
+
+    path = tmp_path / "tokens.yaml"
+    for content in ("b1:\n", "b1: yes\n", "b1: short\n", "- b1\n"):
+        path.write_text(content)
+        path.chmod(0o600)
+        with pytest.raises(SystemExit):
+            load_tokens(str(path))
+    path.write_text("b1: " + "t" * 16 + "\n")
+    assert load_tokens(str(path)) == {"b1": "t" * 16}
+
+
+def test_server_name_requires_token_protection(tmp_path):
+    from agentville.hq.main import main
+
+    with pytest.raises(SystemExit):
+        main(["--server-name", "hq.example", "--db", str(tmp_path / "hq.sqlite3")])

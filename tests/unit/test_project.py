@@ -9,6 +9,7 @@ from agentville.collector.project import COMMON_OFFICE, GitProjectResolver, loca
         "git@github.com:jeonghanlee/agentville.git",
         "https://github.com/jeonghanlee/agentville",
         "https://user@github.com/jeonghanlee/agentville.git",
+        "https://user:p@ss@github.com/jeonghanlee/agentville.git",
         "ssh://git@github.com:22/jeonghanlee/agentville.git",
         "https://GitHub.com/jeonghanlee/agentville/",
     ],

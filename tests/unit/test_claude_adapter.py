@@ -121,3 +121,33 @@ def test_model_is_seeded_from_existing_transcript_at_attach(tmp_path):
     changed = [o.data for o in observations if o.kind is Kind.MODEL_CHANGED]
     assert changed == [{"model": "model-a", "settings": {"effort": "high"}}]
     assert Kind.TOOL_STARTED not in _kinds(observations)
+
+
+def test_unreadable_transcript_does_not_drop_other_shifts(tmp_path):
+    other = "22222222-2222-4222-8222-222222222222"
+    _session(tmp_path, pid=1001)
+    _session(tmp_path, pid=1002, sid=other)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    (tmp_path / "projects" / encode_cwd(CWD) / f"{SID}.jsonl" / "x").mkdir(parents=True)
+    _transcript(tmp_path, [_tool_use()], sid=other)
+    started = [o for o in adapter.poll() if o.kind is Kind.TOOL_STARTED]
+    assert [o.shift.native_id for o in started] == ["1002:1"]
+
+
+def test_shift_discovered_after_attach_reads_transcript_from_start(tmp_path):
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    _transcript(tmp_path, [_tool_use()])
+    _session(tmp_path)
+    assert Kind.TOOL_STARTED in _kinds(adapter.poll())
+
+
+def test_resumed_session_after_attach_does_not_replay_history(tmp_path):
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    old = _tool_use()
+    old["timestamp"] = "2025-12-31T00:00:00Z"
+    _transcript(tmp_path, [old])
+    _session(tmp_path)
+    assert Kind.TOOL_STARTED not in _kinds(adapter.poll())

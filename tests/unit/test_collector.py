@@ -1,4 +1,6 @@
 import json
+import os
+import stat
 from datetime import UTC, datetime, timedelta
 
 import jsonschema
@@ -80,6 +82,14 @@ def test_sequence_resumes_after_restart(tmp_path):
     collector2, out2 = _collector(tmp_path, ScriptedAdapter(), lambda: T0)
     collector2.tick()
     assert out2[0]["seq"] == 1001 and out2[0]["seq"] > last
+
+
+def test_seq_reservation_fsyncs_directory(tmp_path, monkeypatch):
+    synced = []
+    fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda fd: (synced.append(stat.S_ISDIR(os.fstat(fd).st_mode)), fsync(fd)))
+    SeqStore(str(tmp_path / "state" / "seq")).save(5)
+    assert synced[-1] is True
 
 
 def test_cli_once_writes_valid_messages(tmp_path, monkeypatch):

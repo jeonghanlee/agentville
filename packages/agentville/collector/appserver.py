@@ -25,6 +25,10 @@ class AppServerError(Exception):
     pass
 
 
+class RpcError(AppServerError):
+    """The server answered a request with a JSON-RPC error; the connection is still usable."""
+
+
 class RpcConnection(Protocol):
     def request(self, method: str, params: dict[str, Any]) -> Any: ...
 
@@ -148,7 +152,7 @@ class AppServerClient:
                 raise AppServerError(f"timeout waiting for {method}")
             if message.get("id") == request_id and "method" not in message:
                 if "error" in message:
-                    raise AppServerError(f"{method}: {message['error']}")
+                    raise RpcError(f"{method}: {message['error']}")
                 return message.get("result")
             self._queue(message)
 

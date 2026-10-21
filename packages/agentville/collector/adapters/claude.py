@@ -9,6 +9,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -49,6 +50,24 @@ def _from_iso(value: Any) -> datetime | None:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
             return None
+    return None
+
+
+def first_timestamp(path: str, lines: int = 20) -> datetime | None:
+    """Timestamp of the earliest record among the file's first lines."""
+    try:
+        with open(path, "rb") as fh:
+            head = [fh.readline() for _ in range(lines)]
+    except OSError:
+        return None
+    for line in head:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        at = _from_iso(record.get("timestamp")) if isinstance(record, dict) else None
+        if at is not None:
+            return at
     return None
 
 
@@ -129,6 +148,7 @@ class ClaudeAdapter:
         self._clock = clock
         self._is_alive = is_alive
         self._shifts: dict[int, _Shift] = {}
+        self._attached_at: datetime | None = None
 
     def poll(self) -> list[Observation]:
         now = self._clock()
@@ -155,7 +175,18 @@ class ClaudeAdapter:
         for pid in list(self._shifts):
             if pid not in seen:
                 out.extend(self._end(self._shifts[pid], now))
+        if self._attached_at is None:
+            self._attached_at = now
         return out
+
+    def _history_before_attach(self, path: str) -> bool:
+        # A transcript created after attach is read from its start; a resumed one is not.
+        if self._attached_at is None:
+            return True
+        if not os.path.exists(path):
+            return False
+        started = first_timestamp(path)
+        return started is None or started < self._attached_at
 
     def _read_session_files(self) -> list[tuple[int, dict[str, Any] | None]]:
         directory = os.path.join(self.home, "sessions")
@@ -213,9 +244,10 @@ class ClaudeAdapter:
             self._read_transcript(shift, now, out)
             shift.open_tools.clear()
             shift.session_id = session_id
-            # History written before attach is not replayed; live state comes from the session file.
             shift.tail = JsonlTail(self._transcript_path(shift.cwd, session_id))
-            shift.tail.seek_end()
+            if self._history_before_attach(shift.tail.path):
+                # History written before attach is not replayed; live state comes from the session file.
+                shift.tail.seek_end()
             model = last_model(shift.tail.path)
             if model is not None and model != shift.model:
                 shift.model = model
@@ -253,11 +285,15 @@ class ClaudeAdapter:
             resolved = self._transcript_path(shift.cwd, shift.session_id)
             if resolved != shift.tail.path:
                 shift.tail = JsonlTail(resolved)
-        for offset, record in shift.tail.read():
-            raw = RawLocation(shift.tail.path, offset)
-            at = _from_iso(record.get("timestamp")) or now
-            for kind, data in self._interpret(shift, record):
-                out.append(Observation(kind, shift.key, at, now, Source.SESSION_LOG, data, raw))
+        try:
+            for offset, record in shift.tail.read():
+                raw = RawLocation(shift.tail.path, offset)
+                at = _from_iso(record.get("timestamp")) or now
+                for kind, data in self._interpret(shift, record):
+                    out.append(Observation(kind, shift.key, at, now, Source.SESSION_LOG, data, raw))
+        except OSError as exc:
+            # One unreadable transcript must not discard observations of the other shifts.
+            print(f"agentville-collector: {shift.tail.path}: {exc}", file=sys.stderr, flush=True)
 
     def _interpret(self, shift: _Shift, record: dict[str, Any]) -> list[tuple[Kind, dict[str, Any]]]:
         rtype = record.get("type")

@@ -39,6 +39,27 @@ def test_thresholds_override_defaults():
     assert config.thresholds == {"phone": 300, "doze": 1800, "lounge": 3600, "leave": 60}
 
 
+@pytest.mark.parametrize("document", [
+    {"collector": {"heartbeat_interval": 0}},
+    {"thresholds": {"phone": -1}},
+    {"thresholds": {"phone": 600, "doze": 300}},
+    {"thresholds": {"lounge": 1000}},
+])
+def test_invalid_values_are_rejected(document):
+    with pytest.raises(ValueError):
+        parse({"host": {"id": "b"}, **document})
+
+
+def test_token_in_group_readable_config_is_refused(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"host": {"id": "b"}, "hq": {"token": "secret"}}))
+    path.chmod(0o640)
+    with pytest.raises(SystemExit, match="chmod 600"):
+        load_or_create(str(path), str(tmp_path))
+    path.chmod(0o600)
+    assert load_or_create(str(path), str(tmp_path)).hq_token == "secret"
+
+
 def test_condition_rules_first_match_wins():
     config = parse({
         "host": {"id": "b"},

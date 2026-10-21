@@ -21,7 +21,7 @@ class Project:
 COMMON_OFFICE = Project(COMMON_OFFICE_ID, COMMON_OFFICE_ALIAS)
 
 _SCP_LIKE = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>[^/].*)$")
-_URL = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?(?P<host>[^/:]+)(?::\d+)?/(?P<path>.+)$")
+_URL = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^/]*@)?(?P<host>[^/:@]+)(?::\d+)?/(?P<path>.+)$")
 
 
 def normalize_remote(url: str) -> str | None:

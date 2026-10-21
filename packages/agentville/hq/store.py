@@ -13,6 +13,7 @@ from agentville.common.protocol import iso
 
 UNREACHABLE_FACTOR = 3
 DEFAULT_HEARTBEAT = 30
+MAX_CLOCK_LEAD = timedelta(minutes=5)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -120,9 +121,17 @@ class Store:
                 "SELECT last_seq, last_sent_at FROM branches WHERE branch_id = ?", (branch_id,)
             ).fetchone()
             if row and row[0] is not None and seq <= row[0]:
+                stored = self._db.execute(
+                    "SELECT sent_at FROM messages WHERE branch_id = ? AND seq = ?", (branch_id, seq)
+                ).fetchone()
+                if stored and stored[0] == message["sent_at"]:
+                    result.duplicates += 1
+                    return
                 if row[1] is not None and _parse(message["sent_at"]) < _parse(row[1]):
-                    # A delayed snapshot from before the current numbering.
+                    # A delayed snapshot from before the current numbering, or a reset
+                    # Branch whose clock is behind; a fresh snapshot settles either case.
                     result.stale += 1
+                    result.need_snapshot = True
                     return
                 # The Branch lost its sequence state; its snapshot starts a new numbering.
                 self._db.execute("DELETE FROM messages WHERE branch_id = ? AND seq >= ?", (branch_id, seq))
@@ -146,7 +155,8 @@ class Store:
                 result.need_snapshot = True
         self._touch(branch_id, now, seq)
         sent = self._db.execute("SELECT last_sent_at FROM branches WHERE branch_id = ?", (branch_id,)).fetchone()[0]
-        if sent is None or _parse(sent) < _parse(message["sent_at"]):
+        sent_at = _parse(message["sent_at"])
+        if sent_at <= now + MAX_CLOCK_LEAD and (sent is None or _parse(sent) < sent_at):
             self._db.execute("UPDATE branches SET last_sent_at = ? WHERE branch_id = ?", (message["sent_at"], branch_id))
         payload = message["payload"]
         if kind == "snapshot":

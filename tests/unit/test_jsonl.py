@@ -46,3 +46,23 @@ def test_skips_malformed_lines_and_reports_offsets(tmp_path):
 
 def test_missing_file_yields_nothing(tmp_path):
     assert _records(JsonlTail(str(tmp_path / "absent.jsonl"))) == []
+
+
+def test_invalid_utf8_line_is_skipped(tmp_path):
+    path = tmp_path / "log.jsonl"
+    path.write_bytes(b'{"a": "\xff"}\n{"a": 1}\n')
+    tail = JsonlTail(str(path))
+    assert list(tail.read()) == [(11, {"a": 1})]
+    assert _records(tail) == []
+
+
+def test_seek_end_mid_line_resumes_at_next_line(tmp_path):
+    path = tmp_path / "log.jsonl"
+    line = '{"text": "안녕"}\n'.encode()
+    cut = line.index("녕".encode()) + 1
+    path.write_bytes(line[:cut])
+    tail = JsonlTail(str(path))
+    tail.seek_end()
+    with open(path, "ab") as fh:
+        fh.write(line[cut:] + b'{"a": 1}\n')
+    assert list(tail.read()) == [(len(line), {"a": 1})]

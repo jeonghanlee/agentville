@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import glob
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from agentville.collector.appserver import AppServerClient, AppServerError, RpcConnection
+from agentville.collector.appserver import AppServerClient, AppServerError, RpcConnection, RpcError
 from agentville.collector.jsonl import JsonlTail
 from agentville.common.observations import Kind, Observation, RawLocation, SessionStatus, ShiftKey, Source
 
@@ -69,6 +70,7 @@ class CodexAdapter:
         self._conn: RpcConnection | None = None
         self._shifts: dict[str, _Shift] = {}
         self._ignored: set[str] = set()
+        self._attached_at: datetime | None = None
 
     def _default_connect(self) -> RpcConnection:
         client = AppServerClient(socket_path(self.home))
@@ -135,10 +137,16 @@ class CodexAdapter:
             thread = self._read_thread(thread_id)
             if thread is not None:
                 self._observe_thread(thread, now, out)
+        if self._attached_at is None:
+            self._attached_at = now
 
     def _read_thread(self, thread_id: str) -> dict[str, Any] | None:
         assert self._conn is not None
-        result = self._conn.request("thread/read", {"threadId": thread_id, "includeTurns": False})
+        try:
+            result = self._conn.request("thread/read", {"threadId": thread_id, "includeTurns": False})
+        except RpcError:
+            # Skip this thread for now; its shift keeps its previous state.
+            return None
         thread = result.get("thread") if isinstance(result, dict) else None
         return thread if isinstance(thread, dict) else None
 
@@ -163,8 +171,13 @@ class CodexAdapter:
         path = self._rollout_path(thread)
         if path:
             tail = JsonlTail(path)
-            # History written before attach is not replayed; live state comes from the app-server.
-            tail.seek_end()
+            created = thread.get("createdAt")
+            if self._attached_at is None or not isinstance(created, (int, float)) or (
+                datetime.fromtimestamp(created, tz=UTC) < self._attached_at
+            ):
+                # History written before attach, or of a resumed thread, is not replayed;
+                # live state comes from the app-server.
+                tail.seek_end()
         shift = _Shift(ShiftKey(PROVIDER, thread_id), thread_id, tail)
         self._shifts[thread_id] = shift
         out.append(
@@ -251,11 +264,15 @@ class CodexAdapter:
     def _read_rollout(self, shift: _Shift, now: datetime, out: list[Observation]) -> None:
         if shift.tail is None:
             return
-        for offset, record in shift.tail.read():
-            at = _from_iso(record.get("timestamp")) or now
-            raw = RawLocation(shift.tail.path, offset)
-            for kind, data in self._interpret(shift, record):
-                out.append(Observation(kind, shift.key, at, now, Source.SESSION_LOG, data, raw))
+        try:
+            for offset, record in shift.tail.read():
+                at = _from_iso(record.get("timestamp")) or now
+                raw = RawLocation(shift.tail.path, offset)
+                for kind, data in self._interpret(shift, record):
+                    out.append(Observation(kind, shift.key, at, now, Source.SESSION_LOG, data, raw))
+        except OSError as exc:
+            # One unreadable rollout must not discard observations of the other shifts.
+            print(f"agentville-collector: {shift.tail.path}: {exc}", file=sys.stderr, flush=True)
 
     def _interpret(self, shift: _Shift, record: dict[str, Any]) -> list[tuple[Kind, dict[str, Any]]]:
         rtype = record.get("type")

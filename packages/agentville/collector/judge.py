@@ -99,7 +99,8 @@ class Judge:
                     self._set(agent, obs, "waiting", "high")
                 elif status == SessionStatus.IDLE:
                     inst.tool = None
-                    self._set(agent, obs, "idle", "high")
+                    if inst.state != "error":
+                        self._set(agent, obs, "idle", "high")
                 elif status == SessionStatus.ACTIVE:
                     if inst.state not in ("working", "thinking"):
                         self._set(agent, obs, "working", "medium")
@@ -124,8 +125,10 @@ class Judge:
                     self._emit_activity(agent, obs.event_at)
             case Kind.TURN_COMPLETED:
                 inst.tool = None
-                self._set(agent, obs, "completed", "high", force=True)
-                self._set(agent, obs, "idle", "high", force=True)
+                # An error lasts until normal activity resumes, not until the failed turn ends.
+                if inst.state != "error":
+                    self._set(agent, obs, "completed", "high", force=True)
+                    self._set(agent, obs, "idle", "high", force=True)
             case Kind.AGENT_ERROR:
                 self._set(agent, obs, "error", "high", force=True)
             case Kind.LIMIT_REACHED:

@@ -16,6 +16,9 @@ from agentville.hq.app import LOCAL_HOSTS, create_app
 from agentville.hq.store import Store
 
 
+MIN_TOKEN = 16
+
+
 def data_dir() -> str:
     base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
     return os.path.join(base, "agentville")
@@ -33,7 +36,14 @@ def load_tokens(path: str | None) -> dict[str, str]:
     if not path:
         return {}
     document = yaml.safe_load(_read_private(path)) or {}
-    return {str(k): str(v) for k, v in document.items()}
+    if not isinstance(document, dict):
+        raise SystemExit(f"agentville-hq: {path} must be a mapping of branch_id to token")
+    tokens = {}
+    for branch_id, token in document.items():
+        if not isinstance(token, str) or len(token) < MIN_TOKEN:
+            raise SystemExit(f"agentville-hq: token for {branch_id} must be a string of at least {MIN_TOKEN} characters")
+        tokens[str(branch_id)] = token
+    return tokens
 
 
 def is_loopback(host: str) -> bool:
@@ -55,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-remote", action="store_true", help="permit binding to a non-loopback address")
     parser.add_argument("--no-trust-loopback", action="store_true", help="require tokens from loopback Branches too (reverse proxy)")
     parser.add_argument("--server-name", action="append", default=[],
-                        help="additional Host header name accepted on a loopback bind (reverse proxy); repeatable")
+                        help="public name of a reverse proxy, accepted as Host and page Origin; repeatable")
     parser.add_argument("--retention-days", type=int, default=30)
     args = parser.parse_args(argv)
 
@@ -63,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
     viewer_token = (_read_private(args.viewer_token_file).strip() or None) if args.viewer_token_file else None
     if remote and not (args.allow_remote and viewer_token):
         parser.error("a non-loopback --host requires --allow-remote and --viewer-token-file")
+    if args.server_name and not (args.no_trust_loopback and viewer_token):
+        parser.error("--server-name requires --no-trust-loopback and --viewer-token-file")
 
     db = args.db or os.path.join(data_dir(), "hq.sqlite3")
     directory = os.path.dirname(db) or "."
@@ -75,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         trust_loopback=not (remote or args.no_trust_loopback),
         viewer_token=viewer_token,
         # A remote bind requires tokens on every path, so the Host guard applies to loopback binds only.
-        hosts=None if remote else LOCAL_HOSTS | frozenset(args.server_name),
+        hosts=None if remote else LOCAL_HOSTS | {args.host},
+        server_names=frozenset(args.server_name),
     )
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0

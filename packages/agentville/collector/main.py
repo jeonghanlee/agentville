@@ -63,6 +63,11 @@ class SeqStore:
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, self.path)
+        fd = os.open(os.path.dirname(self.path), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def build_adapters(config: BranchConfig) -> list[Adapter]:
@@ -187,7 +192,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--once", action="store_true", help="poll once and exit")
     args = parser.parse_args(argv)
 
-    config = load_or_create(args.config)
+    try:
+        config = load_or_create(args.config)
+    except ValueError as exc:
+        raise SystemExit(f"agentville-collector: invalid configuration: {exc}") from None
     stop = False
 
     def request_stop(signum: int, frame: Any) -> None:

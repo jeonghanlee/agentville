@@ -44,7 +44,9 @@ class HttpSender:
         self.endpoint = url.rstrip("/") + "/api/v1/ingest/messages"
         self.token = token
         self.timeout = timeout
-        self._opener = urllib.request.build_opener(_NoRedirect)
+        # A loopback HQ is never reached through an environment proxy, which would see the token.
+        no_proxy = [urllib.request.ProxyHandler({})] if _is_loopback_host(parsed.hostname) else []
+        self._opener = urllib.request.build_opener(_NoRedirect, *no_proxy)
 
     def __call__(self, messages: list[dict[str, Any]]) -> Delivery:
         body = json.dumps({"messages": messages}, separators=(",", ":")).encode()

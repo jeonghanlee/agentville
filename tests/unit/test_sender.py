@@ -19,6 +19,12 @@ def test_refuses_token_over_plain_http_to_remote_host():
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         self.rfile.read(int(self.headers["Content-Length"]))
+        if self.server.mode == "ok":
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"{}")
+            return
         if self.server.mode == "redirect":
             self.send_response(307)
             self.send_header("Location", "http://127.0.0.1:1/elsewhere")
@@ -45,3 +51,21 @@ def test_redirects_not_followed_and_error_detail_reported(mode, expected):
         assert not result.ok and result.error == expected
     finally:
         server.shutdown()
+
+
+def test_loopback_hq_bypasses_environment_proxy(monkeypatch):
+    servers = []
+    for mode in ("ok", "reject"):
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        server.mode = mode
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+    hq, proxy = servers
+    for name in ("no_proxy", "NO_PROXY", "all_proxy", "ALL_PROXY", "https_proxy", "HTTPS_PROXY", "HTTP_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy.server_port}")
+    try:
+        assert HttpSender(f"http://127.0.0.1:{hq.server_port}", token="t")([{"kind": "heartbeat"}]).ok
+    finally:
+        for server in servers:
+            server.shutdown()

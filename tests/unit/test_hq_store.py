@@ -83,9 +83,9 @@ def test_branch_that_lost_its_sequence_is_reset_by_snapshot(tmp_path):
     s, env = store(tmp_path), Envelope("b1")
     s.ingest("b1", [env.wrap("snapshot", T0, snapshot([agent("old")], []), T0),
                     env.wrap("heartbeat", T0, {"interval": 30}, T0), env.wrap("heartbeat", T0, {"interval": 30}, T0)], T0)
-    fresh = Envelope("b1")
-    result = s.ingest("b1", [fresh.wrap("snapshot", T0, snapshot([agent("new")], []), T0),
-                             fresh.wrap("heartbeat", T0, {"interval": 30}, T0)], T0)
+    fresh, later = Envelope("b1"), T0 + timedelta(seconds=1)
+    result = s.ingest("b1", [fresh.wrap("snapshot", later, snapshot([agent("new")], []), later),
+                             fresh.wrap("heartbeat", later, {"interval": 30}, later)], later)
     assert (result.accepted, result.duplicates, result.need_snapshot) == (2, 0, False)
     assert [a["agent_id"] for a in s.state(T0)["agents"]] == ["new"]
 
@@ -124,3 +124,28 @@ def test_existing_database_gains_last_sent_column(tmp_path):
     db.close()
     s, env = Store(path), Envelope("b1")
     assert s.ingest("b1", [env.wrap("snapshot", T0, snapshot([], []), T0)], T0).accepted == 1
+
+
+def test_resent_snapshot_is_a_duplicate(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    message = env.wrap("snapshot", T0, snapshot([agent("a")], []), T0)
+    s.ingest("b1", [message], T0)
+    result = s.ingest("b1", [message], T0)
+    assert (result.accepted, result.duplicates) == (0, 1)
+
+
+def test_stale_snapshot_requests_a_fresh_one(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    s.ingest("b1", [env.wrap("snapshot", T0, snapshot([agent("a")], []), T0 + timedelta(minutes=1))], T0 + timedelta(minutes=1))
+    reset = Envelope("b1")
+    result = s.ingest("b1", [reset.wrap("snapshot", T0, snapshot([agent("b")], []), T0)], T0 + timedelta(minutes=1))
+    assert (result.stale, result.need_snapshot) == (1, True)
+
+
+def test_far_future_sent_at_is_not_remembered(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    s.ingest("b1", [env.wrap("snapshot", T0, snapshot([agent("a")], []), T0 + timedelta(days=1))], T0)
+    reset = Envelope("b1")
+    result = s.ingest("b1", [reset.wrap("snapshot", T0, snapshot([agent("b")], []), T0)], T0)
+    assert result.accepted == 1
+    assert [a["agent_id"] for a in s.state(T0)["agents"]] == ["b"]

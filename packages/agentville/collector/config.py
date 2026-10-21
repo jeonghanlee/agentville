@@ -8,6 +8,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import socket
+import stat
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -138,6 +139,9 @@ def load_or_create(path: str | None = None, home: str | None = None) -> BranchCo
                 yaml.safe_dump(document, fh, sort_keys=False)
     with open(path, encoding="utf-8") as fh:
         document = yaml.safe_load(fh) or {}
+        private = not stat.S_IMODE(os.fstat(fh.fileno()).st_mode) & 0o077
+    if (document.get("hq") or {}).get("token") and not private:
+        raise SystemExit(f"agentville-collector: {path} holds hq.token and must not be accessible by group or others (chmod 600)")
     return parse(document)
 
 
@@ -152,6 +156,13 @@ def parse(document: dict[str, Any]) -> BranchConfig:
     collector = document.get("collector") or {}
     thresholds = dict(DEFAULT_THRESHOLDS)
     thresholds.update({k: int(v) for k, v in (document.get("thresholds") or {}).items() if k in DEFAULT_THRESHOLDS})
+    if any(v < 0 for v in thresholds.values()):
+        raise ValueError("thresholds must not be negative")
+    if not thresholds["phone"] <= thresholds["doze"] <= thresholds["lounge"]:
+        raise ValueError("thresholds must satisfy phone <= doze <= lounge")
+    heartbeat_interval = int(collector.get("heartbeat_interval", 30))
+    if heartbeat_interval < 1:
+        raise ValueError("collector.heartbeat_interval must be at least 1")
     return BranchConfig(
         host_id=host_id,
         alias=str(host.get("alias") or host_id),
@@ -169,5 +180,5 @@ def parse(document: dict[str, Any]) -> BranchConfig:
         ],
         conditions=list(document["conditions"] or []) if "conditions" in document else list(DEFAULT_CONDITIONS),
         poll_interval=float(collector.get("poll_interval", 1.0)),
-        heartbeat_interval=int(collector.get("heartbeat_interval", 30)),
+        heartbeat_interval=heartbeat_interval,
     )

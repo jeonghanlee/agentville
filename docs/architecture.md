@@ -221,7 +221,9 @@ Every observation carries observed time, event time, source (`session_file`, `se
 ### 3.3 Reading
 
 - Logs are read incrementally from the last position (inode, offset), triggered by file change notification.
-- A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start.
+- A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start; a resumed one (Claude: first record older than attach; Codex: thread `createdAt` older than attach) is read from its end.
+- Attaching in the middle of a line resumes at the next line. A line that is not valid UTF-8 JSON is skipped.
+- A transcript or rollout that cannot be read is reported and skipped for that poll without affecting other shifts. A JSON-RPC error on one Codex `thread/read` skips that thread for the poll; transport errors reconnect.
 - At attach, model and effort are taken from the last non-error assistant record in the transcript tail.
 - A session file that exists but cannot be parsed keeps the current shift; a shift ends only when its file is gone or its process is not alive.
 - Liveness: `/proc/<pid>/stat` exists, the process is not a zombie, and field 22 (start time in clock ticks) equals `procStart`.
@@ -320,6 +322,8 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ````
 
 - Codex homes present at first start are listed automatically.
+- Values are validated at start: `heartbeat_interval` ≥ 1, thresholds ≥ 0 with `phone` ≤ `doze` ≤ `lounge`. A file holding `hq.token` must not be accessible by group or others.
+- A loopback HQ is contacted without environment proxies.
 - Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns.
 
 ### 3.6 Run Loop
@@ -350,13 +354,15 @@ Messages of one batch are applied in `seq` order:
 
 | Case | Result |
 |---|---|
-| `(branch_id, seq)` already stored | Duplicate; ignored |
+| `(branch_id, seq)` already stored with the same `sent_at` | Duplicate; ignored |
 | `snapshot` | Replaces all current state of the Branch. A snapshot whose `seq` is not above the last applied `seq` (Branch lost its sequence state) also discards stored messages from that `seq` on and restarts the numbering. |
-| `snapshot` with `seq` not above the last applied and `sent_at` earlier than the latest applied `sent_at` | Delayed snapshot; stale, not applied |
+| `snapshot` with `seq` not above the last applied and `sent_at` earlier than the latest applied `sent_at` | Stale, not applied; response asks for a snapshot |
 | `seq` lower than the last applied | Stale; stored, not applied |
 | `seq` not equal to last + 1, or no state for the Branch | Applied; response asks for a snapshot |
 | `agent` with no instance | Employee updated; its activity removed |
 | `contractor` with status `ended` | Contractor removed |
+
+The latest applied `sent_at` is not advanced by a value more than 5 minutes ahead of HQ's clock.
 
 A Branch is reported unreachable when no message arrived within three heartbeat intervals (30 s assumed before its first heartbeat).
 
@@ -376,13 +382,15 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 ### 4.3 Authorization
 
 - A Branch connecting from loopback needs no token, unless `--no-trust-loopback` is set (required behind a local reverse proxy).
-- Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token, mode 0600). The Branch sets the same value as `hq.token` in its configuration.
+- Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token, mode 0600, each token a string of at least 16 characters). The Branch sets the same value as `hq.token` in its configuration.
+- A caller that is neither trusted loopback nor holding any configured token is rejected before the body is read.
 - Binding to a non-loopback address requires `--allow-remote` and `--viewer-token-file`; read endpoints then require the viewer token, and loopback Branches need tokens too.
-- Messages are schema-validated after authorization. Request bodies are limited to 4 MiB, counted while reading.
+- Messages are schema-validated after authorization, including `date-time` formats. Non-finite numbers (`NaN`, `Infinity`) and excessive nesting are rejected. Request bodies are limited to 4 MiB, counted while reading.
 - Ingest accepts only `Content-Type: application/json` and rejects requests carrying an `Origin` header, so a web page cannot submit messages through the trusted loopback path.
-- On a loopback bind, requests whose `Host` is not `127.0.0.1`, `::1`, `localhost`, or a `--server-name` value are rejected (DNS rebinding guard).
-- `WS /ws/v1/live` accepts a browser only when its `Origin` matches the request `Host`.
-- Ingest responds after storing; viewer updates are sent in the background, coalesced, with a 5 s send limit per viewer. A viewer that exceeds it is disconnected.
+- On a loopback bind, requests whose `Host` is not `127.0.0.1`, `::1`, `localhost`, the bind address, or a `--server-name` value are rejected (DNS rebinding guard).
+- `--server-name` names the public host of a reverse proxy and requires `--no-trust-loopback` and `--viewer-token-file`.
+- `WS /ws/v1/live` accepts a browser only when its `Origin` matches the request `Host` or names a `--server-name`. Rejected sockets are closed with code 4403 (origin or host) or 4401 (viewer token).
+- Ingest responds after storing. Each viewer has its own sender holding only the latest state, with a 5 s send limit; a viewer that exceeds it is disconnected without delaying others.
 - The Collector refuses to send a token over plain HTTP to a non-loopback HQ and does not follow redirects.
 - On shutdown HQ checkpoints the WAL and closes the database.
 
