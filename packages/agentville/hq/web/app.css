@@ -1,0 +1,81 @@
+:root {
+  --ground: #151a2e;
+  --panel: #1d2440;
+  --panel-2: #2a3152;
+  --line: #3a4470;
+  --edge: #0c1020;
+  --text: #f4eedc;
+  --muted: #c9c3b0;
+  --faint: #8c8a9e;
+  --accent: #f2b544;
+  --waiting: #f28c38;
+  --error: #b63d3d;
+  --claude: #c8643b;
+  --codex: #2f7d74;
+  --pixel: "Silkscreen", ui-monospace, monospace;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--sans); }
+a { color: var(--accent); }
+a:hover { color: #ffd27a; }
+h2 { margin: 0 0 10px; font-family: var(--pixel); font-size: 15px; color: var(--accent); }
+.wrap { max-width: 1360px; margin: 0 auto; padding: 0 24px; }
+main.wrap { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direction: column; gap: 24px; }
+.grow { flex-grow: 1; }
+
+.top { background: var(--panel); border-bottom: 4px solid var(--edge); }
+.top-row { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding-top: 18px; padding-bottom: 18px; }
+.logo { font-family: var(--pixel); font-size: 24px; color: var(--accent); }
+.tabs { display: flex; gap: 8px; }
+.tab { font-family: var(--pixel); font-size: 13px; text-decoration: none; color: var(--muted); padding: 10px 14px; border: 2px solid var(--line); }
+.tab.active { color: var(--ground); background: var(--accent); border-color: var(--accent); }
+.conn { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+.conn.live { color: #8fd19e; }
+.search { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.search input { background: var(--ground); border: 2px solid var(--line); color: var(--text); padding: 10px 12px; font-family: var(--mono); font-size: 13px; width: 240px; max-width: 60vw; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 3px solid var(--edge); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.card-label { font-family: var(--pixel); font-size: 12px; color: var(--faint); }
+.card-value { font-family: var(--pixel); font-size: 32px; }
+.card-sub { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.card.warn { background: var(--waiting); }
+.card.warn * { color: var(--ground); }
+.card.bad { background: var(--error); }
+.card.bad * { color: #ffffff; }
+
+.alerts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.alerts li { background: var(--panel); border: 2px solid var(--line); padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.alerts li.empty { color: var(--faint); font-size: 14px; }
+.tag { font-family: var(--pixel); font-size: 11px; padding: 3px 8px; }
+.time { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+.section-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 10px; }
+.section-row h2 { margin: 0; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.check input { width: 18px; height: 18px; }
+
+.table-box { overflow-x: auto; border: 3px solid var(--edge); }
+table { width: 100%; min-width: 980px; border-collapse: collapse; background: var(--panel); font-size: 14px; }
+th { text-align: left; padding: 12px; font-family: var(--pixel); font-size: 11px; font-weight: 400; color: var(--muted); background: var(--panel-2); }
+td { padding: 12px; border-top: 2px solid var(--panel-2); color: var(--muted); }
+td.name { color: var(--text); }
+td.mono { font-family: var(--mono); }
+tr.dim { opacity: 0.6; }
+tr.faint { opacity: 0.45; }
+.swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; }
+.contractors { font-family: var(--mono); font-size: 12px; color: #f2c230; margin-left: 8px; }
+.empty-row td { color: var(--faint); text-align: center; padding: 24px; }
+
+.s-working { background: #7fb2f0; color: var(--ground); }
+.s-thinking { background: #b9a4f0; color: var(--ground); }
+.s-waiting { background: var(--waiting); color: var(--ground); }
+.s-idle { background: var(--line); color: var(--text); }
+.s-completed { background: #3e8e5a; color: #ffffff; }
+.s-error { background: var(--error); color: #ffffff; }
+.s-limited { background: #6b6f86; color: #ffffff; }
+.s-unknown { background: #5b6a9a; color: #ffffff; }
+.s-none { background: transparent; color: var(--faint); }

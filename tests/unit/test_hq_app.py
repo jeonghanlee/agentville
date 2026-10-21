@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from agentville.common.protocol import Envelope
 from agentville.hq.app import create_app
@@ -92,3 +93,29 @@ def test_hq_refuses_remote_bind_without_viewer_token(tmp_path):
         main(["--host", "0.0.0.0", "--db", str(tmp_path / "hq.sqlite3")])
     with pytest.raises(SystemExit):
         main(["--host", "0.0.0.0", "--allow-remote", "--db", str(tmp_path / "hq.sqlite3")])
+
+
+def test_live_socket_sends_state_on_connect_and_after_ingest(tmp_path):
+    client = _client(tmp_path)
+    with client.websocket_connect("/ws/v1/live") as ws:
+        assert ws.receive_json() == {"type": "state", "state": {"branches": [], "agents": [], "activities": [], "contractors": []}}
+        client.post("/api/v1/ingest/messages", json={"messages": [_snapshot()]})
+        update = ws.receive_json()
+        assert update["state"]["branches"][0]["branch_id"] == "b1"
+
+
+def test_live_socket_requires_viewer_token_when_set(tmp_path):
+    app = create_app(Store(str(tmp_path / "hq.sqlite3")), clock=lambda: T0, loopback=frozenset({"testclient"}), viewer_token="v")
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/v1/live") as ws:
+            ws.receive_json()
+    with client.websocket_connect("/ws/v1/live?token=v") as ws:
+        assert ws.receive_json()["type"] == "state"
+
+
+def test_dashboard_is_served(tmp_path):
+    client = _client(tmp_path)
+    page = client.get("/")
+    assert page.status_code == 200 and "AGENTVILLE" in page.text
+    assert client.get("/app.js").status_code == 200

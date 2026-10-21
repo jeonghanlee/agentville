@@ -394,7 +394,15 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
 - Inspector: shift history, sessions, attributes, recent state changes.
 - Notifications: `waiting`, `error`, reopened Branch or Project, unreachable Branch.
-- Assets: original simple pixel art. External assets only with verified licenses.
+- Visual style: Cyworld-inspired isometric minirooms with chibi pixel characters, as inspiration only; original artwork, no copied graphics or brand assets.
+
+### 6.1 Dashboard
+
+- Served by HQ at `/` (static HTML, CSS, and JavaScript; no build step).
+- Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after every ingest, and every 10 s. The page reconnects with backoff up to 30 s.
+- With a viewer token, the page reads it from the URL fragment (`#token=...`) and passes it as the `token` query parameter of the socket.
+- Idle detail (at desk, phone, dozing, fika) is computed in the page from `state_since` and the Branch thresholds.
+- Branch-provided text is rendered as text only, never as markup.
 
 ## 7. Repository Layout
 
@@ -404,7 +412,7 @@ agentville/
 ├── packages/agentville/
 │   ├── common/          # observations, protocol envelope, schemas/protocol-v1.schema.json
 │   ├── collector/       # jsonl reader, project resolver, judge, adapters/, config, sender, run loop
-│   └── hq/              # store, API, entry point
+│   └── hq/              # store, API, entry point, web/ (Dashboard)
 ├── tests/{unit,integration,fixtures}/
 └── docs/
 ````

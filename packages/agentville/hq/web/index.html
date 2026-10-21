@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentVille — Dashboard</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <div class="logo">AGENTVILLE</div>
+    <nav aria-label="Views" class="tabs">
+      <a href="#" aria-current="page" class="tab active">DASHBOARD</a>
+    </nav>
+    <div class="grow"></div>
+    <span id="connection" class="conn" role="status">connecting…</span>
+    <label class="search">Search
+      <input id="search" type="search" placeholder="Employee, project, tool">
+    </label>
+  </div>
+</header>
+<main class="wrap">
+  <section aria-label="Summary" class="cards">
+    <div class="card"><div class="card-label">BRANCHES</div><div id="c-branches" class="card-value">–</div><div id="c-branches-sub" class="card-sub"></div></div>
+    <div class="card"><div class="card-label">ON DUTY</div><div id="c-duty" class="card-value">–</div><div id="c-duty-sub" class="card-sub"></div></div>
+    <div class="card warn"><div class="card-label">WAITING FOR YOU</div><div id="c-waiting" class="card-value">–</div><div id="c-waiting-sub" class="card-sub"></div></div>
+    <div class="card bad"><div class="card-label">IN INFIRMARY</div><div id="c-error" class="card-value">–</div><div id="c-error-sub" class="card-sub"></div></div>
+  </section>
+  <section aria-labelledby="alerts-h">
+    <h2 id="alerts-h">ALERTS</h2>
+    <ul id="alerts" class="alerts"></ul>
+  </section>
+  <section aria-labelledby="employees-h">
+    <div class="section-row">
+      <h2 id="employees-h">EMPLOYEES</h2>
+      <div class="grow"></div>
+      <label class="check"><input id="show-off" type="checkbox" checked> Show off duty and on leave</label>
+    </div>
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">BRANCH / ROOM</th>
+            <th scope="col">EMPLOYEE</th>
+            <th scope="col">PRESENCE</th>
+            <th scope="col">ACTIVITY</th>
+            <th scope="col">TOOL</th>
+            <th scope="col">CONDITION</th>
+            <th scope="col">WORKLOAD</th>
+            <th scope="col">SINCE</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

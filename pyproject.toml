@@ -16,6 +16,7 @@ dependencies = [
 hq = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
+    "websockets>=12",
     "jsonschema>=4",
 ]
 test = [
@@ -33,6 +34,7 @@ where = ["packages"]
 
 [tool.setuptools.package-data]
 "agentville.common" = ["schemas/*.json"]
+"agentville.hq" = ["web/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["packages"]
