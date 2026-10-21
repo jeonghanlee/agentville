@@ -1,7 +1,9 @@
 """Claude Code adapter.
 
 Live state comes from ``<home>/sessions/<pid>.json``; detail comes from the
-transcript ``<home>/projects/<encoded-cwd>/<sessionId>.jsonl``.
+transcript ``<home>/projects/<encoded-cwd>/<sessionId>.jsonl``. An ``Agent``
+tool call is a Contractor, followed through its subagent transcript
+``<sessionId>/subagents/agent-<agentId>.jsonl`` when present.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from agentville.common.observations import (
 )
 
 PROVIDER = "claude"
+SUBAGENT_TOOL = "Agent"
 
 _STATUS_MAP = {
     "busy": SessionStatus.ACTIVE,
@@ -124,6 +127,15 @@ def _default_is_alive(pid: int, proc_start: str | None, proc_root: str = "/proc"
 
 
 @dataclass
+class _SubAgent:
+    tool_use_id: str
+    tail: JsonlTail | None = None
+    status: str = "active"
+    tool: str | None = None
+    reported: tuple[str, str | None] = ("active", None)
+
+
+@dataclass
 class _Shift:
     key: ShiftKey
     pid: int
@@ -135,6 +147,7 @@ class _Shift:
     proc_start: str | None = None
     model: tuple[str | None, str | None] = (None, None)
     open_tools: dict[str, str] = field(default_factory=dict)
+    subagents: dict[str, _SubAgent] = field(default_factory=dict)
 
 
 class ClaudeAdapter:
@@ -243,6 +256,9 @@ class ClaudeAdapter:
         if session_id and session_id != shift.session_id:
             self._read_transcript(shift, now, out)
             shift.open_tools.clear()
+            for tool_use_id in shift.subagents:
+                out.append(Observation(Kind.SUBAGENT_ENDED, shift.key, at, now, Source.SESSION_FILE, {"subagent_id": tool_use_id}))
+            shift.subagents.clear()
             shift.session_id = session_id
             shift.tail = JsonlTail(self._transcript_path(shift.cwd, session_id))
             if self._history_before_attach(shift.tail.path):
@@ -294,6 +310,68 @@ class ClaudeAdapter:
         except OSError as exc:
             # One unreadable transcript must not discard observations of the other shifts.
             print(f"agentville-collector: {shift.tail.path}: {exc}", file=sys.stderr, flush=True)
+        for sub in list(shift.subagents.values()):
+            self._read_subagent(shift, sub, now, out)
+
+    def _subagent_tail(self, shift: _Shift, sub: _SubAgent) -> JsonlTail | None:
+        assert shift.tail is not None
+        directory = os.path.join(os.path.dirname(shift.tail.path), str(shift.session_id), "subagents")
+        for meta_path in glob.glob(os.path.join(glob.escape(directory), "agent-*.meta.json")):
+            try:
+                with open(meta_path, encoding="utf-8") as fh:
+                    meta = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            if isinstance(meta, dict) and meta.get("toolUseId") == sub.tool_use_id:
+                return JsonlTail(meta_path[: -len(".meta.json")] + ".jsonl")
+        return None
+
+    def _read_subagent(self, shift: _Shift, sub: _SubAgent, now: datetime, out: list[Observation]) -> None:
+        if sub.tail is None:
+            sub.tail = self._subagent_tail(shift, sub)
+            if sub.tail is None:
+                return
+        try:
+            for offset, record in sub.tail.read():
+                if not self._interpret_subagent(sub, record):
+                    continue
+                tool = sub.tool if sub.status == "active" else None
+                if (sub.status, tool) == sub.reported:
+                    continue
+                sub.reported = (sub.status, tool)
+                at = _from_iso(record.get("timestamp")) or now
+                data = {"subagent_id": sub.tool_use_id, "status": sub.status, "tool": tool}
+                out.append(Observation(Kind.SUBAGENT_STATUS, shift.key, at, now, Source.SESSION_LOG, data, RawLocation(sub.tail.path, offset)))
+        except OSError as exc:
+            print(f"agentville-collector: {sub.tail.path}: {exc}", file=sys.stderr, flush=True)
+
+    @staticmethod
+    def _interpret_subagent(sub: _SubAgent, record: dict[str, Any]) -> bool:
+        """Update the subagent's status and tool from one of its records; True when relevant."""
+        rtype = record.get("type")
+        if rtype == "system" and record.get("subtype") == "turn_duration":
+            sub.status, sub.tool = "idle", None
+            return True
+        message = record.get("message")
+        if rtype not in ("user", "assistant") or not isinstance(message, dict):
+            return False
+        items = [i for i in message.get("content") or [] if isinstance(i, dict)] if isinstance(message.get("content"), list) else []
+        if rtype == "user":
+            if any(i.get("type") == "tool_result" for i in items):
+                sub.tool = None
+            sub.status = "active"
+            return True
+        if record.get("isApiErrorMessage"):
+            sub.status, sub.tool = "error", None
+            return True
+        tools = [i.get("name") for i in items if i.get("type") == "tool_use"]
+        if tools:
+            sub.status, sub.tool = "active", tools[-1]
+        elif message.get("stop_reason") == "end_turn":
+            sub.status, sub.tool = "idle", None
+        else:
+            sub.status = "active"
+        return True
 
     def _interpret(self, shift: _Shift, record: dict[str, Any]) -> list[tuple[Kind, dict[str, Any]]]:
         rtype = record.get("type")
@@ -323,6 +401,8 @@ class ClaudeAdapter:
                             },
                         )
                     )
+                    if shift.subagents.pop(tool_id, None) is not None:
+                        found.append((Kind.SUBAGENT_ENDED, {"subagent_id": tool_id}))
                 return found
             if record.get("isMeta") or record.get("toolUseResult") is not None:
                 return []
@@ -339,8 +419,12 @@ class ClaudeAdapter:
                 found.append((Kind.MODEL_CHANGED, _model_data(model)))
             for item in items:
                 if isinstance(item, dict) and item.get("type") == "tool_use":
-                    shift.open_tools[item.get("id")] = item.get("name")
-                    found.append((Kind.TOOL_STARTED, {"tool_id": item.get("id"), "tool": item.get("name")}))
+                    tool_id = item.get("id")
+                    shift.open_tools[tool_id] = item.get("name")
+                    found.append((Kind.TOOL_STARTED, {"tool_id": tool_id, "tool": item.get("name")}))
+                    if item.get("name") == SUBAGENT_TOOL and isinstance(tool_id, str) and tool_id not in shift.subagents:
+                        shift.subagents[tool_id] = _SubAgent(tool_id)
+                        found.append((Kind.SUBAGENT_STARTED, {"subagent_id": tool_id, "provider": PROVIDER, "status": "active", "tool": None}))
             return found
         return []
 

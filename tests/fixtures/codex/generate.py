@@ -173,16 +173,22 @@ def reasoning():
     return ("response_item", {"type": "reasoning", "summary": [], "encrypted_content": "<secret>"})
 
 
-def token_count():
-    return ("event_msg", {"type": "token_count", "info": {}, "rate_limits": {
-        "limit_id": "<id>", "plan_type": "<plan>",
-        "primary": {"used_percent": 10.0, "window_minutes": 300, "resets_at": int((BASE + timedelta(hours=5)).timestamp())},
-        "credits": {"balance": "<balance>", "has_credits": True}}})
+def window(used, minutes, resets_after):
+    return {"used_percent": used, "window_minutes": minutes, "resets_at": int((BASE + resets_after).timestamp())}
+
+
+def token_count(used=10.0, weekly=None):
+    limits = {"limit_id": "<id>", "plan_type": "<plan>", "primary": window(used, 300, timedelta(hours=5))}
+    if weekly is not None:
+        limits["secondary"] = window(weekly, 10080, timedelta(days=7))
+    limits["credits"] = {"balance": "<balance>", "has_credits": True}
+    return ("event_msg", {"type": "token_count", "info": {}, "rate_limits": limits})
 
 
 TA = "019a0000-0000-7000-8000-00000000000a"
 TB = "019a0000-0000-7000-8000-00000000000b"
 TS = "019a0000-0000-7000-8000-0000000000aa"
+TT = "019a0000-0000-7000-8000-0000000000ab"
 TX = "019a0000-0000-7000-8000-0000000000ff"
 
 
@@ -213,13 +219,39 @@ def s02(root):
 
 
 def s04(root):
-    s = Scenario(root, "S04", "Subagent and system threads do not become Employees")
-    s.load(t(0), thread(TA, IDLE)); s.check(agent_count=1)
+    s = Scenario(root, "S04", "Subagent threads are Contractors of the parent; system threads are ignored")
+    s.load(t(0), thread(TA, IDLE)); s.check(agent_count=1, contractors=[])
+    s.status(t(1), TA, ACTIVE)
     s.notify(t(1), "thread/started", {"thread": thread(TS, ACTIVE, parent=TA, source={"subAgent": "review"})})
-    s.check(agent_count=1)
-    s.status(t(2), TS, IDLE); s.check(agent_count=1)
-    s.notify(t(3), "thread/started", {"thread": thread(TX, IDLE, with_path=False, thread_source="system")})
-    s.status(t(4), TX, ACTIVE); s.check(agent_count=1, state="idle")
+    s.check(agent_count=1, state="working", contractors=[{"state": "working", "tool": None}])
+    s.rollout(t(2), TS, [session_meta(TS), task_started("turn-s1"), call("call_s1")])
+    s.check(contractors=[{"state": "working", "tool": "exec_command"}])
+    s.status(t(3), TS, APPROVAL); s.check(contractors=[{"state": "waiting", "tool": None}])
+    s.status(t(4), TS, ACTIVE); s.check(contractors=[{"state": "working", "tool": "exec_command"}])
+    s.rollout(t(5), TS, [output("call_s1"), task_complete("turn-s1")])
+    s.status(t(5), TS, IDLE); s.check(contractors=[{"state": "idle", "tool": None}])
+    s.status(t(6), TS, NOT_LOADED); s.check(agent_count=1, contractors=[], contractors_ended=1)
+    s.notify(t(7), "thread/started", {"thread": thread(TT, ACTIVE, parent=TA, source={"subAgent": "review"})})
+    s.check(contractors=[{"state": "working", "tool": None}])
+    s.notify(t(8), "thread/started", {"thread": thread(TX, IDLE, with_path=False, thread_source="system")})
+    s.status(t(9), TX, ACTIVE); s.check(agent_count=1, state="working")
+    s.status(t(10), TA, NOT_LOADED); s.check(presence="off_duty", contractors=[], contractors_ended=2)
+    s.save()
+
+
+def s12(root):
+    s = Scenario(root, "S12", "Usage limit reached; a new turn after reset resumes work")
+    s.load(t(0), thread(TA, IDLE)); s.check(state="idle", reset_at=None)
+    s.status(t(1), TA, ACTIVE)
+    s.rollout(t(1), TA, [task_started("turn-1"), call("call_1"), output("call_1"), token_count(90.0, 50.0)])
+    s.check(state="working", reset_at=None)
+    s.rollout(t(2), TA, [token_count(100.0, 100.0)]); s.check(state="limited", reset_at="2026-01-08T00:00:00.000Z")
+    s.rollout(t(3), TA, [task_complete("turn-1")])
+    s.status(t(3), TA, IDLE); s.check(state="limited", reset_at="2026-01-08T00:00:00.000Z")
+    s.status(t(600), TA, ACTIVE); s.check(state="working", reset_at=None)
+    s.rollout(t(600), TA, [task_started("turn-2"), token_count(1.0, 1.0), task_complete("turn-2")])
+    s.status(t(601), TA, IDLE)
+    s.check(state="idle", states_since_start=["unknown", "idle", "working", "limited", "working", "completed", "idle"])
     s.save()
 
 
@@ -235,5 +267,5 @@ def s14(root):
 
 
 if __name__ == "__main__":
-    for build in (s01, s02, s04, s14):
+    for build in (s01, s02, s04, s12, s14):
         build(sys.argv[1])

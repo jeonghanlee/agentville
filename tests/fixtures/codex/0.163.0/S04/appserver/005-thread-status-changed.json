@@ -1,7 +1,7 @@
 {
   "method": "thread/status/changed",
   "params": {
-    "threadId": "019a0000-0000-7000-8000-0000000000ff",
+    "threadId": "019a0000-0000-7000-8000-0000000000aa",
     "status": {
       "type": "active",
       "activeFlags": []

@@ -162,13 +162,14 @@ class Collector:
         print(f"agentville-collector: {text}", file=sys.stderr, flush=True)
 
     def send_snapshot(self) -> None:
-        agents, activities = self.judge.snapshot(self._now)
+        agents, activities, contractors = self.judge.snapshot(self._now)
         self._batch.clear()
         self._needs_snapshot = False
         self._send(
             "snapshot",
             self._now,
-            {"branch": self.config.branch_payload(), "agents": agents, "activities": activities, "contractors": []},
+            {"branch": self.config.branch_payload(), "agents": agents, "activities": activities,
+             "contractors": contractors},
         )
 
     def close(self) -> None:

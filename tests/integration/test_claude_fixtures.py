@@ -45,9 +45,16 @@ class Replay:
             shutil.copy(self.scenario / op["file"], self.home / "sessions" / f"{op['pid']}.json")
         elif op["op"] == "session_remove":
             os.remove(self.home / "sessions" / f"{op['pid']}.json")
+        elif op["op"] == "file_write":
+            target = self.home / op["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(self.scenario / op["file"], target)
         elif op["op"] == "log_append":
             lines = (self.scenario / op["file"]).read_text().splitlines(keepends=True)
-            target = self.home / "projects" / encode_cwd(op["cwd"]) / f"{op['session']}.jsonl"
+            if "path" in op:
+                target = self.home / op["path"]
+            else:
+                target = self.home / "projects" / encode_cwd(op["cwd"]) / f"{op['session']}.jsonl"
             target.parent.mkdir(parents=True, exist_ok=True)
             start, end = op["lines"]
             with open(target, "a") as fh:

@@ -151,3 +151,71 @@ def test_resumed_session_after_attach_does_not_replay_history(tmp_path):
     _transcript(tmp_path, [old])
     _session(tmp_path)
     assert Kind.TOOL_STARTED not in _kinds(adapter.poll())
+
+
+def _result(tid="t1"):
+    return {"type": "user", "timestamp": "2026-01-01T00:00:09Z", "toolUseResult": {"agentId": "a1"},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": tid, "content": "<tool-output>"}]}}
+
+
+def _subagent(home, records, agent_id="a1", tool_use_id="toolu_agent", meta=True):
+    directory = home / "projects" / encode_cwd(CWD) / SID / "subagents"
+    directory.mkdir(parents=True, exist_ok=True)
+    if meta:
+        (directory / f"agent-{agent_id}.meta.json").write_text(json.dumps({"agentType": "<text>", "toolUseId": tool_use_id}))
+    with open(directory / f"agent-{agent_id}.jsonl", "a") as fh:
+        for r in records:
+            fh.write(json.dumps(r) + "\n")
+
+
+def _sub(data_of):
+    return [(o.kind, o.data) for o in data_of if o.kind in (Kind.SUBAGENT_STARTED, Kind.SUBAGENT_STATUS, Kind.SUBAGENT_ENDED)]
+
+
+def test_agent_tool_use_hires_and_tool_result_ends_contractor(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    _transcript(tmp_path, [_tool_use("Agent", "toolu_agent")])
+    assert _sub(adapter.poll()) == [(Kind.SUBAGENT_STARTED, {"subagent_id": "toolu_agent", "provider": "claude",
+                                                             "status": "active", "tool": None})]
+    _transcript(tmp_path, [_result("toolu_agent")])
+    observations = adapter.poll()
+    assert _kinds(observations) == [Kind.TOOL_FINISHED, Kind.SUBAGENT_ENDED]
+    assert observations[1].data == {"subagent_id": "toolu_agent"}
+
+
+def test_subagent_transcript_drives_contractor_tool_and_state(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    _transcript(tmp_path, [_tool_use("Agent", "toolu_agent")])
+    _subagent(tmp_path, [{"type": "user", "isSidechain": True, "message": {"content": "<text>"}}], agent_id="other",
+              tool_use_id="toolu_other")
+    adapter.poll()
+    _subagent(tmp_path, [{"type": "user", "isSidechain": True, "message": {"content": "<text>"}},
+                         _tool_use("Grep", "s1")])
+    assert _sub(adapter.poll()) == [(Kind.SUBAGENT_STATUS, {"subagent_id": "toolu_agent", "status": "active", "tool": "Grep"})]
+    _subagent(tmp_path, [{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "s1"}]}},
+                         {"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "<text>"}]}}],
+              meta=False)
+    assert [o.data["status"] for o in adapter.poll()] == ["active", "idle"]
+
+
+def test_subagent_without_transcript_stays_working(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    _transcript(tmp_path, [_tool_use("Agent", "toolu_agent")])
+    adapter.poll()
+    assert _sub(adapter.poll()) == []
+
+
+def test_session_switch_ends_open_contractors(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    _transcript(tmp_path, [_tool_use("Agent", "toolu_agent")])
+    adapter.poll()
+    _session(tmp_path, sid="22222222-2222-4222-8222-222222222222")
+    assert (Kind.SUBAGENT_ENDED, {"subagent_id": "toolu_agent"}) in _sub(adapter.poll())

@@ -133,7 +133,8 @@ class Replay:
             self.judge.apply(obs)
 
     def agent(self, exp):
-        if "seat" not in exp and not any(k in exp for k in ("state", "presence", "tool", "workload", "states_since_start", "ref", "same_as")):
+        if "seat" not in exp and not any(k in exp for k in ("state", "presence", "tool", "workload", "states_since_start", "ref", "same_as",
+                                                     "contractors", "reset_at")):
             return None
         return next(a for a in self.judge.agents if a.seat == exp.get("seat", 1))
 

@@ -27,6 +27,7 @@ class Kind(StrEnum):
     MODEL_CHANGED = "model.changed"
     ACCOUNT_CHANGED = "account.changed"
     SUBAGENT_STARTED = "subagent.started"
+    SUBAGENT_STATUS = "subagent.status"
     SUBAGENT_ENDED = "subagent.ended"
 
 

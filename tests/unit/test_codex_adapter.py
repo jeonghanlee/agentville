@@ -198,3 +198,125 @@ def test_rpc_error_on_one_thread_keeps_connection_and_other_shifts(tmp_path):
     conn.pending = [{"method": "thread/status/changed", "params": {"threadId": "t2", "status": {"type": "active", "activeFlags": []}}}]
     assert adapter.poll() == []
     assert not conn.closed
+
+
+def _sub(observations):
+    return [(o.kind, o.shift.native_id, o.data) for o in observations
+            if o.kind in (Kind.SUBAGENT_STARTED, Kind.SUBAGENT_STATUS, Kind.SUBAGENT_ENDED)]
+
+
+def _sub_obs(observations):
+    return [o for o in observations if o.kind in (Kind.SUBAGENT_STARTED, Kind.SUBAGENT_STATUS)]
+
+
+def _status(thread_id, status):
+    return {"method": "thread/status/changed", "params": {"threadId": thread_id, "status": status}}
+
+
+def _parent_and_child(tmp_path, child_status=None):
+    parent = {"id": "p1", "cwd": "/r", "path": None, "status": {"type": "idle"}}
+    child = {"id": "c1", "cwd": "/r", "path": str(tmp_path / "c1.jsonl"), "parentThreadId": "p1",
+             "source": {"subAgent": "review"}, "createdAt": int(NOW.timestamp()),
+             "status": child_status or {"type": "active", "activeFlags": []}}
+    return parent, child
+
+
+def test_subagent_thread_is_contractor_of_parent_shift(tmp_path):
+    parent, child = _parent_and_child(tmp_path)
+    conn = Scripted({"p1": parent, "c1": child}, loaded=["c1", "p1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    observations = adapter.poll()
+    assert [o.shift.native_id for o in observations if o.kind is Kind.PROCESS_STARTED] == ["p1"]
+    assert _sub(observations) == [(Kind.SUBAGENT_STARTED, "p1", {"subagent_id": "c1", "provider": "codex",
+                                                                 "status": "active", "tool": None})]
+    conn.pending = [_status("c1", {"type": "active", "activeFlags": ["waitingOnApproval"]}),
+                    _status("c1", {"type": "systemError"}), _status("c1", {"type": "idle"})]
+    assert [o.data["status"] for o in adapter.poll()] == ["waiting", "error", "idle"]
+    conn.loaded.remove("c1")
+    conn.pending = [_status("c1", {"type": "notLoaded"})]
+    assert _sub(adapter.poll()) == [(Kind.SUBAGENT_ENDED, "p1", {"subagent_id": "c1"})]
+
+
+def test_subagent_tool_comes_from_its_rollout(tmp_path):
+    parent, child = _parent_and_child(tmp_path)
+    conn = Scripted({"p1": parent}, loaded=["p1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    adapter.poll()
+    (tmp_path / "c1.jsonl").write_text(json.dumps({"timestamp": "2026-01-01T00:00:01Z", "type": "response_item",
+        "payload": {"type": "function_call", "name": "exec_command", "arguments": "<tool-input>", "call_id": "x"}}) + "\n")
+    conn.threads["c1"] = child
+    conn.loaded.append("c1")
+    conn.pending = [{"method": "thread/started", "params": {"thread": child}}]
+    assert [o.data["tool"] for o in _sub_obs(adapter.poll())] == [None, "exec_command"]
+    with open(tmp_path / "c1.jsonl", "a") as fh:
+        fh.write(json.dumps({"timestamp": "2026-01-01T00:00:02Z", "type": "response_item",
+                             "payload": {"type": "function_call_output", "call_id": "x", "output": "<tool-output>"}}) + "\n")
+    assert [o.data["tool"] for o in adapter.poll()] == [None]
+
+
+def test_subagent_ends_on_close_and_with_parent(tmp_path):
+    parent, child = _parent_and_child(tmp_path)
+    conn = Scripted({"p1": parent, "c1": child}, loaded=["p1", "c1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    adapter.poll()
+    conn.pending = [{"method": "thread/closed", "params": {"threadId": "c1"}}]
+    assert _sub(adapter.poll()) == [(Kind.SUBAGENT_ENDED, "p1", {"subagent_id": "c1"})]
+
+    conn2 = Scripted({"p1": parent, "c1": child}, loaded=["p1", "c1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn2, clock=lambda: NOW)
+    messages = []
+    judge = Judge(_Resolver(), lambda kind, at, payload: messages.append((kind, payload)))
+    for obs in adapter.poll():
+        judge.apply(obs)
+    conn2.pending = [_status("p1", {"type": "notLoaded"})]
+    for obs in adapter.poll():
+        judge.apply(obs)
+    assert [(k, p.get("status")) for k, p in messages[-2:]] == [("contractor", "ended"), ("agent", None)]
+    conn2.pending = [_status("c1", {"type": "idle"})]
+    assert _sub(adapter.poll()) == []
+
+
+def test_subagent_missing_after_reconnect_is_ended(tmp_path):
+    parent, child = _parent_and_child(tmp_path)
+    conns = [Scripted({"p1": parent, "c1": child}, loaded=["p1", "c1"]), Scripted({"p1": parent}, loaded=["p1"])]
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conns.pop(0), clock=lambda: NOW)
+    adapter.poll()
+    adapter._conn = None
+    assert _sub(adapter.poll()) == [(Kind.SUBAGENT_ENDED, "p1", {"subagent_id": "c1"})]
+
+
+def _token_count(*used, resets=(1767243600, 1767830400)):
+    windows = {name: {"used_percent": u, "window_minutes": 300, "resets_at": r}
+               for name, u, r in zip(("primary", "secondary"), used, resets)}
+    return json.dumps({"timestamp": "2026-01-01T00:00:00Z", "type": "event_msg",
+                       "payload": {"type": "token_count", "info": {}, "rate_limits": windows}}) + "\n"
+
+
+def test_token_count_at_full_window_reports_limit_with_reset(tmp_path):
+    rollout = tmp_path / "r.jsonl"
+    rollout.write_text("")
+    thread = {"id": "t1", "cwd": "/r", "path": str(rollout), "status": {"type": "active", "activeFlags": []}}
+    conn = Scripted({"t1": thread}, loaded=["t1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    judge = Judge(_Resolver(), lambda kind, at, payload: None)
+
+    def step(line):
+        with open(rollout, "a") as fh:
+            fh.write(line)
+        observations = adapter.poll()
+        for obs in observations:
+            judge.apply(obs)
+        return [(o.kind, o.data) for o in observations]
+
+    step("")
+    assert step(_token_count(50.0)) == []
+    assert step(_token_count(100.0, 100.0)) == [(Kind.LIMIT_REACHED, {"reset_at": datetime(2026, 1, 8, tzinfo=UTC)})]
+    assert step(_token_count(100.0, 100.0)) == []
+    payload = judge.activity_payload(judge.agents[0], NOW)
+    assert (payload["state"], payload["reset_at"]) == ("limited", "2026-01-08T00:00:00.000Z")
+    conn.pending = [{"method": "thread/status/changed", "params": {"threadId": "t1", "status": {"type": "idle"}}}]
+    step(_record("task_complete"))
+    assert judge.agents[0].instance.state == "limited"
+    assert step(_token_count(20.0, 40.0)) == [(Kind.LIMIT_CLEARED, {})]
+    assert judge.agents[0].instance.state == "idle"
+    assert judge.activity_payload(judge.agents[0], NOW)["reset_at"] is None

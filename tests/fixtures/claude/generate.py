@@ -153,6 +153,31 @@ class Scenario:
              "file": f"logs/{session_id}.jsonl", "lines": [start, len(log)]}
         )
 
+    def subagent_meta(self, at, session_id, agent_id, tool_use_id):
+        name = f"logs/agent-{agent_id}.meta.json"
+        os.makedirs(os.path.join(self.dir, "logs"), exist_ok=True)
+        with open(os.path.join(self.dir, name), "w") as fh:
+            json.dump({"toolUseId": tool_use_id}, fh)
+        self.timeline.append({"at": iso(at), "op": "file_write", "path": subagent_rel(session_id, agent_id, ".meta.json"),
+                              "file": name})
+
+    def subagent_records(self, at, session_id, agent_id, recs):
+        """Subagent transcript records: sidechain, parent sessionId, own uuid chain."""
+        key = f"agent-{agent_id}"
+        log = self.logs.setdefault(key, [])
+        start = len(log)
+        for rec in recs:
+            spec = dict(rec)
+            spec.pop("_snake_session", None)
+            record = self._envelope(at, key, True)
+            record.update({"sessionId": session_id, "isSidechain": True, "agentId": agent_id})
+            if spec.get("sourceToolAssistantUUID") == "<last>":
+                spec["sourceToolAssistantUUID"] = record["parentUuid"]
+            record.update(spec)
+            log.append(record)
+        self.timeline.append({"at": iso(at), "op": "log_append", "path": subagent_rel(session_id, agent_id, ".jsonl"),
+                              "file": f"logs/{key}.jsonl", "lines": [start, len(log)]})
+
     def check(self, **kw):
         kw["after"] = len(self.timeline)
         self.expect.append(kw)
@@ -171,6 +196,10 @@ class Scenario:
                 "title": self.title, "expect": self.expect}
         with open(os.path.join(self.dir, "meta.yaml"), "w") as fh:
             yaml.safe_dump(meta, fh, sort_keys=False, default_flow_style=None, width=120)
+
+
+def subagent_rel(session_id, agent_id, ext):
+    return f"projects/{CWD.replace('/', '-')}/{session_id}/subagents/agent-{agent_id}{ext}"
 
 
 def prompt():
@@ -222,16 +251,21 @@ def text():
     return {"type": "text", "text": "<text>"}
 
 
-def tool_use(tid, name):
-    return {"type": "tool_use", "id": tid, "name": name, "input": {"<key>": "<tool-input>"}, "caller": {"type": "direct"}}
+def tool_use(tid, name, tool_input=None):
+    return {"type": "tool_use", "id": tid, "name": name, "input": tool_input or {"<key>": "<tool-input>"},
+            "caller": {"type": "direct"}}
 
 
-def tool_result(tid, error=False, extra=None, result_as_string=False):
+def agent_use(tid):
+    return tool_use(tid, "Agent", {"description": "<text>", "prompt": "<text>", "subagent_type": "<text>"})
+
+
+def tool_result(tid, error=False, extra=None, result_as_string=False, result=None):
     block = {"type": "tool_result", "tool_use_id": tid, "content": "<tool-output>"}
     if error is not None:
         block["is_error"] = error
     record = {"type": "user", "promptId": "<prompt-id>", "sourceToolAssistantUUID": "<last>",
-              "toolUseResult": "<tool-output>" if result_as_string else {"<key>": "<tool-output>"},
+              "toolUseResult": "<tool-output>" if result_as_string else result or {"<key>": "<tool-output>"},
               "message": {"role": "user", "content": [block]}}
     if extra:
         record.update(extra)
@@ -268,6 +302,7 @@ def epilogue():
 SA = "11111111-1111-4111-8111-111111111111"
 SB = "22222222-2222-4222-8222-222222222222"
 SC = "33333333-3333-4333-8333-333333333333"
+AGENT_1 = "a000000000000001"
 
 
 def s01(root):
@@ -310,6 +345,34 @@ def s02(root):
     s.save()
 
 
+def s04(root):
+    s = Scenario(root, "S04", "Agent tool launches a subagent; parent exit ends an unfinished one")
+    s.session(t(0), 1001, SA, "idle"); s.check(state="idle", contractors=[])
+    s.records(t(1), SA, [prompt()])
+    s.session(t(1), 1001, SA, "busy")
+    s.records(t(2), SA, assistant(s, [agent_use("toolu_01")], "tool_use"))
+    s.check(state="working", tool="Agent", contractors=[{"state": "working", "tool": None}])
+    s.subagent_meta(t(2), SA, AGENT_1, "toolu_01")
+    s.subagent_records(t(2), SA, AGENT_1, [{"type": "user", "promptId": "<prompt-id>",
+                                            "message": {"role": "user", "content": "<text>"}}])
+    s.check(contractors=[{"state": "working", "tool": None}])
+    s.subagent_records(t(3), SA, AGENT_1, assistant(s, [tool_use("toolu_s1", "Read")], "tool_use"))
+    s.check(state="working", tool="Agent", contractors=[{"state": "working", "tool": "Read"}])
+    s.subagent_records(t(4), SA, AGENT_1, [tool_result("toolu_s1")]); s.check(contractors=[{"state": "working", "tool": None}])
+    s.subagent_records(t(5), SA, AGENT_1, assistant(s, [text()], "end_turn"))
+    s.check(contractors=[{"state": "idle", "tool": None}])
+    s.records(t(6), SA, [tool_result("toolu_01", result={"agentId": AGENT_1, "<key>": "<tool-output>"})])
+    s.check(state="working", tool=None, contractors=[], contractors_ended=1)
+    s.records(t(7), SA, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(7), 1001, SA, "idle"); s.check(state="idle")
+    s.records(t(10), SA, [prompt()])
+    s.session(t(10), 1001, SA, "busy")
+    s.records(t(11), SA, assistant(s, [agent_use("toolu_02")], "tool_use"))
+    s.check(contractors=[{"state": "working", "tool": None}], contractors_ended=1)
+    s.remove(t(20), 1001); s.check(presence="off_duty", contractors=[], contractors_ended=2)
+    s.save()
+
+
 def s14(root):
     s = Scenario(root, "S14", "Normal exit; resume and runtime location select the returning Employee")
     s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1"); s.check(presence="on_duty", seat=1, ref="a")
@@ -324,5 +387,5 @@ def s14(root):
 
 
 if __name__ == "__main__":
-    for build in (s01, s02, s14):
+    for build in (s01, s02, s04, s14):
         build(sys.argv[1])

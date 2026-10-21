@@ -1,9 +1,37 @@
 provider: codex
 version: 0.163.0
 scenario: S04
-title: Subagent and system threads do not become Employees
+title: Subagent threads are Contractors of the parent; system threads are ignored
 expect:
-- {agent_count: 1, after: 1}
-- {agent_count: 1, after: 2}
-- {agent_count: 1, after: 3}
-- {agent_count: 1, state: idle, after: 5}
+- agent_count: 1
+  contractors: []
+  after: 1
+- agent_count: 1
+  state: working
+  contractors:
+  - {state: working, tool: null}
+  after: 3
+- contractors:
+  - {state: working, tool: exec_command}
+  after: 4
+- contractors:
+  - {state: waiting, tool: null}
+  after: 5
+- contractors:
+  - {state: working, tool: exec_command}
+  after: 6
+- contractors:
+  - {state: idle, tool: null}
+  after: 8
+- agent_count: 1
+  contractors: []
+  contractors_ended: 1
+  after: 9
+- contractors:
+  - {state: working, tool: null}
+  after: 10
+- {agent_count: 1, state: working, after: 12}
+- presence: off_duty
+  contractors: []
+  contractors_ended: 2
+  after: 13

@@ -36,6 +36,9 @@ def check(replay, step, exp, refs, select):
     where = f"step {step}: {exp}"
     if "agent_count" in exp:
         assert len(judge.agents) == exp["agent_count"], where
+    if "contractors_ended" in exp:
+        ended = [m for m in replay.messages if m["kind"] == "contractor" and m["payload"]["status"] == "ended"]
+        assert len(ended) == exp["contractors_ended"], where
     agent = select(exp)
     if agent is None:
         return
@@ -47,6 +50,11 @@ def check(replay, step, exp, refs, select):
         assert agent.instance is not None and agent.instance.state == exp["state"], where
     if "tool" in exp:
         assert agent.instance.tool == exp["tool"], where
+    if "contractors" in exp:
+        contractors = agent.instance.contractors.values() if agent.instance else []
+        assert [{"state": c.state, "tool": c.tool} for c in contractors] == exp["contractors"], where
+    if "reset_at" in exp:
+        assert judge.activity_payload(agent, replay.now)["reset_at"] == exp["reset_at"], where
     if "workload" in exp:
         assert judge.activity_payload(agent, replay.now)["workload"] == exp["workload"], where
     if "states_since_start" in exp:
@@ -57,10 +65,16 @@ def check(replay, step, exp, refs, select):
         assert agent.agent_id == refs[exp["same_as"]], where
 
 
+# Placeholders for prompts, tool input, and provider identifiers that must stay on the Branch.
+PRIVATE = ("<text>", "<tool-input>", "<tool-output>", "/home/user", "toolu_")
+
+
 def check_messages(messages):
     validator = jsonschema.Draft202012Validator(SCHEMA)
     for msg in messages:
         validator.validate(msg)
+        text = json.dumps(msg)
+        assert not any(p in text for p in PRIVATE), text
     assert [m["seq"] for m in messages] == list(range(1, len(messages) + 1))
     event_times = [m["event_at"] for m in messages]
     assert event_times == sorted(event_times), "event_at must not decrease"

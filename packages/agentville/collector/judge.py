@@ -1,6 +1,6 @@
 """Judge: turns observations into Employee assignment and activity state.
 
-Emits protocol payloads (``agent`` and ``activity``) for the Sender.
+Emits protocol payloads (``agent``, ``activity``, and ``contractor``) for the Sender.
 """
 
 from __future__ import annotations
@@ -20,9 +20,21 @@ WORKLOAD_WINDOW = timedelta(minutes=5)
 LEAVE_AFTER = timedelta(days=7)
 MAX_SESSIONS = 20
 
+# Contractor status reported by Adapters, mapped to activity states.
+_SUBAGENT_STATES = {"active": "working", "waiting": "waiting", "idle": "idle", "error": "error"}
+
 
 class ProjectResolver(Protocol):
     def resolve(self, cwd: str) -> Project: ...
+
+
+@dataclass
+class Contractor:
+    contractor_id: str
+    provider: str
+    state: str
+    state_since: datetime
+    tool: str | None = None
 
 
 @dataclass
@@ -37,7 +49,9 @@ class Instance:
     source: Source = Source.PROCESS
     confidence: str = "low"
     tool: str | None = None
+    reset_at: datetime | None = None
     tool_times: deque[datetime] = field(default_factory=deque)
+    contractors: dict[str, Contractor] = field(default_factory=dict)
 
 
 @dataclass
@@ -109,7 +123,7 @@ class Judge:
                     self._set(agent, obs, "waiting", "high")
                 elif status == SessionStatus.IDLE:
                     inst.tool = None
-                    if inst.state != "error":
+                    if inst.state not in ("error", "limited"):
                         self._set(agent, obs, "idle", "high")
                 elif status == SessionStatus.ACTIVE:
                     if inst.state not in ("working", "thinking"):
@@ -135,14 +149,24 @@ class Judge:
                     self._emit_activity(agent, obs.event_at)
             case Kind.TURN_COMPLETED:
                 inst.tool = None
-                # An error lasts until normal activity resumes, not until the failed turn ends.
-                if inst.state != "error":
+                # An error or limit lasts until normal activity resumes, not until the turn ends.
+                if inst.state not in ("error", "limited"):
                     self._set(agent, obs, "completed", "high", force=True)
                     self._set(agent, obs, "idle", "high", force=True)
             case Kind.AGENT_ERROR:
                 self._set(agent, obs, "error", "high", force=True)
             case Kind.LIMIT_REACHED:
+                inst.reset_at = obs.data.get("reset_at")
                 self._set(agent, obs, "limited", "high", force=True)
+            case Kind.LIMIT_CLEARED:
+                if inst.state == "limited":
+                    self._set(agent, obs, "idle", "high")
+            case Kind.SUBAGENT_STARTED | Kind.SUBAGENT_STATUS:
+                self._on_subagent(inst, obs)
+            case Kind.SUBAGENT_ENDED:
+                contractor = inst.contractors.pop(obs.data.get("subagent_id"), None)
+                if contractor is not None:
+                    self._emit("contractor", obs.event_at, self.contractor_payload(inst, contractor, "ended"))
             case Kind.MODEL_CHANGED:
                 agent.model = obs.data.get("model")
                 agent.settings = dict(obs.data.get("settings") or {})
@@ -185,7 +209,33 @@ class Judge:
         self.agents.append(agent)
         return agent
 
+    def _on_subagent(self, inst: Instance, obs: Observation) -> None:
+        sub_id = obs.data.get("subagent_id")
+        if not isinstance(sub_id, str):
+            return
+        contractor = inst.contractors.get(sub_id)
+        if contractor is None and obs.kind is not Kind.SUBAGENT_STARTED:
+            return
+        state = _SUBAGENT_STATES.get(obs.data.get("status") or "active", "unknown")
+        tool = obs.data.get("tool") if state == "working" else None
+        if contractor is None:
+            # Stable per parent instance; the provider's subagent id itself is not sent.
+            contractor_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentville:contractor:{inst.instance_id}:{sub_id}"))
+            contractor = Contractor(contractor_id, obs.data.get("provider") or obs.shift.provider, state, obs.event_at, tool)
+            inst.contractors[sub_id] = contractor
+        elif (contractor.state, contractor.tool) == (state, tool):
+            return
+        else:
+            if contractor.state != state:
+                contractor.state_since = obs.event_at
+            contractor.state, contractor.tool = state, tool
+        self._emit("contractor", obs.event_at, self.contractor_payload(inst, contractor, "hired"))
+
     def _on_exited(self, agent: Agent, obs: Observation) -> None:
+        assert agent.instance is not None
+        # A Contractor's lifetime does not exceed its parent's.
+        for contractor in agent.instance.contractors.values():
+            self._emit("contractor", obs.event_at, self.contractor_payload(agent.instance, contractor, "ended"))
         self._by_shift.pop(obs.shift, None)
         agent.instance = None
         agent.presence_since = obs.event_at
@@ -198,6 +248,8 @@ class Judge:
             return
         inst.state = state
         inst.state_since = obs.event_at
+        if state != "limited":
+            inst.reset_at = None
         inst.source = obs.source
         inst.confidence = confidence
         self._emit_activity(agent, obs.event_at)
@@ -273,13 +325,30 @@ class Judge:
             else {"instance_id": inst.instance_id, "started_at": iso(inst.started_at), "runtime": inst.runtime},
         }
 
-    def snapshot(self, now: datetime) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Agent payloads for all Employees and activity payloads for those on duty."""
+    def snapshot(self, now: datetime) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        """Agent payloads for all Employees, and activity and Contractor payloads for those on duty."""
         agents = [self.agent_payload(a, now) for a in self.agents]
         for agent, payload in zip(self.agents, agents, strict=True):
             agent.reported_presence = payload["presence"]
-        activities = [self.activity_payload(a, now) for a in self.agents if a.instance is not None]
-        return agents, activities
+        on_duty = [a for a in self.agents if a.instance is not None]
+        activities = [self.activity_payload(a, now) for a in on_duty]
+        contractors = [
+            self.contractor_payload(a.instance, c, "hired") for a in on_duty if a.instance for c in a.instance.contractors.values()
+        ]
+        return agents, activities, contractors
+
+    @staticmethod
+    def contractor_payload(inst: Instance, contractor: Contractor, status: str) -> dict[str, Any]:
+        return {
+            "contractor_id": contractor.contractor_id,
+            "parent_instance_id": inst.instance_id,
+            "provider": contractor.provider,
+            "origin": "in_process",
+            "status": status,
+            "state": contractor.state,
+            "state_since": iso(contractor.state_since),
+            "tool": contractor.tool,
+        }
 
     def activity_payload(self, agent: Agent, now: datetime) -> dict[str, Any]:
         inst = agent.instance
@@ -295,6 +364,6 @@ class Judge:
             "source": inst.source.value,
             "confidence": inst.confidence,
             "tool": inst.tool,
-            "reset_at": None,
+            "reset_at": iso(inst.reset_at) if inst.reset_at and inst.state == "limited" else None,
             "workload": len(inst.tool_times),
         }
