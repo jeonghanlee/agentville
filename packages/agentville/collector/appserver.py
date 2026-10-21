@@ -12,6 +12,7 @@ import os
 import select
 import socket
 import struct
+import time
 from collections import deque
 from typing import Any, Protocol
 
@@ -91,6 +92,7 @@ class AppServerClient:
         self._fragments: list[bytes] = []
         self._next_id = 0
         self._notifications: deque[dict[str, Any]] = deque()
+        self.dropped_requests = 0
 
     def connect(self) -> None:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -121,21 +123,28 @@ class AppServerClient:
             sock.close()
             raise AppServerError(f"unexpected handshake response: {lines[0]}")
         self._sock = sock
-        result = self.request(
-            "initialize",
-            {"clientInfo": {"name": self.client_name, "version": self.client_version}, "capabilities": {"experimentalApi": False}},
-        )
-        if not isinstance(result, dict):
-            raise AppServerError("invalid initialize result")
-        self._send({"jsonrpc": "2.0", "method": "initialized"})
+        try:
+            result = self.request(
+                "initialize",
+                {"clientInfo": {"name": self.client_name, "version": self.client_version}, "capabilities": {"experimentalApi": False}},
+            )
+            if not isinstance(result, dict):
+                raise AppServerError("invalid initialize result")
+            self._send({"jsonrpc": "2.0", "method": "initialized"})
+        except AppServerError:
+            self.close()
+            raise
 
     def request(self, method: str, params: dict[str, Any]) -> Any:
         self._next_id += 1
         request_id = self._next_id
         self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        deadline = time.monotonic() + self.timeout
         while True:
-            message = self._receive(self.timeout)
+            remaining = deadline - time.monotonic()
+            message = self._receive(remaining) if remaining > 0 else None
             if message is None:
+                self.close()
                 raise AppServerError(f"timeout waiting for {method}")
             if message.get("id") == request_id and "method" not in message:
                 if "error" in message:
@@ -163,6 +172,8 @@ class AppServerClient:
         # Server-to-client requests (approvals) are never answered; only notifications are kept.
         if "method" in message and "id" not in message:
             self._notifications.append(message)
+        elif "method" in message:
+            self.dropped_requests += 1
 
     def _send(self, message: dict[str, Any]) -> None:
         self._write(encode_frame(OP_TEXT, json.dumps(message).encode()))

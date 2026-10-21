@@ -80,13 +80,23 @@ class CodexAdapter:
             if self._conn is None:
                 self._conn = self._connect()
                 self._seed(now, out)
-            for message in self._conn.drain():
-                self._notification(message, now, out)
+            messages = self._conn.drain()
+            # Rollout first, so a turn's completion precedes the status that ends it.
+            for shift in list(self._shifts.values()):
+                self._read_rollout(shift, now, out)
+            for message in messages:
+                if isinstance(message, dict):
+                    self._notification(message, now, out)
         except AppServerError:
             self._disconnect(now, out)
         for shift in list(self._shifts.values()):
             self._read_rollout(shift, now, out)
         return out
+
+    def close(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
     def _disconnect(self, now: datetime, out: list[Observation]) -> None:
         if self._conn is not None:
@@ -97,16 +107,23 @@ class CodexAdapter:
                 shift.status = ("unknown", ())
                 out.append(self._obs(Kind.SESSION_STATUS, shift, now, now, {"status": SessionStatus.UNKNOWN.value, "native": None}))
 
-    def _seed(self, now: datetime, out: list[Observation]) -> None:
+    def _loaded(self) -> list[str]:
         assert self._conn is not None
         loaded: list[str] = []
         cursor = None
         while True:
             result = self._conn.request("thread/loaded/list", {"cursor": cursor} if cursor else {})
-            loaded.extend(i for i in result.get("data", []) if isinstance(i, str))
+            if not isinstance(result, dict):
+                raise AppServerError("invalid thread/loaded/list result")
+            loaded.extend(i for i in result.get("data") or [] if isinstance(i, str))
             cursor = result.get("nextCursor")
             if not cursor:
                 break
+        return loaded
+
+    def _seed(self, now: datetime, out: list[Observation]) -> None:
+        loaded = self._loaded()
+        self._ignored &= set(loaded)
         for thread_id in list(self._shifts):
             if thread_id not in loaded:
                 self._end(self._shifts[thread_id], now, out)
@@ -201,15 +218,17 @@ class CodexAdapter:
 
     def _notification(self, message: dict[str, Any], now: datetime, out: list[Observation]) -> None:
         method = message.get("method")
-        params = message.get("params") or {}
+        params = message.get("params")
+        if not isinstance(params, dict):
+            return
         thread_id = params.get("threadId")
         if method == "thread/started" and isinstance(params.get("thread"), dict):
             self._observe_thread(params["thread"], now, out)
         elif method == "thread/closed" and thread_id in self._shifts:
             self._end(self._shifts[thread_id], now, out)
         elif method == "thread/status/changed" and isinstance(thread_id, str):
-            status = params.get("status") or {}
-            if thread_id in self._ignored:
+            status = params.get("status")
+            if not isinstance(status, dict) or thread_id in self._ignored:
                 return
             shift = self._shifts.get(thread_id)
             if status.get("type") == "notLoaded":
@@ -217,7 +236,7 @@ class CodexAdapter:
                     self._end(shift, now, out)
             elif shift is not None:
                 self._status(shift, status, now, out)
-            else:
+            elif thread_id in self._loaded():
                 thread = self._read_thread(thread_id)
                 if thread is not None:
                     self._observe_thread(thread, now, out)

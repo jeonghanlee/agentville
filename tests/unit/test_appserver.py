@@ -121,6 +121,7 @@ def test_request_buffers_notifications_and_answers_ping(tmp_path):
     while time.time() < deadline and len(notes) < 2:
         notes += client.drain()
     assert [n["method"] for n in notes] == ["thread/status/changed", "thread/closed"]
+    assert client.dropped_requests == 1
     client.close()
 
 
@@ -150,3 +151,36 @@ def test_server_close_raises(tmp_path):
 def test_missing_socket_raises(tmp_path):
     with pytest.raises(AppServerError):
         AppServerClient(str(tmp_path / "absent.sock"), timeout=1).connect()
+
+
+def test_failed_initialize_closes_socket(tmp_path):
+    path = str(tmp_path / "s.sock")
+
+    def script(d):
+        _, msg = d.recv()
+        d.send({"id": msg["id"], "error": {"code": -1, "message": "no"}})
+
+    FakeDaemon(path, script)
+    client = AppServerClient(path, timeout=2)
+    with pytest.raises(AppServerError):
+        client.connect()
+    assert client._sock is None
+
+
+def test_request_deadline_covers_unrelated_traffic(tmp_path):
+    path = str(tmp_path / "s.sock")
+
+    def script(d):
+        d.answer_initialize()
+        d.recv()
+        for _ in range(20):
+            d.send({"method": "skills/changed", "params": {}})
+            time.sleep(0.05)
+
+    FakeDaemon(path, script)
+    client = AppServerClient(path, timeout=0.3)
+    client.connect()
+    started = time.monotonic()
+    with pytest.raises(AppServerError):
+        client.request("thread/loaded/list", {})
+    assert time.monotonic() - started < 0.8

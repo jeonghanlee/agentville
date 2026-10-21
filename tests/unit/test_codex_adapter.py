@@ -56,3 +56,53 @@ def test_employee_thread_classification():
     assert not is_employee_thread({"threadSource": "system"})
     assert not is_employee_thread({"parentThreadId": "p"})
     assert not is_employee_thread({"source": {"subAgent": "review"}})
+
+
+class Scripted:
+    """Connection whose loaded list and notifications are set by the test."""
+
+    def __init__(self, threads, loaded):
+        self.threads, self.loaded, self.pending, self.reads = threads, loaded, [], []
+
+    def request(self, method, params):
+        if method == "thread/loaded/list":
+            return {"data": list(self.loaded), "nextCursor": None}
+        self.reads.append(params["threadId"])
+        return {"thread": self.threads[params["threadId"]]}
+
+    def drain(self):
+        out, self.pending = self.pending, []
+        return out
+
+    def close(self):
+        pass
+
+
+def test_status_for_unknown_unloaded_thread_is_not_read(tmp_path):
+    conn = Scripted({"t9": {"id": "t9", "status": {"type": "idle"}}}, loaded=[])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    adapter.poll()
+    conn.pending = [{"method": "thread/status/changed", "params": {"threadId": "t9", "status": {"type": "idle"}}}]
+    assert adapter.poll() == []
+    assert conn.reads == []
+
+
+def test_malformed_messages_are_ignored(tmp_path):
+    conn = Scripted({}, loaded=[])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    adapter.poll()
+    conn.pending = [{"method": "thread/status/changed", "params": None}, "junk",
+                    {"method": "thread/status/changed", "params": {"threadId": "x", "status": None}}]
+    assert adapter.poll() == []
+
+
+def test_turn_completion_precedes_idle_status_in_one_poll(tmp_path):
+    rollout = tmp_path / "r.jsonl"
+    thread = {"id": "t1", "cwd": "/r", "path": str(rollout), "status": {"type": "active", "activeFlags": []}, "threadSource": "user"}
+    conn = Scripted({"t1": thread}, loaded=["t1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    adapter.poll()
+    rollout.write_text(_record("task_complete"))
+    conn.pending = [{"method": "thread/status/changed", "params": {"threadId": "t1", "status": {"type": "idle"}}}]
+    kinds = [o.kind for o in adapter.poll()]
+    assert kinds.index(Kind.TURN_COMPLETED) < kinds.index(Kind.SESSION_STATUS)
