@@ -260,7 +260,7 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 |---|---|
 | Live threads, shift | App-server daemon per Codex home (`<launcher> app-server daemon version` → `socketPath`); JSON-RPC over WebSocket on the control socket: `thread/loaded/list`, `thread/read`, `thread/list` |
 | Shift identity | Thread `id` while its status is not `notLoaded` |
-| State changes | Notification `thread/status/changed` (`threadId`, `status`) |
+| State changes | Notification `thread/status/changed` (`threadId`, `status`). Delivered to a passive client that only lists and reads; no subscription required. Turn and item notifications are not delivered to such a client. |
 | Thread status | `notLoaded`, `idle`, `systemError`, `active` with `activeFlags`: `waitingOnApproval`, `waitingOnUserInput` |
 | Turn | `turn/started`, `turn/completed` |
 | Tool | `item/started`, `item/completed` |
@@ -276,6 +276,8 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - No pid is exposed by Codex logs, sqlite state, or app-server responses.
 - The Collector acts as a read-only app-server client. Only `thread/loaded/list` and `thread/read` are called; no method that starts, resumes, sends to, or interrupts a thread.
 - Only loaded threads are read. Reading a `notLoaded` thread is avoided until its side effects are verified.
+- `thread/loaded/list` and `thread/read` seed state on connect and after reconnect; afterwards state follows `thread/status/changed`. `optOutNotificationMethods` is never set for it.
+- Turn and tool detail come from the thread's rollout file, not from app-server notifications.
 - Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only; waiting state is unavailable for them.
 
 #### Antigravity CLI
@@ -336,7 +338,7 @@ agentville/
 
 - Default values: workload window, monitor mapping, process scan interval, heartbeat interval.
 - Claude Code: meaning of `state: blocked` and `status: shell`.
-- Codex app-server notification delivery to a passive client.
+- Codex: live observation of `waitingOnApproval`, `waitingOnUserInput`, and `systemError`.
 - Antigravity waiting and usage-limit signals.
 - Contractor grouping when counts are large (Codex subagent threads dominate recent history).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
