@@ -413,7 +413,8 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 - Served by HQ at `/` (static HTML, CSS, JavaScript, and bundled artwork; no build step). The initial view is the virtual office.
 - Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after ingest (bursts coalesced), and every 10 s. The page reconnects with backoff up to 30 s.
-- With a viewer token, the page reads it from the URL fragment (`#token=...`) and passes it as the `token` query parameter of the socket.
+- With a viewer token, the page reads it from the URL fragment (`#token=...`), keeps it in session storage, removes it from the address bar, and passes it as the `token` query parameter of the socket.
+- Close code 4401 shows that a viewer token is required and 4403 that HQ refused the connection; neither is retried.
 - Idle detail (at desk, phone, dozing, fika) is computed in the page from `state_since` and the Branch thresholds.
 - Branch-provided text is rendered as text only, never as markup.
 
@@ -431,7 +432,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Search, status filters, and room filters select the team list and highlight matching characters. Selecting a teammate opens their current details. Selection survives Project-page changes while the Employee still matches the filters. Remote participants of local Projects remain visible in shared facilities on every Project page.
 - Dashboard and Employees provide tabular views. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
 - Display settings control name labels, reduced motion, and automatic or manually selected window light. The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
-- The browser marks activity unverified when its HQ connection is lost. It preserves the last received state while reconnecting.
+- The browser marks activity unverified when its HQ connection is lost or the Branch is unreachable. Placement, pose, and counts keep the last observed state, dimmed and marked with "?".
 
 ### 6.3 Synthetic demonstration mode
 

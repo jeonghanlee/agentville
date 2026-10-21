@@ -41,9 +41,12 @@ export function mountFurniture(world) {
   let revision = 0;
   return {
     update() {
+      // A hidden office has no floor size; skip until it is shown again.
+      const floor = world.getBoundingClientRect();
+      if (!floor.width || !floor.height) return;
       const selected = world.querySelector(".agent.selected:not(.filtered)");
       if (!selected) { outline.replaceChildren(); previous = ""; return; }
-      const bounds = selected.getBoundingClientRect(), floor = world.getBoundingClientRect();
+      const bounds = selected.getBoundingClientRect();
       const signature = [selected.dataset.appearance, bounds.x, bounds.y, bounds.width, selected.style.zIndex].join("|");
       if (signature === previous) return;
       previous = signature;

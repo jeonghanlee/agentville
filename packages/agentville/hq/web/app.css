@@ -97,6 +97,11 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 .agent.reclining { width: 8%; aspect-ratio: 48/40; transform: translate(-50%,-50%); }
 .agent.coffee-standing { transform: translate(-50%,-100%); transition-duration: 2s; }
 .agent.coffee-standing[data-coffee-facing="left"] > .character { transform: scaleX(-1); }
+/* Unverified Employees keep their last observed place and pose, dimmed and marked. */
+.agent.unverified > .character, .agent.unverified .agent-signal { opacity: .55; }
+.agent.unverified::before { content: "?"; position: absolute; top: -3px; right: -3px; z-index: 1; width: 11px; height: 11px; border: 1px solid #d3d6c6; border-radius: 50%; background: #fffef8; color: var(--unknown); font: 600 8px/11px var(--sans); text-align: center; }
+.state-label.unverified { opacity: .7; }.unverified-mark { font-weight: 700; }.unverified-count::after { content: "?"; }
+.metric.unverified strong { opacity: .55; }.metric small { display: block; color: var(--unknown); font-size: 9px; }
 .coffee-standing[data-coffee-phase^="walking"] .coffee-person { transform-origin: 16px 40px; animation: coffee-step .55s ease-in-out infinite; }
 .brewing-steam { animation: float 2s ease-in-out infinite; }
 .coffee-status { position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: #fff7e7; color: #8d7953; border: 1px solid #e0d2b8; border-radius: 4px; font-size: 8px; padding: 2px 4px; }

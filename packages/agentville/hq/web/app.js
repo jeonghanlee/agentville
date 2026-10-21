@@ -9,7 +9,7 @@ import { SEATED_WIDTH } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 
 const DEMO = new URLSearchParams(location.search).get("demo") === "1";
-const TOKEN = new URLSearchParams(location.hash.slice(1)).get("token");
+const TOKEN = takeToken();
 const COMMON = "common-office";
 const STATES = {
   working: "Working", thinking: "Thinking", waiting: "Waiting", idle: "Idle",
@@ -49,7 +49,7 @@ const $ = (id) => document.getElementById(id);
 const keyOf = (branch, id) => JSON.stringify([branch, id]);
 let current = EMPTY, connected = false, view = "office", branchId = "", floor = 0;
 let stateFilter = "all", roomFilter = "", selected = "", zoom = 100;
-let events = [], eventKeys = new Set(), reconnectTimer = null, activeSocket = null;
+let events = [], eventKeys = new Set(), reconnectTimer = null, activeSocket = null, everOpened = false, failedOpens = 0;
 const actors = new Map();
 const companions = new Map();
 const facilityOccupancy = new Map();
@@ -61,7 +61,11 @@ function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
     if (key === "class") node.className = value;
-    else if (key === "style") Object.assign(node.style, value);
+    else if (key === "style") {
+      for (const [name, style] of Object.entries(value)) {
+        if (name.startsWith("--")) node.style.setProperty(name, style); else node.style[name] = style;
+      }
+    }
     else node.setAttribute(key, value);
   }
   for (const child of children.flat()) {
@@ -70,6 +74,20 @@ function el(tag, attrs = {}, ...children) {
   }
   return node;
 }
+// The viewer token leaves the address bar so it is not shared, bookmarked, or kept in history.
+function takeToken() {
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (!hash.has("token")) {
+    try { return sessionStorage.getItem("agentville-viewer-token"); } catch { return null; }
+  }
+  const token = hash.get("token");
+  try { sessionStorage.setItem("agentville-viewer-token", token); } catch {}
+  hash.delete("token");
+  const rest = hash.toString();
+  history.replaceState(history.state, "", location.pathname + location.search + (rest ? "#" + rest : ""));
+  return token;
+}
+function projectRoom(id) { return "project:" + id; }
 function button(label, cls, fn, attrs = {}) {
   const node = el("button", { type: "button", class: cls, ...attrs }, label);
   node.addEventListener("click", fn);
@@ -105,7 +123,7 @@ function rows() {
     const activity = activities.get(keyOf(agent.branch_id, agent.agent_id));
     const duty = agent.presence === "on_duty";
     const verified = (DEMO || connected) && Boolean(branch?.reachable);
-    const state = duty ? (verified && activity && Object.hasOwn(STATES, activity.state) ? activity.state : "unknown") : "idle";
+    const state = duty ? (activity && Object.hasOwn(STATES, activity.state) ? activity.state : "unknown") : "idle";
     const detail = state === "idle" && duty ? idleDetail(activity, branch) : "";
     const contractors = current.contractors.filter((c) =>
       c.branch_id === agent.branch_id && c.parent_instance_id === agent.instance?.instance_id && c.status !== "ended");
@@ -121,7 +139,7 @@ function rows() {
 function roomOf(row) {
   if (row.state === "error") return "infirmary";
   if (row.detail === "fika") return "fika";
-  return row.agent.project_id === COMMON ? "common" : row.agent.project_id;
+  return row.agent.project_id === COMMON ? "common" : projectRoom(row.agent.project_id);
 }
 function queryMatches(row) {
   const query = $("search").value.trim().toLowerCase();
@@ -148,8 +166,14 @@ function stateLabel(row) {
   const label = !row.duty ? PRESENCE[row.agent.presence] || row.agent.presence
     : row.detail === "fika" ? "Fika" : row.detail === "phone" ? "On a break"
     : row.detail === "dozing" ? "Dozing" : STATES[row.state];
-  return el("span", { class: "state-label", style: { "--state-color": color(row.state) } },
-    el("i", { class: "status-dot" }), label);
+  const unverified = row.duty && !row.verified;
+  return el("span", { class: "state-label" + (unverified ? " unverified" : ""), style: { "--state-color": color(row.state) },
+    ...(unverified ? { title: "Unverified: last observed " + label } : {}) },
+    el("i", { class: "status-dot" }), label, unverified ? el("span", { class: "unverified-mark", "aria-hidden": "true" }, "?") : null,
+    unverified ? el("span", { class: "sr-only" }, " (unverified)") : null);
+}
+function countBadge(list) {
+  return el("b", list.some((r) => r.duty && !r.verified) ? { class: "unverified-count" } : {}, list.length);
 }
 function avatar(row) {
   return el("span", { class: "avatar", style: { "--avatar-color": avatarColor(row.key) } },
@@ -180,18 +204,18 @@ function renderFilters(ctx) {
   $("filters").replaceChildren(...states.map((s) => button([
     s === "all" ? null : el("i", { class: "status-dot", style: { background: color(s) } }),
     s === "all" ? "Everyone" : STATES[s],
-    el("b", {}, ctx.present.filter((r) => s === "all" || r.state === s).length),
+    countBadge(ctx.present.filter((r) => s === "all" || r.state === s)),
   ], "filter", () => { stateFilter = s; render(); },
   { "aria-pressed": String(s === stateFilter), "data-focus-key": "filter-" + s, "data-filter": s })));
 }
 function renderRooms(ctx) {
-  const rooms = ctx.page.map((p,i) => ({ ...p, color: ROOM_LAYOUT["studio" + i].color }));
+  const rooms = ctx.page.map((p,i) => ({ ...p, id: projectRoom(p.id), color: ROOM_LAYOUT["studio" + i].color }));
   rooms.push({ id: "common", name: "Common office", color: ROOM_LAYOUT.common.color },
     { id: "fika", name: "Fika lounge", color: ROOM_LAYOUT.fika.color },
     { id: "infirmary", name: "Infirmary", color: ROOM_LAYOUT.infirmary.color });
   $("rooms").replaceChildren(...rooms.map((room) => button([
     el("i", { class: "room-square", style: { "--room-color": room.color } }), room.name,
-    el("b", {}, ctx.present.filter((r) => roomOf(r) === room.id).length),
+    countBadge(ctx.present.filter((r) => roomOf(r) === room.id)),
   ], "room-tab", () => { roomFilter = roomFilter === room.id ? "" : room.id; render(); },
   { "aria-pressed": String(roomFilter === room.id), "data-focus-key": "room-" + room.id })));
   const count = Math.max(1, Math.ceil(ctx.projects.length / 2));
@@ -204,7 +228,7 @@ function renderCharacters(ctx) {
   const groups = new Map();
   for (const row of ctx.office) {
     let room = roomOf(row);
-    const projectIndex = ctx.page.findIndex((p) => p.id === room);
+    const projectIndex = ctx.page.findIndex((p) => projectRoom(p.id) === room);
     if (projectIndex !== -1) room = "studio" + projectIndex;
     if (!Object.hasOwn(ROOM_LAYOUT, room)) continue;
     if (!groups.has(room)) groups.set(room, []);
@@ -251,8 +275,9 @@ function renderCharacters(ctx) {
       node.dataset.employeeKey = row.key;
       const visible = passes(row);
       const condition = Object.hasOwn(CONDITIONS, row.agent.condition) ? row.agent.condition : "normal";
-      node.className = ["agent", row.state, row.detail, condition, selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
-      node.setAttribute("aria-label", row.name + ", " + STATES[row.state] + ", " + row.project);
+      node.className = ["agent", row.state, row.detail, condition, row.verified ? "" : "unverified",
+        selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
+      node.setAttribute("aria-label", row.name + ", " + STATES[row.state] + (row.verified ? "" : " (unverified)") + ", " + row.project);
       node.setAttribute("aria-pressed", String(row.key === selected));
       node.tabIndex = visible ? 0 : -1;
       const visit = coffee?.get(row.key);
@@ -315,7 +340,7 @@ function renderCharacters(ctx) {
     });
     if (people.length > placed.length) {
       const overflow = button("+" + (people.length - placed.length), "room-overflow", () => {
-        roomFilter = room.startsWith("studio") ? ctx.page[Number(room.slice(-1))].id : room;
+        roomFilter = room.startsWith("studio") ? projectRoom(ctx.page[Number(room.slice(-1))].id) : room;
         render();
       }, { "aria-label": "Show all teammates in this room" });
       overflow.style.left = layout.overflow[0] + "%";
@@ -349,7 +374,7 @@ function renderTeam(ctx) {
       el("p", { class: "detail-note" }, "Choose a teammate to see how their day is going."));
     return;
   }
-  const stats = [["Status", !row.verified ? "Unverified" : STATES[row.state]], ["Condition", CONDITIONS[row.agent.condition] || row.agent.condition],
+  const stats = [["Status", !row.verified ? "Unverified (" + STATES[row.state] + ")" : STATES[row.state]], ["Condition", CONDITIONS[row.agent.condition] || row.agent.condition],
     ["Tool", row.state === "working" ? row.activity?.tool || "-" : "-"],
     ["Workload", row.verified ? (row.activity?.workload ?? 0) + " / 5 min" : "-"]];
   const occupants = facilityOccupancy.get(keyOf(branchId,roomOf(row)));
@@ -358,7 +383,8 @@ function renderTeam(ctx) {
   $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, "IN THEIR LITTLE CORNER"),
     el("div", { class: "detail-top" }, avatar(row), el("div", {}, el("strong", {}, row.name), el("small", {}, row.project + " / " + row.branchName))),
     el("dl", { class: "detail-grid" }, ...stats.map(([name,value]) => el("div", {}, el("dt", {}, name), el("dd", {}, value)))),
-    el("p", { class: "detail-note" }, row.state === "waiting" ? "A little help from you, and we're off."
+    el("p", { class: "detail-note" }, !row.verified ? "Last seen like this. Waiting for a fresh update."
+      : row.state === "waiting" ? "A little help from you, and we're off."
       : row.detail === "fika" ? "Good ideas need a coffee break, too." : row.state === "error" ? "A little rest in the infirmary."
       : row.state === "unknown" ? "Waiting for a fresh update." : row.agent.condition === "extra-coffee" ? "Powered by a little extra coffee." : "Quietly making good things happen."));
 }
@@ -406,10 +432,13 @@ function renderData(all) {
   const root = $("data-view");
   if (view === "employees") root.replaceChildren(employeeTable(all));
   if (view === "dashboard") {
-    const metrics = [["Branches", current.branches.length], ["On duty", all.filter((r) => r.duty).length],
-      ["Waiting for you", all.filter((r) => r.duty && r.state === "waiting").length], ["In the infirmary", all.filter((r) => r.duty && r.state === "error").length]];
-    root.replaceChildren(el("div", { class: "dashboard-summary" }, metrics.map(([title,value]) =>
-      el("div", { class: "metric" }, el("span", {}, title), el("strong", {}, value)))), employeeTable(all));
+    const metrics = [["Branches", current.branches], ["On duty", all.filter((r) => r.duty)],
+      ["Waiting for you", all.filter((r) => r.duty && r.state === "waiting")], ["In the infirmary", all.filter((r) => r.duty && r.state === "error")]];
+    root.replaceChildren(el("div", { class: "dashboard-summary" }, metrics.map(([title,list]) => {
+      const unverified = list.some((r) => r.duty && !r.verified);
+      return el("div", { class: "metric" + (unverified ? " unverified" : "") }, el("span", {}, title), el("strong", {}, list.length),
+        unverified ? el("small", {}, "Unverified") : null);
+    })), employeeTable(all));
   }
   if (view === "timeline") root.replaceChildren(el("div", { class: "data-card" }, el("h2", {}, "Recent activity"),
     el("div", { class: "timeline-list" }, visibleEvents().length ? visibleEvents().map(eventNode) : el("p", { class: "empty-list" }, "Activity will appear as teammates check in."))));
@@ -424,7 +453,7 @@ function renderData(all) {
           const ctx = context(all);
           const index = ctx.projects.findIndex((p) => p.id === id);
           floor = Math.max(0, Math.floor(index / 2));
-          roomFilter = id === COMMON ? "common" : id; stateFilter = "all";
+          roomFilter = id === COMMON ? "common" : projectRoom(id); stateFilter = "all";
           setView("office");
         }));
     }) : el("p", { class: "empty-list" }, "Projects appear when a teammate checks in.")));
@@ -512,6 +541,7 @@ function connect(delay = 1000) {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(scheme + "://" + location.host + "/ws/v1/live" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : ""));
   activeSocket = socket;
+  socket.addEventListener("open", () => { everOpened = true; failedOpens = 0; });
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(event.data);
@@ -525,7 +555,10 @@ function connect(delay = 1000) {
     if (activeSocket !== socket) return;
     connected = false; render();
     if (event.code === 4401) { setConnection("Viewer token required", "disconnected"); return; }
-    setConnection("Reconnecting", "disconnected");
+    if (event.code === 4403) { setConnection("Connection refused by HQ", "disconnected"); return; }
+    // A socket that never opens may be a rejected token or a wrong HQ address; keep retrying.
+    if (!everOpened && ++failedOpens >= 5) setConnection("Can't reach HQ. Check the viewer token or address", "disconnected");
+    else setConnection("Reconnecting", "disconnected");
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(() => connect(Math.min(delay * 2, 30000)), delay);
   });
@@ -551,6 +584,7 @@ document.querySelectorAll("[data-icon]").forEach((node) => node.replaceChildren(
 $("navigation").replaceChildren(...VIEWS.map(([id,label,symbol]) =>
   button([icon(symbol), el("span", {}, label)], "nav-button", () => setView(id),
     { "data-view": id, "aria-label": label, title: label })));
+document.querySelector(".brand").href = location.pathname + location.search + location.hash;
 $("search").addEventListener("input", render);
 $("branch-select").addEventListener("change", (event) => { branchId = event.target.value; floor = 0; roomFilter = ""; stateFilter = "all"; render(); });
 $("all-employees").addEventListener("click", () => setView("employees"));
@@ -595,5 +629,6 @@ window.addEventListener("pagehide", () => {
   const socket = activeSocket;
   activeSocket = null;
   socket?.close();
+  connected = false; render();
 });
 window.addEventListener("pageshow", (event) => { if (event.persisted && !DEMO) connect(); });
