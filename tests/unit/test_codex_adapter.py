@@ -237,6 +237,15 @@ def test_subagent_thread_is_contractor_of_parent_shift(tmp_path):
     assert _sub(adapter.poll()) == [(Kind.SUBAGENT_ENDED, "p1", {"subagent_id": "c1"})]
 
 
+def test_nested_subagent_is_found_at_seed_whatever_the_order(tmp_path):
+    parent, child = _parent_and_child(tmp_path)
+    grandchild = dict(child, id="g1", parentThreadId="c1", path=None)
+    conn = Scripted({"p1": parent, "c1": child, "g1": grandchild}, loaded=["g1", "c1", "p1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    started = [(shift, data["subagent_id"]) for kind, shift, data in _sub(adapter.poll()) if kind is Kind.SUBAGENT_STARTED]
+    assert started == [("p1", "c1"), ("p1", "g1")]
+
+
 def test_subagent_tool_comes_from_its_rollout(tmp_path):
     parent, child = _parent_and_child(tmp_path)
     conn = Scripted({"p1": parent}, loaded=["p1"])

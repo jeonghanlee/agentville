@@ -133,6 +133,8 @@ class _SubAgent:
     status: str = "active"
     tool: str | None = None
     reported: tuple[str, str | None] = ("active", None)
+    # The Agent tool returned; a background run still ends with its own transcript.
+    released: bool = False
 
 
 @dataclass
@@ -319,6 +321,9 @@ class ClaudeAdapter:
             print(f"agentville-collector: {shift.tail.path}: {exc}", file=sys.stderr, flush=True)
         for sub in list(shift.subagents.values()):
             self._read_subagent(shift, sub, now, out)
+            if sub.released and (sub.tail is None or sub.status != "active"):
+                del shift.subagents[sub.tool_use_id]
+                out.append(Observation(Kind.SUBAGENT_ENDED, shift.key, now, now, Source.SESSION_LOG, {"subagent_id": sub.tool_use_id}))
 
     def _subagent_tail(self, shift: _Shift, sub: _SubAgent) -> JsonlTail | None:
         assert shift.tail is not None
@@ -408,8 +413,8 @@ class ClaudeAdapter:
                             },
                         )
                     )
-                    if shift.subagents.pop(tool_id, None) is not None:
-                        found.append((Kind.SUBAGENT_ENDED, {"subagent_id": tool_id}))
+                    if tool_id in shift.subagents:
+                        shift.subagents[tool_id].released = True
                 return found
             if record.get("isMeta") or record.get("toolUseResult") is not None:
                 return []

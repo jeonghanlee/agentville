@@ -221,6 +221,20 @@ def test_session_switch_ends_open_contractors(tmp_path):
     assert (Kind.SUBAGENT_ENDED, {"subagent_id": "toolu_agent"}) in _sub(adapter.poll())
 
 
+def test_background_contractor_outlives_its_early_tool_result(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    _transcript(tmp_path, [_tool_use("Agent", "toolu_agent")])
+    _subagent(tmp_path, [{"type": "user", "isSidechain": True, "message": {"content": "<text>"}}, _tool_use("Grep", "s1")])
+    adapter.poll()
+    _transcript(tmp_path, [_result("toolu_agent")])
+    assert Kind.SUBAGENT_ENDED not in _kinds(adapter.poll())
+    _subagent(tmp_path, [{"type": "assistant", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "<text>"}]}}],
+              meta=False)
+    assert [k for k, _ in _sub(adapter.poll())] == [Kind.SUBAGENT_STATUS, Kind.SUBAGENT_ENDED]
+
+
 def test_shift_carries_the_account_alias(tmp_path):
     adapter = ClaudeAdapter(str(tmp_path), clock=lambda: NOW, is_alive=lambda pid, start: True, account_alias="claude-account-2")
     _session(tmp_path)

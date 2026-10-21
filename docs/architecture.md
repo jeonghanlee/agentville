@@ -273,7 +273,7 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Project | `cwd`, `gitBranch` on records |
 | Account | Claude home (one configuration directory per account) |
 
-- Contractor: an `Agent` `tool_use` hires one, keyed by its `id`; the matching `tool_result` ends it. The subagent transcript is the `agent-*.jsonl` whose `.meta.json` `toolUseId` matches; it is read from its start. Its `tool_use` sets the tool, `tool_result` clears it, and `stop_reason: end_turn` or `turn_duration` sets `idle`. Without that file the Contractor is `working` with no tool. A session change ends open Contractors.
+- Contractor: an `Agent` `tool_use` hires one, keyed by its `id`; the matching `tool_result` ends it, unless its subagent transcript is still active (a background run), in which case it ends when that transcript reaches `idle` or `error`. The subagent transcript is the `agent-*.jsonl` whose `.meta.json` `toolUseId` matches; it is read from its start. Its `tool_use` sets the tool, `tool_result` clears it, and `stop_reason: end_turn` or `turn_duration` sets `idle`. Without that file the Contractor is `working` with no tool. A session change ends open Contractors.
 - Usage limit and thinking are not yet read.
 
 #### Codex
@@ -301,7 +301,7 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - `thread/loaded/list` and `thread/read` seed state on connect and after reconnect; afterwards state follows `thread/status/changed`. `optOutNotificationMethods` is never set for it.
 - Turn and tool detail come from the thread's rollout file, not from app-server notifications.
 - Threads that are not Employees: subagent threads (`parentThreadId` set or `source.subAgent`), and `threadSource: system` (internal threads, typically with a null `path`, ignored).
-- A loaded subagent thread is a Contractor of the shift of its `parentThreadId` (for a nested subagent, the root shift); one whose parent is not a shift is not tracked. State follows its thread status (`active` → `working`, `waitingOn*` → `waiting`, `idle`, `systemError` → `error`); the tool comes from its rollout. It ends when the thread is closed, `notLoaded`, absent at a seed, or when the parent shift ends.
+- A loaded subagent thread is a Contractor of the shift of its `parentThreadId` (for a nested subagent, the root shift; seeds read parents before their subagents at any depth); one whose parent is not a shift is not tracked. State follows its thread status (`active` → `working`, `waitingOn*` → `waiting`, `idle`, `systemError` → `error`); the tool comes from its rollout. It ends when the thread is closed, `notLoaded`, absent at a seed, or when the parent shift ends.
 - A `token_count` with any window at `used_percent` ≥ 100 reports `limit.reached` with the latest `resets_at` of those windows; a later one with every window below 100 reports `limit.cleared`.
 - Rollout path: `Thread.path`; when null, `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl`.
 - Responses carry no `jsonrpc` field; the client does not require it. Server-to-client requests (approvals) are never answered.

@@ -4,7 +4,7 @@
   --page: #f7f8f4; --paper: #fff; --sidebar: #f0f2e9; --ink: #29352b;
   --muted: #82877d; --line: #e7e9df; --green: #547350; --green-dark: #3e603c;
   --green-soft: #e9efdf; --working: #6a8c58; --thinking: #9a83ba; --waiting: #ce9951;
-  --idle: #9ba493; --error: #c57369; --limited: #9f8d6e; --unknown: #7c8d99;
+  --idle: #9ba493; --error: #c57369; --limited: #9f8d6e; --unknown: #7c8d99; --completed: #8aa476;
   --sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
   --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
 }

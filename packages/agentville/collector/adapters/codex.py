@@ -170,8 +170,17 @@ class CodexAdapter:
             if thread_id not in loaded:
                 self._end(self._shifts[thread_id], now, out)
         threads = [t for t in (self._read_thread(i) for i in loaded if i not in self._ignored) if t is not None]
-        # Parents first, so their subagent threads find the parent shift.
-        for thread in sorted(threads, key=is_subagent_thread):
+        parents = {t.get("id"): t.get("parentThreadId") for t in threads}
+
+        def depth(thread: dict[str, Any]) -> int:
+            n, parent, seen = int(is_subagent_thread(thread)), thread.get("parentThreadId"), set()
+            while parent in parents and parent not in seen:
+                seen.add(parent)
+                n, parent = n + 1, parents[parent]
+            return n
+
+        # Parents first, nested subagents after their own parents, so each finds its parent shift.
+        for thread in sorted(threads, key=depth):
             self._observe_thread(thread, now, out)
         if self._attached_at is None:
             self._attached_at = now
