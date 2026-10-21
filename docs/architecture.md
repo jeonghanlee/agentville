@@ -236,7 +236,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 
 ### 3.3 Reading
 
-- Logs are read incrementally from the last position (inode, offset), triggered by file change notification.
+- Logs are read incrementally from the last position (inode, offset) on every tick.
 - A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start; a resumed one (Claude: first record older than attach; Codex: thread `createdAt` older than attach) is read from its end.
 - Attaching in the middle of a line resumes at the next line. A line that is not valid UTF-8 JSON is skipped.
 - A transcript or rollout that cannot be read is reported and skipped for that poll without affecting other shifts. A JSON-RPC error on one Codex `thread/read` skips that thread for the poll; transport errors reconnect.
@@ -352,7 +352,7 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 
 ### 3.6 Run Loop
 
-- Each tick polls every Adapter, applies observations to the Judge, and emits messages.
+- A tick runs every `collector.poll_interval` seconds (default 1.0). Each tick polls every Adapter, applies observations to the Judge, and emits messages.
 - The first tick emits a `snapshot` instead of individual changes. A `heartbeat` is emitted every `heartbeat_interval`.
 - `seq` is reserved in blocks of 1000 in `$XDG_STATE_HOME/agentville/seq` (default `~/.local/state/agentville/seq`), written with fsync before use; a restart resumes after the reserved bound.
 - A failing Adapter is logged to stderr and skipped for that tick; other Adapters continue.
