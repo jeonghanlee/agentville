@@ -492,5 +492,6 @@ agentville/
 - Codex: live observation of `waitingOnApproval`, `waitingOnUserInput`, and `systemError`.
 - Antigravity waiting and usage-limit signals.
 - Switching the login within one Claude home: not yet in use; decided when adopted. Accounts in separate homes are configured per home.
+- Presence `retired` (거두어짐): a colleague whose model was withdrawn and cannot return. No signal identifies it yet; until then such a colleague passes to `on_leave`.
 - Contractor grouping when counts are large (Codex subagent threads dominate recent history).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.
