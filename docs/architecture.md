@@ -271,6 +271,7 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Continuation | `continued-in` record in the old file (`continuedInSessionId`) |
 | Contractor | `tool_use` `name: Agent` → `toolUseResult.agentId`; `<sessionId>/subagents/agent-<agentId>.jsonl` and `.meta.json` (`toolUseId`); subagent records carry the parent `sessionId` |
 | Project | `cwd`, `gitBranch` on records |
+| Account | Claude home (one configuration directory per account) |
 
 - Contractor: an `Agent` `tool_use` hires one, keyed by its `id`; the matching `tool_result` ends it. The subagent transcript is the `agent-*.jsonl` whose `.meta.json` `toolUseId` matches; it is read from its start. Its `tool_use` sets the tool, `tool_result` clears it, and `stop_reason: end_turn` or `turn_duration` sets `idle`. Without that file the Contractor is `working` with no tool. A session change ends open Contractors.
 - Usage limit and thinking are not yet read.
@@ -331,10 +332,11 @@ hq:
   url: http://127.0.0.1:8470
 thresholds: {phone: 300, doze: 1800, lounge: 3600, leave: 604800}
 providers:
-  claude: {home: ~/.claude}
+  claude:
+    - {home: ~/.claude, account_alias: claude-account-1}
   codex:
-    - {home: ~/.codex, account_alias: personal}
-    - {home: ~/.codex-work, account_alias: work}
+    - {home: ~/.codex, account_alias: codex-account-1}
+    - {home: ~/.codex-2, account_alias: codex-account-2}
 conditions:
   - {provider: claude, fast_mode: true, condition: extra-coffee}
   - {provider: "*", effort: high, condition: study-mode}
@@ -342,7 +344,8 @@ conditions:
 collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ````
 
-- Codex homes present at first start are listed automatically: `~/.codex` as `personal`, `~/.codex-work` as `work`.
+- One provider home is one account. At first start, `~/.<provider>` and existing `~/.<provider>-*` directories are listed in that order as `<provider>-account-1`, `<provider>-account-2`, …; `~/.claude` is always listed. Account names and homes are local settings.
+- A single mapping (`claude: {home: ~/.claude}`) is read as a one-account list.
 - Values are validated at start: `heartbeat_interval` ≥ 1, thresholds ≥ 0 with `phone` ≤ `doze` ≤ `lounge`. A file holding `hq.token` must not be accessible by group or others.
 - A loopback HQ is contacted without environment proxies.
 - Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns.
@@ -488,6 +491,6 @@ agentville/
 - Claude Code: meaning of `state: blocked` and `status: shell`.
 - Codex: live observation of `waitingOnApproval`, `waitingOnUserInput`, and `systemError`.
 - Antigravity waiting and usage-limit signals.
-- Claude account switching: not yet in use; the source and the alias mapping are decided when it is adopted. Codex accounts are identified by Codex home.
+- Switching the login within one Claude home: not yet in use; decided when adopted. Accounts in separate homes are configured per home.
 - Contractor grouping when counts are large (Codex subagent threads dominate recent history).
 - English terms pending confirmation: on duty, off duty, on leave, shift, seat, unreachable, closed.

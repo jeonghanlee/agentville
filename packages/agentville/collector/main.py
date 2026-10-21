@@ -62,8 +62,9 @@ class SeqStore:
 
 def build_adapters(config: BranchConfig) -> list[Adapter]:
     adapters: list[Adapter] = []
-    if config.claude_home and os.path.isdir(config.claude_home):
-        adapters.append(ClaudeAdapter(config.claude_home))
+    for entry in config.claude_homes:
+        if os.path.isdir(entry.home):
+            adapters.append(ClaudeAdapter(entry.home, account_alias=entry.account_alias))
     for entry in config.codex_homes:
         if os.path.isdir(entry.home):
             adapters.append(CodexAdapter(entry.home, account_alias=entry.account_alias))

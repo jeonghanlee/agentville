@@ -10,13 +10,16 @@ from agentville.collector.config import load_or_create, parse
 def test_first_start_creates_private_config_with_stable_id(tmp_path):
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
-    (home / ".codex-work").mkdir()
+    (home / ".codex-2").mkdir()
+    (home / ".claude-2").mkdir()
     path = tmp_path / "cfg" / "config.yaml"
     first = load_or_create(str(path), str(home))
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
     assert first.host_id
-    assert [c.account_alias for c in first.codex_homes] == ["personal", "work"]
-    assert first.claude_home == str(home / ".claude")
+    assert [(c.home, c.account_alias) for c in first.codex_homes] == [
+        (str(home / ".codex"), "codex-account-1"), (str(home / ".codex-2"), "codex-account-2")]
+    assert [(c.home, c.account_alias) for c in first.claude_homes] == [
+        (str(home / ".claude"), "claude-account-1"), (str(home / ".claude-2"), "claude-account-2")]
     second = load_or_create(str(path), str(home))
     assert second.host_id == first.host_id
 
@@ -86,3 +89,9 @@ def test_posix_tz_is_not_used_as_zone_name(monkeypatch):
     assert cfg.local_timezone() != "UTC0"
     monkeypatch.setenv("TZ", ":Asia/Seoul")
     assert cfg.local_timezone() == "Asia/Seoul"
+
+
+def test_single_mapping_provider_form_is_still_read():
+    config = parse({"host": {"id": "b"}, "providers": {"claude": {"home": "/c"}, "codex": [{"home": "/x"}, {"home": "/y", "account_alias": "spare"}]}})
+    assert [(c.home, c.account_alias) for c in config.claude_homes] == [("/c", "claude-account-1")]
+    assert [(c.home, c.account_alias) for c in config.codex_homes] == [("/x", "codex-account-1"), ("/y", "spare")]

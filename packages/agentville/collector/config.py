@@ -57,7 +57,7 @@ def local_timezone() -> str:
 
 
 @dataclass
-class CodexHome:
+class ProviderHome:
     home: str
     account_alias: str
 
@@ -72,8 +72,8 @@ class BranchConfig:
     hq_url: str
     hq_token: str | None
     thresholds: dict[str, int]
-    claude_home: str | None
-    codex_homes: list[CodexHome]
+    claude_homes: list[ProviderHome]
+    codex_homes: list[ProviderHome]
     conditions: list[dict[str, Any]] = field(default_factory=list)
     poll_interval: float = 1.0
     heartbeat_interval: int = 30
@@ -99,15 +99,33 @@ class BranchConfig:
         return "normal"
 
 
-DEFAULT_CODEX_HOMES = ((".codex", "personal"), (".codex-work", "work"))
+def account_alias(provider: str, number: int) -> str:
+    return f"{provider}-account-{number}"
+
+
+def _discover_homes(home: str, provider: str, keep_primary: bool = False) -> list[dict[str, str]]:
+    """``~/.<provider>`` first, then ``~/.<provider>-*`` in name order, one account each."""
+    try:
+        extra = sorted(n for n in os.listdir(home) if n.startswith(f".{provider}-"))
+    except OSError:
+        extra = []
+    primary = os.path.join(home, f".{provider}")
+    paths = [p for p in (os.path.join(home, n) for n in [f".{provider}", *extra])
+             if os.path.isdir(p) or (keep_primary and p == primary)]
+    return [{"home": p, "account_alias": account_alias(provider, i)} for i, p in enumerate(paths, 1)]
+
+
+def _homes(entries: Any, provider: str) -> list[ProviderHome]:
+    # A single mapping is the earlier one-home form.
+    listed = [entries] if isinstance(entries, dict) else entries or []
+    valid = [e for e in listed if isinstance(e, dict) and e.get("home")]
+    return [
+        ProviderHome(os.path.expanduser(e["home"]), str(e.get("account_alias") or account_alias(provider, i)))
+        for i, e in enumerate(valid, 1)
+    ]
 
 
 def _default_document(home: str) -> dict[str, Any]:
-    codex = [
-        {"home": path, "account_alias": alias}
-        for name, alias in DEFAULT_CODEX_HOMES
-        if os.path.isdir(path := os.path.join(home, name))
-    ]
     return {
         "host": {
             "id": str(uuid.uuid4()),
@@ -119,8 +137,8 @@ def _default_document(home: str) -> dict[str, Any]:
         "hq": {"url": "http://127.0.0.1:8470"},
         "thresholds": dict(DEFAULT_THRESHOLDS),
         "providers": {
-            "claude": {"home": os.path.join(home, ".claude")},
-            "codex": codex,
+            "claude": _discover_homes(home, "claude", keep_primary=True),
+            "codex": _discover_homes(home, "codex"),
         },
         "conditions": [dict(rule) for rule in DEFAULT_CONDITIONS],
         "collector": {"poll_interval": 1.0, "heartbeat_interval": 30},
@@ -154,8 +172,6 @@ def parse(document: dict[str, Any]) -> BranchConfig:
     if not isinstance(host_id, str) or not host_id:
         raise ValueError("host.id is required")
     providers = document.get("providers") or {}
-    claude = providers.get("claude") or {}
-    codex = providers.get("codex") or []
     collector = document.get("collector") or {}
     thresholds = dict(DEFAULT_THRESHOLDS)
     thresholds.update({k: int(v) for k, v in (document.get("thresholds") or {}).items() if k in DEFAULT_THRESHOLDS})
@@ -175,12 +191,8 @@ def parse(document: dict[str, Any]) -> BranchConfig:
         hq_url=str((document.get("hq") or {}).get("url") or "http://127.0.0.1:8470"),
         hq_token=(document.get("hq") or {}).get("token") or None,
         thresholds=thresholds,
-        claude_home=os.path.expanduser(claude["home"]) if claude.get("home") else None,
-        codex_homes=[
-            CodexHome(os.path.expanduser(entry["home"]), str(entry.get("account_alias") or os.path.basename(entry["home"])))
-            for entry in codex
-            if isinstance(entry, dict) and entry.get("home")
-        ],
+        claude_homes=_homes(providers.get("claude"), "claude"),
+        codex_homes=_homes(providers.get("codex"), "codex"),
         conditions=list(document["conditions"] or []) if "conditions" in document else list(DEFAULT_CONDITIONS),
         poll_interval=float(collector.get("poll_interval", 1.0)),
         heartbeat_interval=heartbeat_interval,

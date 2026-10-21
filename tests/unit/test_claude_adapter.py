@@ -219,3 +219,10 @@ def test_session_switch_ends_open_contractors(tmp_path):
     adapter.poll()
     _session(tmp_path, sid="22222222-2222-4222-8222-222222222222")
     assert (Kind.SUBAGENT_ENDED, {"subagent_id": "toolu_agent"}) in _sub(adapter.poll())
+
+
+def test_shift_carries_the_account_alias(tmp_path):
+    adapter = ClaudeAdapter(str(tmp_path), clock=lambda: NOW, is_alive=lambda pid, start: True, account_alias="claude-account-2")
+    _session(tmp_path)
+    started = [o for o in adapter.poll() if o.kind is Kind.PROCESS_STARTED]
+    assert started[0].data["account_alias"] == "claude-account-2"

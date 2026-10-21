@@ -156,8 +156,10 @@ class ClaudeAdapter:
         home: str,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         is_alive: Callable[[int, str | None], bool] = _default_is_alive,
+        account_alias: str | None = None,
     ) -> None:
         self.home = home
+        self.account_alias = account_alias
         self._clock = clock
         self._is_alive = is_alive
         self._shifts: dict[int, _Shift] = {}
@@ -245,6 +247,7 @@ class ClaudeAdapter:
                     "session_id": doc.get("sessionId"),
                     "kind": doc.get("kind"),
                     "runtime": {"type": "tmux", "location": doc["tmux"]} if doc.get("tmux") else {"type": "shell"},
+                    "account_alias": self.account_alias,
                 },
             )
         )
