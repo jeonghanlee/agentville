@@ -329,22 +329,60 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 - `seq` is reserved in blocks of 1000 in `$XDG_STATE_HOME/agentville/seq` (default `~/.local/state/agentville/seq`), written with fsync before use; a restart resumes after the reserved bound.
 - A failing Adapter is logged to stderr and skipped for that tick; other Adapters continue.
 - Time-based presence changes (off duty to on leave) are emitted when the threshold passes, without a new event.
-- Until the Sender exists, messages are written as JSONL to stdout or a file (`agentville-collector --output`).
-- Service: `deploy/systemd/agentville-collector.service` (systemd user unit).
+- Services: `deploy/systemd/agentville-collector.service` and `deploy/systemd/agentville-hq.service` (systemd user units).
 
 ## 4. HQ
 
-- Storage: SQLite (WAL). Current state per Branch and message history.
-- History retention: configurable. Default 30 days.
-- Browser API: REST for the full current state; WebSocket for changes. On reconnect, the browser fetches the full state via REST first.
-- Bound to `127.0.0.1` by default. Exposure beyond loopback requires authentication.
+- Process: `agentville-hq` (FastAPI, uvicorn), bound to `127.0.0.1:8470` by default.
+- Storage: SQLite (WAL) at `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`).
+
+| Table | Content |
+|---|---|
+| `messages` | Every accepted message, keyed by `(branch_id, seq)` |
+| `branches` | Branch payload, last `seq`, last seen time, heartbeat interval |
+| `agents`, `activities`, `contractors` | Current state per Branch |
+
+- Message history retention: 30 days by default (`--retention-days`); current state is never pruned.
+
+### 4.1 Ingest Rules
+
+Messages of one batch are applied in `seq` order:
+
+| Case | Result |
+|---|---|
+| `(branch_id, seq)` already stored | Duplicate; ignored |
+| `snapshot` | Replaces all current state of the Branch |
+| `seq` lower than the last applied | Stale; stored, not applied |
+| `seq` not equal to last + 1, or no state for the Branch | Applied; response asks for a snapshot |
+| `agent` with no instance | Employee updated; its activity removed |
+| `contractor` with status `ended` | Contractor removed |
+
+A Branch is reported unreachable when no message arrived within three heartbeat intervals.
+
+### 4.2 API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | Liveness |
+| `POST` | `/api/v1/ingest/messages` | Branch ingest, body `{"messages": [...]}`, one Branch per batch, at most 1000 messages |
+| `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors |
+| `GET` | `/api/v1/branches` | Branches |
+| `GET` | `/api/v1/agents` | Agents |
+
+Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
+
+### 4.3 Authorization
+
+- A Branch connecting from loopback needs no token.
+- Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token). The Branch sets the same value as `hq.token` in its configuration.
+- Messages are schema-validated after authorization.
 
 ## 5. Transport
 
-- The Collector on the HQ Host uses the same protocol over loopback.
-- Remote Branches connect outbound to HQ only. HQ never connects to a Branch.
-- Transport: HTTPS POST.
-- Authentication: per-Branch token, issued and revoked at HQ.
+- The Collector sends each tick's messages as one batch by HTTP(S) POST to `hq.url`. Remote Branches connect outbound only; HQ never connects to a Branch.
+- On delivery failure the batch is dropped and the next successful delivery starts with a snapshot. Retries back off from 1 s to 60 s.
+- When HQ reports `need_snapshot`, the next tick sends a snapshot.
+- `agentville-collector --output <path|->` writes JSONL instead of sending, for diagnostics.
 
 ## 6. Web UI
 
@@ -359,10 +397,10 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ````text
 agentville/
 ├── pyproject.toml
-├── schemas/protocol-v1.schema.json
 ├── packages/agentville/
-│   ├── common/          # observations, protocol envelope
-│   └── collector/       # jsonl reader, project resolver, judge, adapters/
+│   ├── common/          # observations, protocol envelope, schemas/protocol-v1.schema.json
+│   ├── collector/       # jsonl reader, project resolver, judge, adapters/, config, sender, run loop
+│   └── hq/              # store, API, entry point
 ├── tests/{unit,integration,fixtures}/
 └── docs/
 ````

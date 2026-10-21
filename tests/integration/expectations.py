@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 
 import jsonschema
+
+from agentville.common.protocol import load_schema
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = json.loads((ROOT / "schemas" / "protocol-v1.schema.json").read_text())
+SCHEMA = load_schema()
 
 
 def load_scenario(scenario: Path):

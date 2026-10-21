@@ -13,17 +13,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+hq = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "jsonschema>=4",
+]
 test = [
     "pytest>=8",
     "jsonschema>=4",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
 agentville-collector = "agentville.collector.main:main"
+agentville-hq = "agentville.hq.main:main"
 
 [tool.setuptools.packages.find]
 where = ["packages"]
 
+[tool.setuptools.package-data]
+"agentville.common" = ["schemas/*.json"]
+
 [tool.pytest.ini_options]
 pythonpath = ["packages"]
 testpaths = ["tests"]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

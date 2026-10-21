@@ -4,7 +4,7 @@
 
 - The Branch determines Employee assignment, activity state, and condition. HQ stores and displays the results.
 - Raw observations remain on the Branch.
-- The canonical message schema is `schemas/protocol-v1.schema.json` (JSON Schema 2020-12). Implementations conform to it.
+- The canonical message schema is `packages/agentville/common/schemas/protocol-v1.schema.json` (JSON Schema 2020-12). Implementations conform to it.
 
 ## 2. Delivery
 
@@ -20,6 +20,8 @@
 - Changes during disconnection are not queued. The `snapshot` on reconnect supersedes them.
 - On receiving a `snapshot`, HQ replaces all stored state for that Branch.
 - HQ marks a Branch `unreachable` when no message arrives within a multiple of the last `heartbeat.interval`.
+
+- Transport: HTTP(S) POST of `{"messages": [...]}` to `/api/v1/ingest/messages`; one Branch per batch. Response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 ## 3. Envelope
 

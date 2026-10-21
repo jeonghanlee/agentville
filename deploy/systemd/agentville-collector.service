@@ -1,10 +1,10 @@
 [Unit]
 Description=AgentVille Branch Collector
-After=default.target
+After=default.target agentville-hq.service
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/agentville-collector --output %h/.local/state/agentville/messages.jsonl
+ExecStart=%h/.local/bin/agentville-collector
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes

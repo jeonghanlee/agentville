@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
+from importlib import resources
 from typing import Any
 
 SCHEMA_VERSION = 1
+
+
+def load_schema() -> dict[str, Any]:
+    """The canonical Branch-HQ message JSON Schema."""
+    text = resources.files("agentville.common").joinpath("schemas/protocol-v1.schema.json").read_text(encoding="utf-8")
+    return json.loads(text)
 
 
 def iso(value: datetime) -> str:

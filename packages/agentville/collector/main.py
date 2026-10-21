@@ -17,6 +17,7 @@ from agentville.collector.adapters.codex import CodexAdapter
 from agentville.collector.config import BranchConfig, load_or_create, state_dir
 from agentville.collector.judge import Judge, ProjectResolver
 from agentville.collector.project import GitProjectResolver
+from agentville.collector.sender import Delivery, HttpSender
 from agentville.common.observations import Observation
 from agentville.common.protocol import Envelope
 
@@ -25,7 +26,10 @@ class Adapter(Protocol):
     def poll(self) -> list[Observation]: ...
 
 
-Sink = Callable[[dict[str, Any]], None]
+Deliver = Callable[[list[dict[str, Any]]], Delivery]
+
+RETRY_MIN = timedelta(seconds=1)
+RETRY_MAX = timedelta(seconds=60)
 
 
 class SeqStore:
@@ -75,7 +79,7 @@ class Collector:
     def __init__(
         self,
         config: BranchConfig,
-        sink: Sink,
+        deliver: Deliver,
         adapters: list[Adapter],
         resolver: ProjectResolver,
         seq_store: SeqStore,
@@ -83,12 +87,15 @@ class Collector:
     ) -> None:
         self.config = config
         self.adapters = adapters
-        self._sink = sink
+        self._deliver = deliver
         self._clock = clock
         self._seq_store = seq_store
         self._envelope = Envelope(config.host_id, seq_store.load(), reserve=seq_store.reserve)
         self._now = clock()
-        self._started = False
+        self._batch: list[dict[str, Any]] = []
+        self._needs_snapshot = True
+        self._retry_at: datetime | None = None
+        self._retry_delay = RETRY_MIN
         self._last_heartbeat: datetime | None = None
         self.judge = Judge(
             resolver,
@@ -98,11 +105,11 @@ class Collector:
         )
 
     def _send(self, kind: str, at: datetime, payload: dict[str, Any]) -> None:
-        self._sink(self._envelope.wrap(kind, at, payload, self._now))
+        self._batch.append(self._envelope.wrap(kind, at, payload, self._now))
 
     def _emit_judge(self, kind: str, at: datetime, payload: dict[str, Any]) -> None:
-        # Before the first snapshot, individual changes are superseded by it.
-        if self._started:
+        # While a snapshot is pending, individual changes are superseded by it.
+        if not self._needs_snapshot:
             self._send(kind, at, payload)
 
     def tick(self) -> None:
@@ -116,13 +123,31 @@ class Collector:
             for obs in observations:
                 self.judge.apply(obs)
         self.judge.refresh_presence(self._now)
-        if not self._started:
+        if self._retry_at is not None and self._now < self._retry_at:
+            return
+        if self._needs_snapshot:
             self.send_snapshot()
-            self._started = True
         interval = timedelta(seconds=self.config.heartbeat_interval)
         if self._last_heartbeat is None or self._now - self._last_heartbeat >= interval:
             self._send("heartbeat", self._now, {"interval": self.config.heartbeat_interval})
             self._last_heartbeat = self._now
+        self._flush()
+
+    def _flush(self) -> None:
+        if not self._batch:
+            return
+        batch, self._batch = self._batch, []
+        result = self._deliver(batch)
+        if not result.ok:
+            # Changes are not queued across a disconnection; the next contact starts with a snapshot.
+            self._log(f"delivery failed: {result.error}")
+            self._needs_snapshot = True
+            self._retry_at = self._now + self._retry_delay
+            self._retry_delay = min(self._retry_delay * 2, RETRY_MAX)
+            return
+        self._retry_at = None
+        self._retry_delay = RETRY_MIN
+        self._needs_snapshot = result.need_snapshot
 
     @staticmethod
     def _log(text: str) -> None:
@@ -130,6 +155,8 @@ class Collector:
 
     def send_snapshot(self) -> None:
         agents, activities = self.judge.snapshot(self._now)
+        self._batch.clear()
+        self._needs_snapshot = False
         self._send(
             "snapshot",
             self._now,
@@ -143,10 +170,12 @@ class Collector:
                 close()
 
 
-def jsonl_sink(stream: TextIO) -> Sink:
-    def write(message: dict[str, Any]) -> None:
-        stream.write(json.dumps(message, separators=(",", ":")) + "\n")
+def jsonl_deliver(stream: TextIO) -> Deliver:
+    def write(messages: list[dict[str, Any]]) -> Delivery:
+        for message in messages:
+            stream.write(json.dumps(message, separators=(",", ":")) + "\n")
         stream.flush()
+        return Delivery(True)
 
     return write
 
@@ -154,7 +183,7 @@ def jsonl_sink(stream: TextIO) -> Sink:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentville-collector", description="AgentVille Branch Collector")
     parser.add_argument("--config", help="configuration file (default: $XDG_CONFIG_HOME/agentville/config.yaml)")
-    parser.add_argument("--output", default="-", help="JSONL message output path, or - for stdout")
+    parser.add_argument("--output", help="write JSONL messages to this path (- for stdout) instead of sending to HQ")
     parser.add_argument("--once", action="store_true", help="poll once and exit")
     args = parser.parse_args(argv)
 
@@ -167,12 +196,19 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    stream = sys.stdout if args.output == "-" else open(args.output, "a", encoding="utf-8")
+    stream: TextIO | None = None
+    if args.output == "-":
+        deliver: Deliver = jsonl_deliver(sys.stdout)
+    elif args.output:
+        stream = open(args.output, "a", encoding="utf-8")
+        deliver = jsonl_deliver(stream)
+    else:
+        deliver = HttpSender(config.hq_url, config.hq_token)
     collector: Collector | None = None
     try:
         collector = Collector(
             config,
-            jsonl_sink(stream),
+            deliver,
             build_adapters(config),
             GitProjectResolver(config.host_id),
             SeqStore(os.path.join(state_dir(), "seq")),
@@ -187,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if collector is not None:
             collector.close()
-        if stream is not sys.stdout:
+        if stream is not None:
             stream.close()
     return 0
 

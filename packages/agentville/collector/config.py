@@ -69,6 +69,7 @@ class BranchConfig:
     time: str
     location: str
     hq_url: str
+    hq_token: str | None
     thresholds: dict[str, int]
     claude_home: str | None
     codex_homes: list[CodexHome]
@@ -158,6 +159,7 @@ def parse(document: dict[str, Any]) -> BranchConfig:
         time=str(host.get("time") or "UTC"),
         location=str(host.get("location") or ""),
         hq_url=str((document.get("hq") or {}).get("url") or "http://127.0.0.1:8470"),
+        hq_token=(document.get("hq") or {}).get("token") or None,
         thresholds=thresholds,
         claude_home=os.path.expanduser(claude["home"]) if claude.get("home") else None,
         codex_homes=[
