@@ -12,6 +12,7 @@ from typing import Any
 from agentville.common.protocol import iso
 
 UNREACHABLE_FACTOR = 3
+DEFAULT_HEARTBEAT = 30
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -33,19 +34,22 @@ CREATE TABLE IF NOT EXISTS branches (
     heartbeat_interval INTEGER
 );
 CREATE TABLE IF NOT EXISTS agents (
-    agent_id TEXT PRIMARY KEY,
     branch_id TEXT NOT NULL,
-    payload TEXT NOT NULL
+    agent_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (branch_id, agent_id)
 );
 CREATE TABLE IF NOT EXISTS activities (
-    agent_id TEXT PRIMARY KEY,
     branch_id TEXT NOT NULL,
-    payload TEXT NOT NULL
+    agent_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (branch_id, agent_id)
 );
 CREATE TABLE IF NOT EXISTS contractors (
-    contractor_id TEXT PRIMARY KEY,
     branch_id TEXT NOT NULL,
-    payload TEXT NOT NULL
+    contractor_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (branch_id, contractor_id)
 );
 """
 
@@ -76,9 +80,12 @@ class Store:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_SCHEMA)
         self._lock = threading.Lock()
+        self.totals = IngestResult()
 
     def close(self) -> None:
-        self._db.close()
+        with self._lock:
+            self._db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._db.close()
 
     # Ingest.
 
@@ -96,10 +103,19 @@ class Store:
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+            self.totals.accepted += result.accepted
+            self.totals.duplicates += result.duplicates
+            self.totals.stale += result.stale
+            self.totals.need_snapshot = self.totals.need_snapshot or result.need_snapshot
         return result
 
     def _apply(self, message: dict[str, Any], now: datetime, result: IngestResult) -> None:
         branch_id, seq, kind = message["branch_id"], message["seq"], message["kind"]
+        if kind == "snapshot":
+            row = self._db.execute("SELECT last_seq FROM branches WHERE branch_id = ?", (branch_id,)).fetchone()
+            if row and row[0] is not None and seq <= row[0]:
+                # The Branch lost its sequence state; its snapshot starts a new numbering.
+                self._db.execute("DELETE FROM messages WHERE branch_id = ? AND seq >= ?", (branch_id, seq))
         inserted = self._db.execute(
             "INSERT OR IGNORE INTO messages VALUES (?, ?, ?, ?, ?, ?, ?)",
             (branch_id, seq, kind, message["event_at"], message["sent_at"], iso(now), json.dumps(message["payload"])),
@@ -129,12 +145,16 @@ class Store:
         elif kind == "agent":
             self._upsert("agents", "agent_id", payload["agent_id"], branch_id, payload)
             if payload.get("instance") is None:
-                self._db.execute("DELETE FROM activities WHERE agent_id = ?", (payload["agent_id"],))
+                self._db.execute(
+                    "DELETE FROM activities WHERE branch_id = ? AND agent_id = ?", (branch_id, payload["agent_id"])
+                )
         elif kind == "activity":
             self._upsert("activities", "agent_id", payload["agent_id"], branch_id, payload)
         elif kind == "contractor":
             if payload["status"] == "ended":
-                self._db.execute("DELETE FROM contractors WHERE contractor_id = ?", (payload["contractor_id"],))
+                self._db.execute(
+                    "DELETE FROM contractors WHERE branch_id = ? AND contractor_id = ?", (branch_id, payload["contractor_id"])
+                )
             else:
                 self._upsert("contractors", "contractor_id", payload["contractor_id"], branch_id, payload)
         result.accepted += 1
@@ -148,9 +168,9 @@ class Store:
 
     def _upsert(self, table: str, key: str, value: str, branch_id: str, payload: dict[str, Any]) -> None:
         self._db.execute(
-            f"INSERT INTO {table} ({key}, branch_id, payload) VALUES (?, ?, ?) "
-            f"ON CONFLICT ({key}) DO UPDATE SET branch_id = excluded.branch_id, payload = excluded.payload",
-            (value, branch_id, json.dumps(payload)),
+            f"INSERT INTO {table} (branch_id, {key}, payload) VALUES (?, ?, ?) "
+            f"ON CONFLICT (branch_id, {key}) DO UPDATE SET payload = excluded.payload",
+            (branch_id, value, json.dumps(payload)),
         )
 
     def _replace(self, branch_id: str, snapshot: dict[str, Any]) -> None:
@@ -172,7 +192,8 @@ class Store:
             for branch_id, payload, last_seq, last_seen, interval in self._db.execute(
                 "SELECT branch_id, payload, last_seq, last_seen_at, heartbeat_interval FROM branches ORDER BY branch_id"
             ):
-                reachable = interval is None or now - _parse(last_seen) <= timedelta(seconds=interval * UNREACHABLE_FACTOR)
+                window = timedelta(seconds=(interval or DEFAULT_HEARTBEAT) * UNREACHABLE_FACTOR)
+                reachable = now - _parse(last_seen) <= window
                 branches.append(
                     {
                         "branch_id": branch_id,

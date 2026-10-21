@@ -340,7 +340,7 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 |---|---|
 | `messages` | Every accepted message, keyed by `(branch_id, seq)` |
 | `branches` | Branch payload, last `seq`, last seen time, heartbeat interval |
-| `agents`, `activities`, `contractors` | Current state per Branch |
+| `agents`, `activities`, `contractors` | Current state, keyed by `(branch_id, id)` |
 
 - Message history retention: 30 days by default (`--retention-days`); current state is never pruned.
 
@@ -351,13 +351,13 @@ Messages of one batch are applied in `seq` order:
 | Case | Result |
 |---|---|
 | `(branch_id, seq)` already stored | Duplicate; ignored |
-| `snapshot` | Replaces all current state of the Branch |
+| `snapshot` | Replaces all current state of the Branch. A snapshot whose `seq` is not above the last applied `seq` (Branch lost its sequence state) also discards stored messages from that `seq` on and restarts the numbering. |
 | `seq` lower than the last applied | Stale; stored, not applied |
 | `seq` not equal to last + 1, or no state for the Branch | Applied; response asks for a snapshot |
 | `agent` with no instance | Employee updated; its activity removed |
 | `contractor` with status `ended` | Contractor removed |
 
-A Branch is reported unreachable when no message arrived within three heartbeat intervals.
+A Branch is reported unreachable when no message arrived within three heartbeat intervals (30 s assumed before its first heartbeat).
 
 ### 4.2 API
 
@@ -368,14 +368,18 @@ A Branch is reported unreachable when no message arrived within three heartbeat 
 | `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors |
 | `GET` | `/api/v1/branches` | Branches |
 | `GET` | `/api/v1/agents` | Agents |
+| `GET` | `/api/v1/stats` | Ingest totals since HQ start |
 
 Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 ### 4.3 Authorization
 
-- A Branch connecting from loopback needs no token.
-- Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token). The Branch sets the same value as `hq.token` in its configuration.
-- Messages are schema-validated after authorization.
+- A Branch connecting from loopback needs no token, unless `--no-trust-loopback` is set (required behind a local reverse proxy).
+- Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token, mode 0600). The Branch sets the same value as `hq.token` in its configuration.
+- Binding to a non-loopback address requires `--allow-remote` and `--viewer-token-file`; read endpoints then require the viewer token, and loopback Branches need tokens too.
+- Messages are schema-validated after authorization. Request bodies are limited to 4 MiB.
+- The Collector refuses to send a token over plain HTTP to a non-loopback HQ and does not follow redirects.
+- On shutdown HQ checkpoints the WAL and closes the database.
 
 ## 5. Transport
 

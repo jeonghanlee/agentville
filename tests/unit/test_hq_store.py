@@ -41,9 +41,10 @@ def test_snapshot_replaces_branch_state_and_changes_apply(tmp_path):
 
 def test_duplicates_stale_and_gaps(tmp_path):
     s, env = store(tmp_path), Envelope("b1")
-    first = env.wrap("snapshot", T0, snapshot([], []), T0)
-    assert s.ingest("b1", [first], T0).accepted == 1
-    assert s.ingest("b1", [first], T0).duplicates == 1
+    s.ingest("b1", [env.wrap("snapshot", T0, snapshot([], []), T0)], T0)
+    beat = env.wrap("heartbeat", T0, {"interval": 30}, T0)
+    assert s.ingest("b1", [beat], T0).accepted == 1
+    assert s.ingest("b1", [beat], T0).duplicates == 1
     env.seq = 5
     gap = s.ingest("b1", [env.wrap("heartbeat", T0, {"interval": 30}, T0)], T0)
     assert gap.need_snapshot and gap.accepted == 1
@@ -76,3 +77,28 @@ def test_prune_removes_old_messages_only(tmp_path):
     s.ingest("b1", [env.wrap("snapshot", T0, snapshot([agent("a1")], []), T0)], T0)
     assert s.prune(T0 + timedelta(days=1)) == 1
     assert len(s.state(T0)["agents"]) == 1
+
+
+def test_branch_that_lost_its_sequence_is_reset_by_snapshot(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    s.ingest("b1", [env.wrap("snapshot", T0, snapshot([agent("old")], []), T0),
+                    env.wrap("heartbeat", T0, {"interval": 30}, T0), env.wrap("heartbeat", T0, {"interval": 30}, T0)], T0)
+    fresh = Envelope("b1")
+    result = s.ingest("b1", [fresh.wrap("snapshot", T0, snapshot([agent("new")], []), T0),
+                             fresh.wrap("heartbeat", T0, {"interval": 30}, T0)], T0)
+    assert (result.accepted, result.duplicates, result.need_snapshot) == (2, 0, False)
+    assert [a["agent_id"] for a in s.state(T0)["agents"]] == ["new"]
+
+
+def test_same_agent_id_on_two_branches_is_kept_apart(tmp_path):
+    s = store(tmp_path)
+    s.ingest("b1", [Envelope("b1").wrap("snapshot", T0, snapshot([agent("a1")], []), T0)], T0)
+    s.ingest("b2", [Envelope("b2").wrap("snapshot", T0, snapshot([agent("a1")], []), T0)], T0)
+    assert sorted(a["branch_id"] for a in s.state(T0)["agents"]) == ["b1", "b2"]
+
+
+def test_branch_without_heartbeat_uses_default_interval(tmp_path):
+    s = store(tmp_path)
+    s.ingest("b1", [Envelope("b1").wrap("snapshot", T0, snapshot([], []), T0)], T0)
+    assert s.state(T0 + timedelta(seconds=90))["branches"][0]["reachable"]
+    assert not s.state(T0 + timedelta(seconds=91))["branches"][0]["reachable"]
