@@ -35,8 +35,9 @@ def state_dir() -> str:
 
 
 def local_timezone() -> str:
-    if os.environ.get("TZ"):
-        return os.environ["TZ"].lstrip(":")
+    tz = os.environ.get("TZ", "").lstrip(":")
+    if tz and ("/" in tz or tz == "UTC"):
+        return tz
     try:
         with open("/etc/timezone", encoding="utf-8") as fh:
             name = fh.read().strip()
@@ -127,9 +128,13 @@ def load_or_create(path: str | None = None, home: str | None = None) -> BranchCo
     if not os.path.exists(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         document = _default_document(home)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            yaml.safe_dump(document, fh, sort_keys=False)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                yaml.safe_dump(document, fh, sort_keys=False)
     with open(path, encoding="utf-8") as fh:
         document = yaml.safe_load(fh) or {}
     return parse(document)
@@ -160,7 +165,7 @@ def parse(document: dict[str, Any]) -> BranchConfig:
             for entry in codex
             if isinstance(entry, dict) and entry.get("home")
         ],
-        conditions=list(document.get("conditions") or DEFAULT_CONDITIONS),
+        conditions=list(document["conditions"] or []) if "conditions" in document else list(DEFAULT_CONDITIONS),
         poll_interval=float(collector.get("poll_interval", 1.0)),
         heartbeat_interval=int(collector.get("heartbeat_interval", 30)),
     )

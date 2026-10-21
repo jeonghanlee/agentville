@@ -14,7 +14,8 @@
 | State change on the Branch | `branch`, `agent`, `activity`, or `contractor` |
 | Fixed interval | `heartbeat` |
 
-- `seq` increases by one per message per Branch and is persisted across Branch restarts.
+- `seq` increases by one per message per Branch. It is never reused across Branch restarts; after a restart it may skip ahead.
+- `event_at` is the time of the fact and is not ordered; message order is `seq`.
 - On a gap in `seq`, HQ requests a new `snapshot`.
 - Changes during disconnection are not queued. The `snapshot` on reconnect supersedes them.
 - On receiving a `snapshot`, HQ replaces all stored state for that Branch.

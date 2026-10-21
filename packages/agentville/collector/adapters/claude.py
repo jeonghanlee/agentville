@@ -69,6 +69,34 @@ def proc_start_ticks(pid: int, proc_root: str = "/proc") -> str | None:
     return fields[19] if fields else None
 
 
+def _model_data(model: tuple[str | None, str | None]) -> dict[str, Any]:
+    return {"model": model[0], "settings": {"effort": model[1]} if model[1] else {}}
+
+
+def last_model(path: str, window: int = 256 * 1024) -> tuple[str | None, str | None] | None:
+    """Model and effort of the last non-error assistant record in the file's tail."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - window))
+            data = fh.read()
+    except OSError:
+        return None
+    for line in reversed(data.splitlines()):
+        try:
+            record = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if not isinstance(record, dict) or record.get("type") != "assistant" or record.get("isApiErrorMessage"):
+            continue
+        message = record.get("message") if isinstance(record.get("message"), dict) else {}
+        model = (record.get("requestedModel") or message.get("model"), record.get("effort"))
+        if any(model):
+            return model
+    return None
+
+
 def _default_is_alive(pid: int, proc_start: str | None, proc_root: str = "/proc") -> bool:
     fields = _proc_stat_fields(pid, proc_root)
     if fields is None or fields[0] == "Z":
@@ -188,6 +216,12 @@ class ClaudeAdapter:
             # History written before attach is not replayed; live state comes from the session file.
             shift.tail = JsonlTail(self._transcript_path(shift.cwd, session_id))
             shift.tail.seek_end()
+            model = last_model(shift.tail.path)
+            if model is not None and model != shift.model:
+                shift.model = model
+                out.append(
+                    Observation(Kind.MODEL_CHANGED, shift.key, at, now, Source.SESSION_LOG, _model_data(model))
+                )
             out.append(Observation(Kind.SESSION_STARTED, shift.key, at, now, Source.SESSION_FILE, {"session_id": session_id}))
         status = doc.get("status")
         if status == shift.status:
@@ -266,7 +300,7 @@ class ClaudeAdapter:
             model = (record.get("requestedModel") or message.get("model"), record.get("effort"))
             if not record.get("isApiErrorMessage") and model != shift.model and any(model):
                 shift.model = model
-                found.append((Kind.MODEL_CHANGED, {"model": model[0], "settings": {"effort": model[1]} if model[1] else {}}))
+                found.append((Kind.MODEL_CHANGED, _model_data(model)))
             for item in items:
                 if isinstance(item, dict) and item.get("type") == "tool_use":
                     shift.open_tools[item.get("id")] = item.get("name")

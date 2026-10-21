@@ -69,7 +69,7 @@ def test_sequence_resumes_after_restart(tmp_path):
     last = out[-1]["seq"]
     collector2, out2 = _collector(tmp_path, ScriptedAdapter(), lambda: T0)
     collector2.tick()
-    assert out2[0]["seq"] == last + 1
+    assert out2[0]["seq"] == 1001 and out2[0]["seq"] > last
 
 
 def test_cli_once_writes_valid_messages(tmp_path, monkeypatch):
@@ -84,4 +84,43 @@ def test_cli_once_writes_valid_messages(tmp_path, monkeypatch):
     for message in messages:
         validator.validate(message)
     assert (tmp_path / "config" / "agentville" / "config.yaml").exists()
-    assert (tmp_path / "state" / "agentville" / "seq").read_text().strip() == "2"
+    assert (tmp_path / "state" / "agentville" / "seq").read_text().strip() == "1000"
+
+
+class FailingAdapter:
+    def poll(self):
+        raise RuntimeError("boom")
+
+
+def test_failing_adapter_does_not_stop_others(tmp_path, capsys):
+    good = ScriptedAdapter()
+    good.batches = [[_obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"})]]
+    config = parse({"host": {"id": "b"}})
+    out = []
+    collector = Collector(config, out.append, [FailingAdapter(), good], Resolver(), SeqStore(str(tmp_path / "seq")), clock=lambda: T0)
+    collector.tick()
+    assert len(out[0]["payload"]["agents"]) == 1
+    assert "RuntimeError" in capsys.readouterr().err
+
+
+def test_off_duty_becomes_on_leave_without_new_events(tmp_path):
+    now = [T0]
+    adapter = ScriptedAdapter()
+    adapter.batches = [
+        [_obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"})],
+        [_obs(Kind.PROCESS_EXITED, T0 + timedelta(seconds=1))],
+    ]
+    config = parse({"host": {"id": "b"}, "thresholds": {"leave": 60}})
+    out = []
+    collector = Collector(config, out.append, [adapter], Resolver(), SeqStore(str(tmp_path / "seq")), clock=lambda: now[0])
+    collector.tick()
+    now[0] = T0 + timedelta(seconds=1)
+    collector.tick()
+    assert out[-1]["payload"]["presence"] == "off_duty"
+    now[0] = T0 + timedelta(seconds=120)
+    collector.tick()
+    presences = [m["payload"]["presence"] for m in out if m["kind"] == "agent"]
+    assert presences[-1] == "on_leave"
+    count = len(out)
+    collector.tick()
+    assert all(m["kind"] == "heartbeat" for m in out[count:])

@@ -51,3 +51,16 @@ def test_condition_rules_first_match_wins():
     assert config.condition_for("codex", "model-a-1", {"effort": "high"}) == "normal"
     assert config.condition_for("codex", None, {"effort": "low"}) == "lazy"
     assert config.condition_for("claude", None, {}) == "normal"
+
+
+def test_empty_conditions_disable_mapping():
+    config = parse({"host": {"id": "b"}, "conditions": []})
+    assert config.condition_for("codex", None, {"effort": "high"}) == "normal"
+
+
+def test_posix_tz_is_not_used_as_zone_name(monkeypatch):
+    from agentville.collector import config as cfg
+    monkeypatch.setenv("TZ", "UTC0")
+    assert cfg.local_timezone() != "UTC0"
+    monkeypatch.setenv("TZ", ":Asia/Seoul")
+    assert cfg.local_timezone() == "Asia/Seoul"

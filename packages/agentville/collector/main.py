@@ -29,10 +29,20 @@ Sink = Callable[[dict[str, Any]], None]
 
 
 class SeqStore:
-    """Persists the per-Branch sequence number across restarts."""
+    """Persists a reserved upper bound of the per-Branch sequence number.
+
+    A restart resumes after the reserved bound, so numbers may skip but are never reused.
+    """
+
+    BLOCK = 1000
 
     def __init__(self, path: str) -> None:
         self.path = path
+
+    def reserve(self, next_seq: int) -> int:
+        bound = next_seq + self.BLOCK - 1
+        self.save(bound)
+        return bound
 
     def load(self) -> int:
         try:
@@ -46,6 +56,8 @@ class SeqStore:
         tmp = f"{self.path}.tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write(f"{seq}\n")
+            fh.flush()
+            os.fsync(fh.fileno())
         os.replace(tmp, self.path)
 
 
@@ -74,7 +86,7 @@ class Collector:
         self._sink = sink
         self._clock = clock
         self._seq_store = seq_store
-        self._envelope = Envelope(config.host_id, seq_store.load())
+        self._envelope = Envelope(config.host_id, seq_store.load(), reserve=seq_store.reserve)
         self._now = clock()
         self._started = False
         self._last_heartbeat: datetime | None = None
@@ -95,10 +107,15 @@ class Collector:
 
     def tick(self) -> None:
         self._now = self._clock()
-        seq_before = self._envelope.seq
         for adapter in self.adapters:
-            for obs in adapter.poll():
+            try:
+                observations = adapter.poll()
+            except Exception as exc:  # noqa: BLE001 - one failing provider must not stop the others
+                self._log(f"{type(adapter).__name__}: {type(exc).__name__}: {exc}")
+                continue
+            for obs in observations:
                 self.judge.apply(obs)
+        self.judge.refresh_presence(self._now)
         if not self._started:
             self.send_snapshot()
             self._started = True
@@ -106,8 +123,10 @@ class Collector:
         if self._last_heartbeat is None or self._now - self._last_heartbeat >= interval:
             self._send("heartbeat", self._now, {"interval": self.config.heartbeat_interval})
             self._last_heartbeat = self._now
-        if self._envelope.seq != seq_before:
-            self._seq_store.save(self._envelope.seq)
+
+    @staticmethod
+    def _log(text: str) -> None:
+        print(f"agentville-collector: {text}", file=sys.stderr, flush=True)
 
     def send_snapshot(self) -> None:
         agents, activities = self.judge.snapshot(self._now)
@@ -140,15 +159,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = load_or_create(args.config)
-    stream = sys.stdout if args.output == "-" else open(args.output, "a", encoding="utf-8")
-    collector = Collector(
-        config,
-        jsonl_sink(stream),
-        build_adapters(config),
-        GitProjectResolver(config.host_id),
-        SeqStore(os.path.join(state_dir(), "seq")),
-    )
-
     stop = False
 
     def request_stop(signum: int, frame: Any) -> None:
@@ -157,7 +167,16 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
+    stream = sys.stdout if args.output == "-" else open(args.output, "a", encoding="utf-8")
+    collector: Collector | None = None
     try:
+        collector = Collector(
+            config,
+            jsonl_sink(stream),
+            build_adapters(config),
+            GitProjectResolver(config.host_id),
+            SeqStore(os.path.join(state_dir(), "seq")),
+        )
         while True:
             collector.tick()
             if args.once or stop:
@@ -166,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
             if stop:
                 break
     finally:
-        collector.close()
+        if collector is not None:
+            collector.close()
         if stream is not sys.stdout:
             stream.close()
     return 0

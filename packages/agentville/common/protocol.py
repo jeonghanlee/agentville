@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,13 +14,21 @@ def iso(value: datetime) -> str:
 
 
 class Envelope:
-    """Wraps payloads with the per-Branch sequence number."""
+    """Wraps payloads with the per-Branch sequence number.
 
-    def __init__(self, branch_id: str, seq: int = 0) -> None:
+    ``reserve`` is called before a number beyond the reserved range is used, so a
+    restarted Branch never reuses a sequence number it may already have sent.
+    """
+
+    def __init__(self, branch_id: str, seq: int = 0, reserve: Callable[[int], int] | None = None) -> None:
         self.branch_id = branch_id
         self.seq = seq
+        self._reserve = reserve
+        self._reserved = seq if reserve else None
 
     def wrap(self, kind: str, event_at: datetime, payload: dict[str, Any], sent_at: datetime) -> dict[str, Any]:
+        if self._reserve is not None and self._reserved is not None and self.seq + 1 > self._reserved:
+            self._reserved = self._reserve(self.seq + 1)
         self.seq += 1
         return {
             "schema_version": SCHEMA_VERSION,

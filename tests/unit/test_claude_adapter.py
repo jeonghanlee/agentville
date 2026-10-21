@@ -108,3 +108,16 @@ def test_zombie_is_not_alive(tmp_path):
     fields[0] = "S"
     (tmp_path / "77" / "stat").write_text("77 (claude) " + " ".join(fields))
     assert _default_is_alive(77, "555", str(tmp_path))
+
+
+def test_model_is_seeded_from_existing_transcript_at_attach(tmp_path):
+    _transcript(tmp_path, [
+        {"type": "assistant", "requestedModel": "model-a", "effort": "high", "message": {"model": "model-a", "content": []}},
+        {"type": "assistant", "isApiErrorMessage": True, "message": {"model": "<synthetic>", "content": []}},
+        {"type": "user", "message": {"content": "x"}},
+    ])
+    _session(tmp_path)
+    observations = _adapter(tmp_path).poll()
+    changed = [o.data for o in observations if o.kind is Kind.MODEL_CHANGED]
+    assert changed == [{"model": "model-a", "settings": {"effort": "high"}}]
+    assert Kind.TOOL_STARTED not in _kinds(observations)

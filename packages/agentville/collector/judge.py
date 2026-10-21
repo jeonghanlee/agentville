@@ -52,6 +52,7 @@ class Agent:
     location: str | None = None
     sessions: set[str] = field(default_factory=set)
     account_alias: str | None = None
+    reported_presence: str | None = None
 
     def presence(self, now: datetime, leave_after: timedelta) -> str:
         if self.instance is not None:
@@ -189,7 +190,15 @@ class Judge:
         self._emit_activity(agent, obs.event_at)
 
     def _emit_agent(self, agent: Agent, at: datetime) -> None:
-        self._emit("agent", at, self.agent_payload(agent, at))
+        payload = self.agent_payload(agent, at)
+        agent.reported_presence = payload["presence"]
+        self._emit("agent", at, payload)
+
+    def refresh_presence(self, now: datetime) -> None:
+        """Emit Employees whose time-based presence changed (off duty to on leave)."""
+        for agent in self.agents:
+            if agent.reported_presence is not None and agent.presence(now, self._leave_after) != agent.reported_presence:
+                self._emit_agent(agent, max(now, agent.presence_since + self._leave_after))
 
     def _emit_activity(self, agent: Agent, at: datetime) -> None:
         self._emit("activity", at, self.activity_payload(agent, at))
