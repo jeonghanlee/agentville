@@ -98,6 +98,7 @@ class CodexAdapter:
         self._contractors: dict[str, _Contractor] = {}
         self._ignored: set[str] = set()
         self._attached_at: datetime | None = None
+        self._followed: set[str] = set()
 
     def _default_connect(self) -> RpcConnection:
         client = AppServerClient(socket_path(self.home))
@@ -253,11 +254,13 @@ class CodexAdapter:
             return None
         tail = JsonlTail(path)
         created = thread.get("createdAt")
-        if self._attached_at is None or not isinstance(created, (int, float)) or (
+        resumed = path in self._followed
+        self._followed.add(path)
+        if self._attached_at is None or resumed or not isinstance(created, (int, float)) or (
             datetime.fromtimestamp(created, tz=UTC) < self._attached_at
         ):
-            # History written before attach, or of a resumed thread, is not replayed;
-            # live state comes from the app-server.
+            # History written before attach, or of a thread resumed before or during this
+            # run, is not replayed; live state comes from the app-server.
             tail.seek_end()
         return tail
 

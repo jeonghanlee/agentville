@@ -47,9 +47,8 @@ Validation is repeated when a provider version changes.
 | S13 | both | Agent-level error | `error` |
 | S14 | both | Normal exit | Off duty |
 
-Generated: Claude S01, S02, S03, S04, S07, S08, S10, S11, S13, S14; Codex S01, S02, S03, S04, S08, S09, S10, S11, S12, S13, S14. Claude S12 awaits verification of its live usage-limit source; S05 awaits child-process Contractor support.
+Generated: Claude S01, S02, S03, S04, S06, S07, S08, S10, S11, S13, S14; Codex S01, S02, S03, S04, S06, S08, S09, S10, S11, S12, S13, S14. Claude S12 awaits verification of its live usage-limit source; S05 awaits child-process Contractor support.
 
-S06 is written in both generators but not generated: resuming a session first seen during the same Collector run reads its transcript (Claude: first record not older than attach) or rollout (Codex: `createdAt` not older than attach) from the start, so the earlier history is replayed on the new shift with past event times. It is generated once that is fixed.
 
 Notes on what the generated scenarios can show:
 

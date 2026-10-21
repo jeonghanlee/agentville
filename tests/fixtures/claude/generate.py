@@ -417,8 +417,6 @@ def s03(root):
     s.save()
 
 
-# Not generated: a resume of a session first seen during the same Collector run replays its whole
-# history (see the S06 note in docs/fixtures.md). Add s06 to the build list once that is fixed.
 def s06(root):
     s = Scenario(root, "S06", "Resume returns to the session's Employee; fork takes a free or new seat")
     s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1"); s.check(seat=1, ref="a", session_id=SA)
@@ -550,5 +548,5 @@ def s14(root):
 
 
 if __name__ == "__main__":
-    for build in (s01, s02, s03, s04, s07, s08, s10, s11, s13, s14):
+    for build in (s01, s02, s03, s04, s06, s07, s08, s10, s11, s13, s14):
         build(sys.argv[1])

@@ -164,6 +164,7 @@ class ClaudeAdapter:
         self._is_alive = is_alive
         self._shifts: dict[int, _Shift] = {}
         self._attached_at: datetime | None = None
+        self._followed: set[str] = set()
 
     def poll(self) -> list[Observation]:
         now = self._clock()
@@ -195,8 +196,11 @@ class ClaudeAdapter:
         return out
 
     def _history_before_attach(self, path: str) -> bool:
-        # A transcript created after attach is read from its start; a resumed one is not.
-        if self._attached_at is None:
+        # A transcript created after attach is read from its start; a resumed one is not,
+        # including one already followed earlier in this run.
+        resumed = path in self._followed
+        self._followed.add(path)
+        if self._attached_at is None or resumed:
             return True
         if not os.path.exists(path):
             return False
