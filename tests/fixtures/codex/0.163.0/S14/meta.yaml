@@ -1,0 +1,11 @@
+provider: codex
+version: 0.163.0
+scenario: S14
+title: Unload, reload of the same thread, and daemon reconnect
+expect:
+- {presence: on_duty, seat: 1, ref: a, after: 1}
+- {presence: on_duty, seat: 2, ref: b, after: 2}
+- {presence: off_duty, seat: 1, same_as: a, after: 3}
+- {presence: on_duty, seat: 1, same_as: a, after: 4}
+- {seat: 2, state: unknown, after: 5}
+- {presence: off_duty, seat: 2, same_as: b, after: 6}

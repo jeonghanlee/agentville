@@ -278,6 +278,10 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - Only loaded threads are read. Reading a `notLoaded` thread is avoided until its side effects are verified.
 - `thread/loaded/list` and `thread/read` seed state on connect and after reconnect; afterwards state follows `thread/status/changed`. `optOutNotificationMethods` is never set for it.
 - Turn and tool detail come from the thread's rollout file, not from app-server notifications.
+- Threads that are not Employees: `parentThreadId` set or `source.subAgent` (future Contractors), and `threadSource: system` (internal threads, typically with a null `path`).
+- Rollout path: `Thread.path`; when null, `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl`.
+- Responses carry no `jsonrpc` field; the client does not require it. Server-to-client requests (approvals) are never answered.
+- On loss of the app-server connection, every Codex shift is reported `unknown` until the next seed.
 - Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only; waiting state is unavailable for them.
 
 #### Antigravity CLI

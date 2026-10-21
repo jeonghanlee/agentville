@@ -1,0 +1,13 @@
+provider: codex
+version: 0.163.0
+scenario: S01
+title: One turn with a shell command
+expect:
+- {presence: on_duty, seat: 1, state: idle, after: 1}
+- {state: working, after: 3}
+- {state: working, tool: exec_command, after: 4}
+- {state: working, tool: null, workload: 1, after: 5}
+- {state: idle, after: 6}
+- state: idle
+  states_since_start: [unknown, idle, working, completed, idle]
+  after: 7

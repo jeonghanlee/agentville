@@ -1,0 +1,10 @@
+provider: codex
+version: 0.163.0
+scenario: S02
+title: Approval requested through activeFlags, then granted
+expect:
+- {state: idle, after: 1}
+- {state: working, tool: exec_command, after: 3}
+- {state: waiting, after: 4}
+- {state: working, after: 5}
+- {state: idle, after: 7}

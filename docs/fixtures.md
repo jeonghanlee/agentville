@@ -68,5 +68,10 @@ tests/fixtures/<provider>/<version>/<scenario-id>/
 | `session_write` | Copies a `sessions/` snapshot to `<home>/sessions/<pid>.json` |
 | `session_remove` | Removes `<home>/sessions/<pid>.json` (process exit) |
 | `log_append` | Appends a line range of a `logs/` file to the transcript path for `cwd` and `session` |
+| `appserver_thread` | Codex: a thread already loaded when the Collector first connects |
+| `appserver_notify` | Codex: applies a notification (`thread/started`, `thread/status/changed`, `thread/closed`) to the fake daemon and delivers it |
+| `appserver_disconnect` | Codex: breaks the current app-server connection |
+
+For Codex, `log_append` uses `path` relative to the Codex home. Thread `path` values under `/home/user/.codex` are rewritten to the test home.
 
 The harness polls the Adapter after each operation and feeds the Judge. `meta.yaml` `expect` entries name the step (`after`) and the expected `seat`, `presence`, `state`, `tool`, `workload`, or state history of the selected Employee; `ref` and `same_as` assert Employee identity across steps. Every emitted message is validated against the protocol schema.
