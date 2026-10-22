@@ -87,7 +87,8 @@ let resync = true;
 let connection = ["connection.connecting", ""];
 // The latest state from HQ; `current` is what the page shows, which is a past state while replaying.
 let live = EMPTY;
-let history = null, replay = null;
+// History reads (history.js); a module binding named after a window global (history, location, name) would shadow it.
+let records = null, replay = null;
 // Timeline: the shown day and its recorded changes. Work log: the chosen day and Branch ("" for all) and its rows.
 let timelineDay = "", dayChanges = null, dayChangesKey = "", dayChangesAt = 0;
 let worklogDay = "", worklogBranch = "", worklogData = null, worklogKey = "", worklogFailed = false;
@@ -861,7 +862,7 @@ function loadDayChanges() {
   dayChangesKey = key; dayChangesAt = Date.now();
   const [start, end] = [dayStart(timelineDay, zone), dayEnd(timelineDay, zone)];
   if (end <= replay.range.from) { dayChanges = { changes: [], agents: [], branches: [], truncated: false }; return; }
-  history.changes(Math.max(start, replay.range.from), Math.min(end, replay.now()), "")
+  records.changes(Math.max(start, replay.range.from), Math.min(end, replay.now()), "")
     .then((result) => { if (dayChangesKey === key) { dayChanges = result; render(); } })
     .catch(() => { if (dayChangesKey === key) { dayChangesKey = ""; dayChanges = null; } });
 }
@@ -896,7 +897,7 @@ function loadWorklog() {
   if (key === worklogKey && !(isToday && Date.now() - (worklogData?.loadedAt || 0) > TODAY_REFRESH)) return;
   worklogKey = key; worklogFailed = false;
   if (worklogData?.key !== key) worklogData = null;
-  history.worklog(dayStart(worklogDay, zone), dayEnd(worklogDay, zone), worklogBranch)
+  records.worklog(dayStart(worklogDay, zone), dayEnd(worklogDay, zone), worklogBranch)
     .then((result) => { if (worklogKey === key) { worklogData = { ...result, key, loadedAt: Date.now() }; render(); } })
     .catch(() => { if (worklogKey === key) { worklogFailed = true; worklogKey = ""; render(); } });
 }
@@ -946,11 +947,11 @@ function renderWorklog(root) {
 }
 // Today's work log in browser time, for waiting times.
 function refreshToday() {
-  if (!history || !replay?.range.from) return;
+  if (!records || !replay?.range.from) return;
   const day = dayOf(Date.now(), "");
   if (today.key === day && Date.now() - today.at < TODAY_REFRESH - 1000) return;
   today = { ...today, key: day, at: Date.now() };
-  history.worklog(dayStart(day, ""), Date.now(), "").then((data) => {
+  records.worklog(dayStart(day, ""), Date.now(), "").then((data) => {
     if (today.key === day) { today = { key: day, data, at: Date.now() }; if (view === "dashboard" || view === "office") render(); }
   }).catch(() => { today = { key: "", data: today.data, at: 0 }; });
 }
@@ -1104,8 +1105,8 @@ walkers = createWalkers($("characters"), { motionAllowed, changed: render });
 coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
 const demoNow = Date.now();
-history = createHistory({ demo: DEMO, token: TOKEN, now: demoNow });
-replay = createReplay({ history, shown: showReplay, moved: updateReplay });
+records = createHistory({ demo: DEMO, token: TOKEN, now: demoNow });
+replay = createReplay({ history: records, shown: showReplay, moved: updateReplay });
 if (DEMO) {
   acceptState(demoState(demoNow));
   connection = ["connection.demo", "demo"];
