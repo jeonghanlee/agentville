@@ -77,6 +77,8 @@ The search field filters colleagues and projects; the state chips above the offi
 
 ## Timeline and replay
 
+![Timeline and replay](images/replay.png)
+
 The Timeline lists what HQ recorded on one day, newest first: colleagues starting and stopping work, waiting, errors, limits, going on or off duty, and Branches stopping or resuming reports. Times follow the time zone of the Branch shown in the office.
 
 Replay (되감기) shows the office as it was at an earlier time:
@@ -87,6 +89,8 @@ Replay (되감기) shows the office as it was at an earlier time:
 - HQ keeps 30 days of history by default (Installation Section 4). An HQ upgraded from 0.1.0 has history from the upgrade on.
 
 ## Work log
+
+![Work log](images/worklog.png)
 
 The Work log (근무 일지) shows, for one day, how long each colleague was on duty and in each state, grouped by Branch and Project with subtotals. Durations are hours and minutes (`h:mm`).
 

@@ -6,6 +6,27 @@ This document lists the user-visible changes of each AgentVille release.
 
 **Out of scope:** internal refactoring and test-only changes.
 
+## 0.2.0 - Unreleased
+
+### Collector
+
+- `aliases` in the configuration gives colleagues display names (agent_id to name, at most 40 characters); the name is sent as the colleague `alias`.
+- Seat numbers are unique per provider on a Branch, so default names such as "Codex 2" no longer repeat across repositories. Rosters with duplicate seats are renumbered at start.
+
+### HQ
+
+- State history: every change to current state is recorded with the time of the fact and kept for `--retention-days` (default 30); older changes fold into a baseline. A 0.1.0 database starts its history at the first start of 0.2.0.
+- New read endpoints: `/api/v1/state?at=`, `/api/v1/history`, `/api/v1/changes`, `/api/v1/worklog`.
+- External notifications to an ntfy topic with `--notify-config`, following the browser notification rules; off by default.
+
+### Web UI
+
+- Work log view: time per state for one day, grouped by Branch and Project, with waits, longest wait, errors, limits, and unobserved time.
+- Timeline lists the recorded changes of a chosen day and replays the office at 1x, 10x, or 60x, with steps between changes and "Back to live".
+- Dashboard cards "Waited today" and "Longest current wait"; Colleague detail shows waiting time today and the colleague id.
+- Colleague aliases are shown wherever the default name was.
+- Demo mode includes synthetic history for the Work log and replay.
+
 ## 0.1.0 - 2026-10-22
 
 First release.

@@ -84,8 +84,8 @@ The commands in this guide call the programs by name, so `~/.local/bin` must be 
 Check:
 
 ```bash
-agentville-collector --version                                          # agentville-collector 0.1.0
-agentville-hq --version                                                 # HQ host: agentville-hq 0.1.0
+agentville-collector --version                                          # agentville-collector 0.2.0
+agentville-hq --version                                                 # HQ host: agentville-hq 0.2.0
 ```
 
 ## 4. Start the services
