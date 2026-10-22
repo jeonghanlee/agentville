@@ -3,6 +3,12 @@ name: release
 on:
   push:
     tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  # Tags the dispatched commit and releases it, for maintainers who cannot push tags.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 0.1.0"
+        required: true
 
 permissions:
   contents: write
@@ -10,17 +16,28 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+      - name: Check the version
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release version: $VERSION" >&2; exit 1; }
+          grep -q "^version = \"$VERSION\"$" pyproject.toml || { echo "pyproject.toml is not at $VERSION" >&2; exit 1; }
       - name: Extract the release notes from CHANGELOG.md
         run: |
-          awk -v tag="$GITHUB_REF_NAME" '
+          awk -v tag="$VERSION" '
             $0 ~ "^## " tag "( |$)" { found = 1; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > notes.md
-          test -s notes.md || { echo "CHANGELOG.md has no section for $GITHUB_REF_NAME" >&2; exit 1; }
+          test -s notes.md || { echo "CHANGELOG.md has no section for $VERSION" >&2; exit 1; }
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "AgentVille $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            gh release create "$VERSION" --title "AgentVille $VERSION" --notes-file notes.md --target "$GITHUB_SHA"
+          else
+            gh release create "$VERSION" --title "AgentVille $VERSION" --notes-file notes.md --verify-tag
+          fi
