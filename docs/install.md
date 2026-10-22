@@ -95,11 +95,11 @@ systemctl --user daemon-reload
 systemctl --user enable --now agentville-hq agentville-collector
 ```
 
-HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener, and HQ stops with `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`), choose another port, for example 8471, before enabling the services. If the listener is an HQ you started yourself (for example from the README quick start), stop it instead of changing the port.
+HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener, and HQ stops with `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`), choose another port, for example 8471. If the listener is an HQ you started yourself (for example from the README quick start), stop it instead of changing the port.
 
 To change the port:
 
-- in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`;
+- in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`, then run `systemctl --user daemon-reload` and `systemctl --user restart agentville-hq`;
 - in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
 - use the same port in the addresses of Section 5.
 
@@ -191,9 +191,9 @@ systemctl --user daemon-reload
 systemctl --user restart agentville-hq
 ```
 
-Unit files expand `%h` to the home directory; they do not expand `~`. Without systemd, run the `ExecStart` command in the foreground with `~` in place of `%h`; where this guide says `systemctl --user restart ...`, stop the program (Ctrl-C) and start it again.
+Unit files expand `%h` to the home directory; they do not expand `~`. Without systemd, run the command after `ExecStart=` in the foreground, in its own terminal, with `~` in place of `%h`; where this guide says `systemctl --user restart ...`, stop the program (Ctrl-C) and start it again.
 
-**(a) HQ serves HTTPS directly.** HQ needs a PEM certificate and key for `hq.example.org`, readable by the login user (key mode 0600). The Collector verifies the certificate against the host's system trust store, so each Branch, and the HQ host for its own Collector, must trust its issuer. Until it does, the Collector logs `delivery failed: ... CERTIFICATE_VERIFY_FAILED`. For a self-signed or internal CA certificate:
+**(a) HQ serves HTTPS directly.** HQ needs a PEM certificate and key for `hq.example.org`, readable by the login user (key mode 0600). The Collector verifies the certificate against the host's system trust store, so each Branch, and the HQ host for its own Collector, must trust its issuer. Until it does, the Collector logs `delivery failed: ... CERTIFICATE_VERIFY_FAILED`. To trust a self-signed certificate, copy HQ's `cert.pem` to each host first; for an internal CA, use the CA certificate instead of `cert.pem`. Then:
 
 | System | Command |
 |---|---|
