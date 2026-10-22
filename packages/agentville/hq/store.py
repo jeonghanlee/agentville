@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import sqlite3
 import threading
@@ -21,6 +22,12 @@ MAX_CLOCK_LEAD = timedelta(minutes=5)
 MAX_CHANGES = 5000
 # History checkpoints are written at whole multiples of this interval since the epoch (UTC).
 CHECKPOINT_INTERVAL = timedelta(hours=1)
+# Bytes of write-ahead log above which HQ holds back new history reads until the log is checkpointed and truncated;
+# also the size the log file is cut back to after a checkpoint resets it (journal_size_limit).
+WAL_LIMIT = 32 * 1024 * 1024
+# Passive checkpoint passes before the truncating one, and the frames that may remain for it.
+WAL_PASSES = 5
+WAL_REMAINDER = 256
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -150,10 +157,14 @@ def _boundary_before(at: str) -> str:
 
 
 class Store:
-    def __init__(self, path: str, now: datetime | None = None) -> None:
+    def __init__(self, path: str, now: datetime | None = None, wal_limit: int = WAL_LIMIT) -> None:
         self._path = path
+        self._wal_limit = wal_limit
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute(f"PRAGMA journal_size_limit = {int(wal_limit)}")
+        # Ingest never copies the log into the database itself; ``_shrink_wal`` does, outside the lock.
+        self._db.execute("PRAGMA wal_autocheckpoint = 0")
         self._db.executescript(_SCHEMA)
         columns = {row[1] for row in self._db.execute("PRAGMA table_info(branches)")}
         if "last_sent_at" not in columns:
@@ -177,6 +188,12 @@ class Store:
         self._readers: queue.SimpleQueue[sqlite3.Connection] = queue.SimpleQueue()
         self._opened: list[sqlite3.Connection] = []
         self._opened_lock = threading.Lock()
+        # Reader gate: a read transaction keeps the log frames it may need, so a log grown past the limit is
+        # checkpointed while new history reads wait and the running ones finish (``_shrink_wal``).
+        self._gate = threading.Condition()
+        self._reads = 0
+        self._draining = False
+        self._shrinker: threading.Thread | None = None
         self.totals = IngestResult()
         # Branches asked for a snapshot after a stale one, with no message applied since.
         self._snapshot_requested: set[str] = set()
@@ -204,6 +221,9 @@ class Store:
             return frozenset(self._heard)
 
     def close(self) -> None:
+        shrinker = self._shrinker
+        if shrinker is not None:
+            shrinker.join()
         with self._lock, self._opened_lock:
             for reader in self._opened:
                 reader.close()
@@ -213,19 +233,75 @@ class Store:
     @contextmanager
     def _reading(self) -> Iterator[sqlite3.Connection]:
         """A read-only connection in one read transaction: a consistent view while ingest goes on (WAL)."""
+        with self._gate:
+            while self._draining:
+                self._gate.wait()
+            self._reads += 1
         try:
-            db = self._readers.get_nowait()
-        except queue.Empty:
-            db = sqlite3.connect(self._path, check_same_thread=False, isolation_level=None)
-            db.execute("PRAGMA query_only = ON")
-            with self._opened_lock:
-                self._opened.append(db)
-        db.execute("BEGIN")
-        try:
-            yield db
+            try:
+                db = self._readers.get_nowait()
+            except queue.Empty:
+                db = sqlite3.connect(self._path, check_same_thread=False, isolation_level=None)
+                db.execute("PRAGMA query_only = ON")
+                with self._opened_lock:
+                    self._opened.append(db)
+            db.execute("BEGIN")
+            try:
+                yield db
+            finally:
+                db.execute("COMMIT")
+                self._readers.put(db)
         finally:
-            db.execute("COMMIT")
-            self._readers.put(db)
+            with self._gate:
+                self._reads -= 1
+                self._gate.notify_all()
+
+    def _check_wal(self) -> None:
+        """Start shrinking the write-ahead log once it has grown past the limit; called after ingest commits."""
+        try:
+            size = os.path.getsize(self._path + "-wal")
+        except OSError:
+            return
+        if size <= self._wal_limit:
+            return
+        with self._gate:
+            if self._shrinker is not None and self._shrinker.is_alive():
+                return
+            self._shrinker = threading.Thread(target=self._shrink_wal, name="agentville-wal", daemon=True)
+            self._shrinker.start()
+
+    def _shrink_wal(self) -> None:
+        """Hold back new history reads, let the running ones finish, then checkpoint and truncate the log.
+
+        Overlapping read transactions otherwise always keep some log frames in use, and the log never restarts.
+        Ingest and the live state do not pass the gate. Passive checkpoints copy the log while ingest goes on;
+        the truncating one runs under the store lock and has only the frames written since left to copy.
+        """
+        with self._gate:
+            self._draining = True
+            while self._reads:
+                self._gate.wait()
+        try:
+            db = sqlite3.connect(self._path, isolation_level=None)
+            try:
+                # Passive checkpoints copy the log without blocking ingest; each pass copies what ingest wrote
+                # during the previous one, so the remainder becomes small.
+                for _ in range(WAL_PASSES):
+                    _busy, frames, copied = db.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+                    if frames - copied <= WAL_REMAINDER:
+                        break
+            finally:
+                db.close()
+            # The writer copies the rest and empties the log under the store lock, so ingest waits on the lock
+            # for a short time instead of retrying a busy database.
+            with self._lock:
+                self._db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass  # the next ingest past the limit tries again
+        finally:
+            with self._gate:
+                self._draining = False
+                self._gate.notify_all()
 
     # Ingest.
 
@@ -255,6 +331,7 @@ class Store:
             self.totals.duplicates += result.duplicates
             self.totals.stale += result.stale
             self.totals.need_snapshot = self.totals.need_snapshot or result.need_snapshot
+        self._check_wal()
         return result
 
     def _apply(self, message: dict[str, Any], now: datetime, result: IngestResult) -> bool:

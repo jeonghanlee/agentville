@@ -400,6 +400,7 @@ aliases: {}
 
 - Retention: 30 days by default (`--retention-days`), applied at most once per hour during ingest. Messages received before the cutoff are deleted, and history changes and checkpoints before it are folded into the baseline (Section 4.4). Current state is never pruned.
 - Ingest, pruning, and the live state use one connection under one lock. History reads (Sections 4.4 and 4.5) use separate read-only connections, each in one read transaction and used by one query at a time; WAL lets them read while ingest writes, so they never wait for ingest and ingest never waits for them.
+- Write-ahead log: ingest never checkpoints the log itself (`wal_autocheckpoint` 0; `journal_size_limit` 32 MiB). A read transaction keeps the log frames it may need, so overlapping history reads would keep the log from restarting. When the log file exceeds 32 MiB after an ingest, a background thread holds back new history reads, waits for the running ones to finish, copies the log into the database with passive checkpoints (up to five passes, which do not block ingest), then runs a truncating checkpoint under the store lock for the remaining frames, and lets history reads continue. The log thus stays near 32 MiB, exceeding it by what is written while the longest running history read finishes. New history reads wait up to that read's remaining time; ingest and the live state do not wait for reads.
 - HQ sets the interpreter's thread switch interval to 0.5 ms, so a long history computation yields often to ingest and the live state.
 
 ### 4.1 Ingest Rules

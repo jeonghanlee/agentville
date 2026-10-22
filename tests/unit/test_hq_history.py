@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
@@ -466,3 +467,40 @@ def test_a_removal_across_the_period_start_keeps_the_last_known_activity(tmp_pat
     branch.send(450, "snapshot", snapshot([agent("a1")], []))
     branch.send(500, "snapshot", snapshot([agent("a1")], [activity("a1", "waiting", 480)]))
     assert store.worklog(s(460), s(520), s(520))["rows"][0]["waits"] == 1
+
+
+def test_the_log_is_truncated_although_history_reads_overlap(tmp_path):
+    path = str(tmp_path / "hq.sqlite3")
+    store = Store(path, wal_limit=64 * 1024)
+    branch = Branch(store)
+    branch.send(0, "snapshot", snapshot([agent("a1")], [activity("a1")]))
+    first_open, release, second_done = threading.Event(), threading.Event(), threading.Event()
+
+    def first():
+        with store._reading() as db:
+            db.execute("SELECT COUNT(*) FROM changes").fetchone()
+            first_open.set()
+            release.wait(5)
+
+    def second():
+        store.state_at(s(1))
+        second_done.set()
+
+    reader = threading.Thread(target=first)
+    reader.start()
+    assert first_open.wait(5)
+    # A read transaction pins the log: it grows past the limit while the read stays open.
+    for second_ in range(1, 400):
+        branch.send(second_, "activity", activity("a1", "working", 0, workload=second_))
+    assert os.path.getsize(path + "-wal") > 64 * 1024
+    # A new history read waits while the open one finishes and the log is checkpointed.
+    later = threading.Thread(target=second)
+    later.start()
+    assert not second_done.wait(0.3)
+    release.set()
+    reader.join(5)
+    assert second_done.wait(5)
+    later.join(5)
+    store._shrinker.join(5)
+    assert os.path.getsize(path + "-wal") <= 64 * 1024
+    assert _states(store.state_at(s(399))) == {"a1": "working"}
