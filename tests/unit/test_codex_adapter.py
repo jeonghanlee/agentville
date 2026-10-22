@@ -432,9 +432,11 @@ def test_rollout_without_daemon_is_a_low_confidence_shift(tmp_path):
     _rollout(tmp_path, "r0", None, _record("task_started"), age=31 * 60)
     adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW, account_alias="codex-account-1")
     judge = Judge(_Resolver(), lambda kind, at, payload: None)
+    assert adapter.poll() == []
+    _append(path, _record("task_started"))
     observations = adapter.poll()
     assert [(o.kind, o.shift.native_id) for o in observations] == [
-        (Kind.PROCESS_STARTED, "rollout:r1"), (Kind.SESSION_STARTED, "rollout:r1")]
+        (Kind.PROCESS_STARTED, "rollout:r1"), (Kind.SESSION_STARTED, "rollout:r1"), (Kind.TURN_STARTED, "rollout:r1")]
     started = observations[0]
     assert started.source is Source.SESSION_LOG
     assert started.data == {"cwd": "/w", "session_id": "r1", "runtime": {"type": "rollout"},
@@ -464,7 +466,9 @@ def test_rollout_created_after_attach_is_read_from_start(tmp_path):
 def test_rollout_shift_ends_after_thirty_minutes_without_writes(tmp_path):
     path = _rollout(tmp_path, "r1")
     adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW)
-    adapter.poll()
+    assert adapter.poll() == []
+    _append(path, _record("task_started"))
+    assert Kind.PROCESS_STARTED in [o.kind for o in adapter.poll()]
     _touch(path, 29 * 60)
     assert adapter.poll() == []
     _touch(path, 31 * 60)
@@ -488,7 +492,9 @@ def test_daemon_thread_takes_over_a_rollout_shift(tmp_path):
             judge.apply(obs)
         return [(o.kind, o.shift.native_id) for o in observations]
 
-    step()
+    assert step() == []
+    _append(path, _record("task_started"))
+    assert step()[:2] == [(Kind.PROCESS_STARTED, "rollout:r1"), (Kind.SESSION_STARTED, "rollout:r1")]
     _append(path, _record("task_started"))
     connect[0] = lambda: daemon
     assert step()[:4] == [(Kind.TURN_STARTED, "rollout:r1"), (Kind.PROCESS_EXITED, "rollout:r1"),

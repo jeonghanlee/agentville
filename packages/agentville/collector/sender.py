@@ -11,12 +11,18 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+SHARED_HOST_WARNING = (
+    "possible shared host.id: different messages used the same sequence number; "
+    "run only one Collector per host.id and give independent copies a new identity"
+)
+
 
 @dataclass
 class Delivery:
     ok: bool
     need_snapshot: bool = False
     error: str | None = None
+    shared_host_id: bool = False
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -71,4 +77,6 @@ class HttpSender:
         except http.client.HTTPException as exc:
             # A response cut short or malformed, e.g. IncompleteRead or BadStatusLine.
             return Delivery(False, error=f"{type(exc).__name__}: {exc}")
-        return Delivery(True, need_snapshot=bool(isinstance(result, dict) and result.get("need_snapshot")))
+        warnings = result.get("warnings") if isinstance(result, dict) else None
+        return Delivery(True, need_snapshot=bool(isinstance(result, dict) and result.get("need_snapshot")),
+                        shared_host_id=isinstance(warnings, list) and "shared_host_id" in warnings)

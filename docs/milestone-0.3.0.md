@@ -1,0 +1,420 @@
+# Observation Coverage for 0.3.0
+
+Release line: 0.3.0
+Milestone index: 0.3.0
+Canonical path: `docs/milestone-0.3.0.md`
+Canonical branch or ref: `feature/0.3.0`
+Git upstream: none
+Remote tracker: none
+
+Next session entry point: Check the implementation and CHANGELOG commits against origin/feature/0.3.0 and inspect their CI results, then record landing evidence before the version-only change. The owner delegated these two commits and one initial branch push on 2026-10-22. M4 owns candidate and published-object checks; tag creation and publication still require their separate authority. Office expansion requirements remain in `docs/milestone-0.4.0.md` M2.
+
+## Scope
+
+This document tracks child-process Contractors, Antigravity observation, and remote Collector operation from the 0.2.0 baseline.
+
+Out of scope: 0.4.0 features, release publication, changes to running services, and deployment of this checkout.
+
+## Milestone
+
+### Work
+
+| ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| M1 | Child-process Contractors | Milestone | In progress | No | D1, D2, G1 | Process descendants are Contractors without duplicate colleagues; [detail](#m1---child-process-contractors) |
+| M2 | Antigravity Adapter | Milestone | In progress | No | M1, D1 | Live Antigravity sessions report presence and observable activity; [detail](#m2---antigravity-adapter) |
+| M3 | Remote development environments | Milestone | In progress | No | M2, D1 | SSH and container procedures preserve identity and reach HQ securely; [detail](#m3---remote-development-environments) |
+| G1 | Late parent observation policy | External gate | Complete | No | | D2 selects later reclassification while preserving the former Employee record; [detail](#g1---late-parent-observation-policy) |
+| M4 | Release 0.3.0 | Milestone | Blocked | No | M1, M2, M3, G2 | Reviewed candidate is tagged, published, installed, and verified; [detail](#m4---release-030) |
+| G2 | Git execution authority | External gate | Open | No | | Owner authorizes each exact Git operation before execution; [detail](#g2---git-execution-authority) |
+
+### Decisions
+
+| ID | Decision | Decision Date |
+| --- | --- | --- |
+| D1 | Implement M1, M2, then M3 on feature/0.3.0 from Release 0.2.0. | 2026-10-22 |
+| D2 | When a process-backed parent is observed later, end the child's independent Employee shift, preserve its ID and history as off duty, and continue its current activity and descendants as Contractors of the parent's root Employee. Keep established parent assignments fixed. | 2026-10-22 |
+
+### Milestone Details
+
+#### M1 - Child-process Contractors
+
+Origin: 0.3.0 / M1
+Identity History: none
+GitHub Issue: none
+Status: In progress
+
+##### Summary
+
+Identify agent CLIs launched by another observed agent as Contractors of the parent's shift.
+
+##### Scope
+
+Extend Claude and Codex observation with Linux process ancestry. Preserve existing in-process Contractors and the provider-neutral protocol. Cover S05 and the reported inaccessible-file-descriptor and Collector-restart cases.
+
+Out of scope: linking independent invocations without process ancestry, and cross-host process ancestry.
+
+##### Completion Criteria
+
+- A child CLI appears once as a Contractor and never simultaneously as an independent colleague.
+- The Contractor ends when its process or parent shift ends; PID reuse does not join unrelated processes.
+- Unreadable process file descriptors do not silently defeat supported process matching.
+- At Collector startup, a completed codex exec rollout does not create an on-duty colleague merely because its mtime is recent.
+- Real adapters, Judge, and protocol validation run together using shipped fixtures.
+
+##### Dependencies And Decisions
+
+- D1 sets work ordering, not a runtime dependency.
+- G1 is complete through D2. The owner selected and authorized late-parent reclassification on 2026-10-22; M1 resumes as In progress. Existing identity and session history remain on the off-duty Employee record.
+
+##### Implementation Plan
+
+Plan Status: accepted
+Plan Acceptance: 2026-10-22, owner accepted the implementation and verification plan, including D2 by selecting option 1.
+Implementation Authorization: 2026-10-22, owner directed implementation and selected option 1 for D2.
+Superseded Plan Artifacts: none
+
+1. Add a shared Linux process reader under `packages/agentville/collector/`: read PID, parent PID, command name, start ticks, and working directory; exclude zombies and validate lifetime identity before using a match.
+2. Extend Claude start observations with process identity. Associate Codex rollouts with codex processes by open file descriptors; when descriptors are unreadable, accept only an unambiguous command-name, working-directory, and process/rollout-start-time match. Scan file descriptors only for codex processes.
+3. Collect all adapters' observations for one tick before assigning Employees in `main.py`. Resolve the nearest observed ancestor through intermediate shell processes, order parents before children, and route a child shift into the existing Contractor model in `judge.py` with origin `child_process`. Recheck independent process-backed shifts after parent discovery: preserve the prior Employee ID and history as off duty, move current activity and descendants to the parent's root Employee, and then keep established ownership fixed. End descendants with the parent.
+4. Keep internal process identity and paths on the Branch. Use the existing `child_process` protocol value and validate all generated messages against `protocol-v1.schema.json`.
+5. In Codex rollout discovery, record initial file versions. A rollout present at attach without a matching live process cannot start a shift until its file changes. Preserve rollout-only observation after a fresh write, bounded by the existing inactivity window; process-backed shifts end on process exit.
+6. Ship S05 process-tree and provider-log fixtures, replay them through actual adapters, Collector, Judge, and protocol validation, and run real-process tests for denied descriptor access, nested ancestry, PID reuse, parent exit, and Collector restart.
+
+##### Test Plan
+
+| Label | Layer | Method | Environment | Expected Result |
+| --- | --- | --- | --- | --- |
+| T1 | Integration | Claude and Codex S05 fixtures through actual adapters, Collector, and protocol validation | Linux, Python 3.12+ | One parent colleague and child Contractor, with correct end events |
+| T2 | Integration | Real child processes, including denied fd access and PID lifetime checks | Linux /proc | Correct ownership or explicit unknown evidence; no unrelated parent |
+| T3 | Regression | Restart Collector with a completed child rollout, then append a fresh event | Linux, synthetic rollout | Old child remains off duty until fresh evidence establishes activity |
+| T4 | Integration | Delay the parent session file while a real child process is working; vary Adapter order, restart the Collector, and use the shipped process tree for descendants | Linux, shipped S05 worker and fixture | Child activity becomes a Contractor; its former Employee ID and history remain off duty; descendants migrate and end correctly |
+
+##### Verification Results
+
+| Label | Observed At | Environment | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| T1 | 2026-10-22 21:48:11 UTC | Linux, Python 3.13.5 | Passed | /tmp/agentville-030-R1-full.xml; actual Claude and Codex Adapters, Collector, JSONL Sender, and protocol validation with shipped S05 inputs. |
+| T2 | 2026-10-22 21:48:11 UTC | Linux procfs and synthetic procfs boundary | Passed | /tmp/agentville-030-R1-full.xml; actual processes with accessible and denied descriptors; intermediate shell ancestry, nested child Contractors, ambiguous matching, truncated process names, and changed parent start ticks use the shipped process fixture. |
+| T3 | 2026-10-22 21:48:11 UTC | Linux, actual Collector restart with roster and seq files | Passed | /tmp/agentville-030-R1-full.xml; completed child rollout creates no colleague on restart; a fresh write starts a new low-confidence rollout-only shift. |
+| T4 | 2026-10-22 21:48:11 UTC | Linux, actual processes and full Collector path; synthetic procfs boundary for nested descendants | Passed | /tmp/agentville-030-R1-full.xml; both Adapter orders preserve the prior Employee ID and sessions as off duty, transfer active tool state, survive Collector restart, and end on child exit. Nested process Contractors migrate to the root and end on parent PID reuse. The Judge unit case also verifies in-process Contractor migration and subsequent status updates. |
+
+##### Closure Evidence
+
+- D2 is implemented and T1-T4 passed. The full pytest run recorded 290 passed, zero failures, zero errors, and zero skips. The pre-fix failure remains in `/tmp/agentville-030-pytest.2FpfDt/results.xml`. Self-review is accepted; repository landing and release publication remain pending.
+
+#### M2 - Antigravity Adapter
+
+Origin: 0.3.0 / M2
+Identity History: none
+GitHub Issue: none
+Status: In progress
+
+##### Summary
+
+Observe Antigravity CLI presence and work activity from sources available on the host.
+
+##### Scope
+
+Inspect live agy presence locks, process lifetime, and transcript structure. Add account configuration, an Adapter, synthetic fixtures, and provider rendering. Derive supported states from observed evidence. Clear completed tool names and document the overlap between ~/.gemini and Gemini CLI.
+
+Out of scope: inferred thinking, waiting or usage-limit signals without observed evidence, and starting or controlling user sessions.
+
+##### Completion Criteria
+
+- Live presence and exit follow the owning process and lock, including restart and stale-file cases.
+- Supported activity states match observed source records and agree across documents.
+- Completed tools do not remain on colleague details.
+- Provider configuration, protocol, and UI support Antigravity without exposing prompts, paths, account identities, or tool arguments.
+- Shipped synthetic fixtures exercise the real Adapter and Collector path.
+
+##### Dependencies And Decisions
+
+- M1 precedes M2 by D1; this is work ordering.
+- Live agy is available on the development host; inspect it without controlling its sessions.
+- R1 correction was accepted and authorized on 2026-10-22 by the owner's selection of option 1. Remember content-free activity fingerprints throughout a shift, including complete history at attach, to prevent old records from changing state or increasing workload after rotation or truncation. Verify both history replay and fresh appended records through the real Collector.
+
+##### Implementation Plan
+
+Plan Status: accepted
+Plan Acceptance: 2026-10-22, owner accepted the implementation and verification plan, including correction option 1 for R1.
+Implementation Authorization: 2026-10-22, owner directed implementation and selected correction option 1 for R1.
+Superseded Plan Artifacts: none
+
+1. Resolve held `presence/<conversation-id>.lock` files to their owning agy process through `/proc/locks`, verify PID and start ticks, and use the owner's current working directory for Project identity. A stale unlocked file is not presence.
+2. Add `adapters/antigravity.py`, using `JsonlTail` on `brain/<conversation-id>/.system_generated/logs/transcript.jsonl`. Parse only activity fields and tool names. At attach, fingerprint complete historical activity records without emitting them and seed current activity from the tail. Retain activity fingerprints for the shift lifetime across rotation and truncation, skip repeated records, and still process fresh appended records. Never retain content or tool arguments in the fingerprint identity, or send private identifiers.
+3. Confirm state transitions against live agy before specifying their mapping: observed record types include `USER_INPUT`, `PLANNER_RESPONSE`, `GENERIC`, `CHECKPOINT`, `SYSTEM_MESSAGE`, and `ERROR_MESSAGE`; observed statuses are `RUNNING`, `DONE`, and `ERROR`. Distinguish model completion, tool completion, and agent failure instead of mapping every `DONE` or `ERROR` to the same activity.
+4. Extend `config.py` and `build_adapters` with Antigravity account homes, require the `antigravity-cli` subtree before discovering a Gemini home automatically, and cover provider values in protocol validation and Web UI badges.
+5. Ship synthetic Antigravity fixtures based on the observed field structure. Verify presence, active work, completion, error, stale-lock behavior, transcript rotation, and removal of completed tool names through the actual Adapter and Collector.
+6. Update architecture, configuration, fixture, and usage documents with the states actually emitted. Document the `~/.gemini` overlap with Gemini CLI and any observation limitations.
+
+##### Test Plan
+
+| Label | Layer | Method | Environment | Expected Result |
+| --- | --- | --- | --- | --- |
+| T1 | Observation | Inspect agy process, lock ownership, and source field names | Live Linux host | Documented signals have direct evidence |
+| T2 | Integration | Synthetic Antigravity fixtures through actual Adapter, Collector, and protocol validation | Linux, Python 3.12+ | Presence and supported states match fixtures |
+| T3 | Regression | Complete a tool, truncate or rotate a transcript, and end its process | Linux, synthetic fixtures | No stale tool, history replay, or phantom shift |
+
+##### Verification Results
+
+| Label | Observed At | Environment | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| T1 | 2026-10-22 21:12:55 UTC | Live Linux host, agy 1.4.5 | Passed | `/tmp/agentville-030-agy-epwmvww1/receipt.json`: actual Adapter observed one live shift, seeded idle, and emitted no new shift on its second poll. Native lock ownership and process start ticks matched. Transcript field structure was inspected without retaining content; tool and error transitions are synthetic-fixture evidence, not a live-session-control claim. |
+| T2 | 2026-10-22 21:48:11 UTC | Linux, Python 3.13.5 | Passed | /tmp/agentville-030-R1-full.xml; actual kernel lock, process, Adapter, Collector, Judge, JSONL Sender, and schema validation consume generated agy 1.4.5 records. |
+| T3 | 2026-10-22 21:48:11 UTC | Linux, shipped agy fixture, actual kernel lock, Adapter, and Collector | Passed | `/tmp/agentville-030-R1-full.xml`; fresh history, existing history, and history beyond the 256 KiB tail window preserve state and workload across file replacement and truncation. A fresh appended tool is counted once and finishes normally. The two original cases failed on the pre-fix source in `/tmp/agentville-030-R1-before.xml`; the earlier workload 1-to-2 reproduction remains in `/tmp/agentville-030-review-extra-with-rotation.xml`. |
+
+##### Review Results
+
+Review target: current 0.3.0 changes on `feature/0.3.0`, M1-M3 implementation, tests, and documentation. Office expansion implementation and deployment are excluded. No earlier formal passes for this reconstructed working tree were available.
+
+- Available pass 1, first-person: three deliberate choices, one previously missed late-parent ordering case now corrected by D2, no loose ends or sentence corrections.
+- Available pass 2, third-person: one minor finding, R1, against M2 / T3. The pre-fix Adapter remembered only active tools, so replaying a finished step emitted `tool.started` again; the original rotation test expected that duplicate. The owner accepted correction option 1 on 2026-10-22. R1 is resolved by shift-lifetime hashes of activity fields, including historical records at attach, and a regression that failed before the correction and passes afterward.
+- Additional real-path checks for late-parent classification through actual HTTP and HQ, and concurrent Antigravity tool completion, passed. The additional three-case run has two passes and one failure. Source: `/tmp/agentville_030_review_checks.py`; result: `/tmp/agentville-030-review-extra-with-rotation.xml`.
+- Available pass 3, third-person: no additional findings. The corrected 290-case base suite and 18 Docker/SSH assertions pass. `/tmp/agentville-030-R1-review.xml` records three passing additional real-path checks, including preservation of state and workload when replayed content and tool arguments differ. The current source matches the retained Docker build context, excluding Python caches.
+- Available pass 4, second-person: no findings from the remote operator's seat. The current remote procedure, configuration, changed architecture and protocol descriptions, fixture instructions, and canonical evidence were checked against the real executions; mdBook built successfully on 2026-10-22 at 21:50 UTC. This was self-review, with no independent reviewer or delegated pass.
+- The loop is closed with no open findings. Recorded totals: four available passes, all direct; one first-person, two third-person, one second-person. The initial third-person minor R1 is resolved; no must-fix, info, hygiene, or out-of-scope findings were recorded. Termination: no finding above the floor.
+
+##### Closure Evidence
+
+- Native presence, synthetic activity, transcript-history deduplication, and subsequent fresh records passed. R1 is resolved and self-review is accepted. Repository landing and release publication remain pending.
+
+#### M3 - Remote Development Environments
+
+Origin: 0.3.0 / M3
+Identity History: none
+GitHub Issue: none
+Status: In progress
+
+##### Summary
+
+Provide SSH and container Collector operation with durable Branch identity and an explicit HQ network boundary.
+
+##### Scope
+
+Document persistent configuration, sequence, and roster storage; tunnel and direct-HQ networking; Collector restart; and container volume ownership. Detect conflicting messages from cloned host.id and seq state, distinguish exact retries, and disambiguate Branch aliases in colleague details and work logs.
+
+Out of scope: changing host.id during normal startup, automatic merging of two Collectors, and deployment to user services.
+
+##### Completion Criteria
+
+- Container rebuilds retain Branch and colleague IDs when their documented storage persists.
+- Two Collectors sharing host.id produce the documented warning even when their seq numbers coincide and message content differs; exact retries remain duplicates.
+- Container procedures explain SSH-host loopback versus container loopback, working connection methods, token requirements, ownership, and restart.
+- Documented token settings reject unauthorized ingest; loopback requests bypass environment proxies as documented.
+- Equal Branch aliases remain distinguishable in colleague details and work logs.
+- Each verification distinguishes executed behavior from unavailable infrastructure.
+
+##### Dependencies And Decisions
+
+- M2 precedes M3 by D1; this is work ordering.
+
+##### Implementation Plan
+
+Plan Status: accepted
+Plan Acceptance: 2026-10-22, owner accepted the implementation and verification plan.
+Implementation Authorization: 2026-10-22, owner directed implementation of this plan.
+Superseded Plan Artifacts: none
+
+1. In `hq/store.py`, compare all stored envelope fields and decoded payload when `(branch_id, seq)` already exists, including snapshot duplicates. Preserve exact retry behavior; detect conflicting content and report a possible shared host.id without logging message contents or credentials. Preserve documented sequence-reset and clock-reset behavior.
+2. Cover copied Collector configuration and sequence state against real HQ ingest, both coincident sequence numbers and later conflicting activity; verify exact retries do not raise a warning. Write the exact diagnostic and recovery instructions in the installation documentation.
+3. Document persistent config and state paths, one Collector per identity, and a new host.id for an independently cloned environment. Retain both config and roster/seq volumes during container rebuilds and set volume ownership for the actual container UID/GID.
+4. Provide separate host-network and Docker-host-gateway connection procedures. A reverse SSH tunnel bound to the SSH host's loopback is reachable from a host-network container; the gateway method requires an explicitly reachable bind, appropriate SSH forwarding policy, HQ authentication, and limited network access. Plain non-loopback HTTP cannot carry a Collector token under the existing Sender policy; verify and document the applicable HTTPS or tunnel boundary.
+5. Include start, stop, and restart for a foreground or nohup Collector, verify PID identity before stopping it, and show proxy bypass settings. Execute procedures in isolated SSH and Docker environments without changing the installed services.
+6. Reuse a shared Branch-display helper in Web UI colleague details and work logs so equal aliases include the full distinguishing Branch ID. Exercise both views with duplicate aliases.
+
+##### Test Plan
+
+| Label | Layer | Method | Environment | Expected Result |
+| --- | --- | --- | --- | --- |
+| T1 | Integration | Run Collectors with copied identity and sequence state against real HQ ingest | Linux, isolated database | Conflicting content warns; identical retries do not |
+| T2 | Integration | Rebuild container with persistent config and state volumes | Docker | Branch and colleague IDs persist; writable ownership |
+| T3 | Integration | Follow tunnel, token, proxy, and Collector-restart procedures | SSH and Docker test environment | HQ is reachable only through the intended authenticated boundary |
+| T4 | UI | Render equal-alias Branches in colleague details and work logs | Browser or existing UI test harness | Branch IDs distinguish equal aliases |
+
+##### Verification Results
+
+| Label | Observed At | Environment | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| T1 | 2026-10-22 21:48:11 UTC | Real HQ HTTP ingest and actual Collectors | Passed | /tmp/agentville-030-R1-full.xml; copied identity and coincident seq with different snapshot payload warns, exact stored-envelope replay does not, and conflicting heartbeat content warns. |
+| T2 | 2026-10-22 | Docker 29.9.1, installed Collector, persistent named volumes | Passed | `/tmp/agentville-030-system-liatpmu9/results.json` and `commands.jsonl`; fresh root-owned volumes are reassigned, two recreated containers retain host.id and colleague ID, and the actual Git resolver identifies the synthetic remote Project. |
+| T3 | 2026-10-22 | Isolated SSH server, host-network and bridge containers, real HQ | Passed | `/tmp/agentville-030-system-liatpmu9/results.json`: all 18 assertions passed, including reverse SSH delivery, two nohup runs, process/start-time receipts, bridge-loopback refusal, and host-gateway SSH delivery. /tmp/agentville-030-R1-full.xml also verifies token rejection and loopback proxy bypass. |
+| T4 | 2026-10-22 21:48:11 UTC | Actual Chromium and HQ, 1440px and 720px | Passed | /tmp/agentville-030-R1-full.xml; both Branch IDs appear in colleague detail and work-log headings; AG badge renders with no page errors. Screenshots were inspected. |
+
+##### Closure Evidence
+
+- HTTP, Docker, SSH, browser, and mdBook checks ran against the working tree. `packages/` and `pyproject.toml` match `/tmp/agentville-030-system-liatpmu9/context/` byte for byte, excluding Python caches. Test containers are stopped; generated images, volumes, and private evidence remain. Self-review is accepted; repository landing and release publication remain pending.
+
+#### G1 - Late Parent Observation Policy
+
+Origin: 0.3.0 / G1
+GitHub Issue: none
+Status: Complete
+
+##### Summary
+
+The owner selected option 1 on 2026-10-22: reclassify after parent evidence arrives while retaining the prior Employee ID and history as off duty. D2 records the accepted and authorized behavior for M1. The regression now passes in both Adapter orders; M1 / T4 records the executed evidence.
+
+##### Completion Criteria
+
+- The owner selects the behavior, and the canonical implementation and verification plan records that dated decision and authority.
+
+##### Verification Results
+
+| Observed At | Result | Evidence |
+| --- | --- | --- |
+| 2026-10-22 | Complete | Owner selected option 1; D2 records the decision and M1 records plan acceptance and implementation authority. |
+
+##### Closure Evidence
+
+- D2, Decision Date 2026-10-22. Owner selected option 1.
+
+#### M4 - Release 0.3.0
+
+Origin: 0.3.0 / M4
+Identity History: none
+GitHub Issue: none
+Status: Blocked
+
+##### Summary
+
+Prepare and publish AgentVille 0.3.0 from the reviewed observation changes.
+
+##### Scope
+
+Implementation landing, CHANGELOG, version-only change, candidate verification, annotated tag, existing GitHub release workflow, and released-install verification.
+
+Out of scope: deploying to existing user services, implementing 0.4.0, and changing the existing publication workflow.
+
+##### Completion Criteria
+
+- Version metadata, installed CLI versions, CHANGELOG, tag, and GitHub Release agree on 0.3.0.
+- All required candidate and released-object checks pass with retained evidence.
+- M1-M3 have landing evidence and the next entry points at the 0.4.0 document.
+
+##### Dependencies And Decisions
+
+- M1-M3 supply implementation and local verification; their landing is still pending.
+- G2 is open; resume as Not started after execution authority is supplied.
+- The owner requested release preparation on 2026-10-22, then delegated the implementation and CHANGELOG commits and one initial push of feature/0.3.0. The version-only change and later release actions remain separate steps.
+- Public REST observation on 2026-10-22 found releases 0.1.0 and 0.2.0 and no remote milestones. Git SSH observation found master at `39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b` and no 0.3.0 tag. Local gh authentication returned 401; Git SSH reads succeeded. Recheck live state before execution.
+- `.github/workflows/release.yml` creates the Release when a numeric tag is pushed. Do not also create a duplicate Release manually. The workflow's extraction consumes the prepared CHANGELOG section.
+
+##### Implementation Plan
+
+Plan Status: draft
+Plan Acceptance: none
+Implementation Authorization: none
+Superseded Plan Artifacts: none
+
+1. Commit the reviewed cumulative implementation with its tests and documentation, using individual authored paths. Commit the CHANGELOG separately.
+2. After the pre-bump tree is otherwise clean, change only `pyproject.toml` version from 0.2.0 to 0.3.0 and commit it separately.
+3. Verify candidate versions, the full suite, Python 3.12/3.13 CI, and installation of the exact candidate through install.sh in an isolated environment. Record and commit readiness evidence under separate authority.
+4. Resolve the immutable candidate, fast-forward master only if possible, create an annotated 0.3.0 tag at that candidate, and perform only separately authorized pushes. Observe the existing workflow's published Release.
+5. Check released objects and run install.sh against the published tag on a clean equivalent host after the storage preflight in the release-cycle closing procedure. Record closure without rewriting the tag; retain `docs/milestone-0.4.0.md` for the next line.
+
+##### Test Plan
+
+See Release Verification Plan; this final release detail has no local T labels.
+
+##### Verification Results
+
+See Release Verification Results. Existing feature checks remain in M1-M3.
+
+##### Integrated Verification
+
+| Source Check | Re-run Trigger | Shared Surface | Release Verification Label | Expected Result | Result Evidence |
+| --- | --- | --- | --- | --- | --- |
+| M1 / T1-T4, M2 / T2-T3, M3 / T1-T4 | Version change or any package, schema, UI, or dependency change | Combined installed package | Release Verification 4 | Candidate suite and environment checks pass | Pending |
+
+##### Production Environment Tests
+
+| Release Verification Label | Timing | System | Version | Architecture | Deployment Path | Method | Expected Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Release Verification 5 | post-change | Clean isolated Linux environment | 0.3.0 candidate | Host-compatible | Dedicated temporary home | Run actual install.sh with explicit immutable candidate and --hq --no-start; inspect both CLI versions | Both commands run at 0.3.0 | Pending |
+| Release Verification 7 | post-release | Clean production-equivalent Linux host | Published 0.3.0 | Record actual architecture | Fresh dedicated home | Complete released-object storage preflight, install actual published tag through install.sh, and verify delivery to isolated HQ | Released installation and delivery succeed | Pending |
+
+##### Version Changes
+
+| Field | File | Before | Planned After | Pre-check | Pre-check Label | Post-check | Post-check Label |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| project.version | pyproject.toml | 0.2.0 | 0.3.0 | Parse TOML and inspect the otherwise clean pre-bump tree | Release Verification 2 | Build/install candidate and check package metadata plus both --version entry points | Release Verification 3 |
+
+##### Release Execution
+
+| Step | Action | Authorization | Expected Result | Evidence |
+| --- | --- | --- | --- | --- |
+| 1 | Commit reviewed implementation and CHANGELOG separately | Commit scope or user execution | Named commits preserve reviewed bytes | Pending |
+| 2 | Commit version-only 0.3.0 change and readiness evidence separately | Commit scope or user execution | Candidate checks identify immutable commit | Pending |
+| 3 | Push candidate branch and inspect test workflow | Push scope or user execution | Exact candidate passes supported Python CI | Pending |
+| 4 | Fast-forward master to the resolved candidate | Explicit authorization for previewed merge or user execution | No history rewrite or unresolved merge | Pending |
+| 5 | Create annotated refs/tags/0.3.0 at the resolved candidate | Release scope with exact preview or user execution | Immutable annotated tag | Pending |
+| 6 | Push master and the one tag; tag push triggers release.yml | Separately applicable Push and Tag push authority, or user execution | Remote objects match local accepted objects; Release is created once | Pending |
+| 7 | Record released checks, M1-M4 closure, and next-line entry point | Commit scope or user execution | Closure evidence is committed after publication | Pending |
+
+##### Release Verification Plan
+
+| Label | Layer | Timing | Method | Environment | Expected Result | Evidence Target |
+| --- | --- | --- | --- | --- | --- | --- |
+| Release Verification 1 | Local | pre-change | Reconcile M1-M3 evidence, changed paths, and CHANGELOG scope | Current working tree | Source and recorded checks agree | Canonical evidence and source comparison |
+| Release Verification 2 | Local | pre-change | Parse version and verify pre-bump commit boundary | Git and TOML | Version is 0.2.0; prior changes committed | Commit identity and clean status |
+| Release Verification 3 | Package | post-change | Install candidate and run both CLI --version commands | Isolated environment | Metadata and CLI versions equal 0.3.0 | Installed-command receipts |
+| Release Verification 4 | Integrated | post-change | Full pytest, Docker/SSH, browser, mdBook, and Python 3.12/3.13 CI on exact candidate | Local and GitHub Actions | All required checks pass | Candidate XML, system evidence, workflow runs |
+| Release Verification 5 | Installation | post-change | Actual documented install.sh path on immutable candidate | Clean isolated Linux environment | Candidate installation succeeds | Installer receipts |
+| Release Verification 6 | Remote | post-release | Read tag type, peeled commit, Release identity and flags, workflow conclusion | Canonical Git remote and GitHub | Published objects identify accepted candidate | Remote object identifiers and observed metadata |
+| Release Verification 7 | Installation | post-release | Storage preflight followed by actual released-tag installation and delivery | Clean equivalent host | Released install and operation succeed | Installed files, CLI output, HQ delivery |
+| Release Verification 8 | Documentation | post-release | Verify canonical closure and existing 0.4.0 entry point | Committed documents | Truthful release closure and next line | Closure commit |
+
+##### Release Verification Results
+
+| Label | Observed At | Environment | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| Release Verification 1 | 2026-10-22 | Working tree and prepared release files | Pass | CHANGELOG covers the implemented M1-M3 behavior. The source still matches the 290-test and 18-assertion candidate checked before release preparation. The actual release.yml note-extraction step produced a byte-identical body to `work/release-notes-0.3.0.md`; retained output: `/tmp/agentville-release-notes-m14dkxhe/notes.md`. Explicit authored-path coverage, script syntax, ShellCheck, version-patch applicability, and diff checks passed. A static scan of the 38 proposed public files found no strong credential-pattern matches. This is pre-change evidence, not versioned-candidate or publication verification. |
+| Release Verification 2 | Not run | Git and TOML | Pending | Implementation remains uncommitted; version bump has not run |
+| Release Verification 3 | Not run | Isolated package install | Pending | none |
+| Release Verification 4 | Not run | Local and GitHub Actions | Pending | Feature-tree checks passed; versioned candidate checks remain pending |
+| Release Verification 5 | Not run | Clean installation | Pending | none |
+| Release Verification 6 | Not run | Git and GitHub | Pending | No 0.3.0 tag or Release exists |
+| Release Verification 7 | Not run | Released installation | Pending | none |
+| Release Verification 8 | Not run | Committed documents | Pending | none |
+
+Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. Plan acceptance and execution authority remain pending.
+
+##### Closure Evidence
+
+- none
+
+#### G2 - Git Execution Authority
+
+Origin: 0.3.0 / G2
+GitHub Issue: none
+Status: Open
+
+##### Summary
+
+The owner delegated the prepared implementation and CHANGELOG commits and one initial branch push on 2026-10-22. Later version, master, tag, and publication operations remain separately governed. M4 cannot complete release execution under the current partial authorization.
+
+##### Completion Criteria
+
+- The owner accepts the concrete release plan and supplies the applicable execution authority, separately for commits, branch pushes, and previewed release actions.
+
+##### Verification Results
+
+| Observed At | Result | Evidence |
+| --- | --- | --- |
+| 2026-10-22 | Open | Commit/add and one initial branch Push were delegated for the prepared implementation and CHANGELOG. Later release actions remain outside that bounded execution. |
+
+##### Closure Evidence
+
+- none
+
+## Backlog
+
+### Work
+
+| ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+
+### Backlog Details
+
+No unassigned work.

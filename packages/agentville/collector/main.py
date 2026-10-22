@@ -14,12 +14,13 @@ from typing import Any, Protocol, TextIO
 
 from agentville import version
 from agentville.collector.adapters.claude import ClaudeAdapter
+from agentville.collector.adapters.antigravity import AntigravityAdapter
 from agentville.collector.adapters.codex import CodexAdapter
 from agentville.collector.config import BranchConfig, load_or_create, state_dir
 from agentville.collector.judge import Judge, ProjectResolver
 from agentville.collector.project import GitProjectResolver
 from agentville.collector.roster import Roster, atomic_write
-from agentville.collector.sender import Delivery, HttpSender
+from agentville.collector.sender import Delivery, HttpSender, SHARED_HOST_WARNING
 from agentville.common.observations import Observation
 from agentville.common.protocol import Envelope
 
@@ -32,6 +33,7 @@ Deliver = Callable[[list[dict[str, Any]]], Delivery]
 
 RETRY_MIN = timedelta(seconds=1)
 RETRY_MAX = timedelta(seconds=60)
+IDENTITY_WARNING_INTERVAL = timedelta(minutes=1)
 
 
 class SeqStore:
@@ -71,6 +73,9 @@ def build_adapters(config: BranchConfig) -> list[Adapter]:
     for entry in config.codex_homes:
         if os.path.isdir(entry.home):
             adapters.append(CodexAdapter(entry.home, account_alias=entry.account_alias))
+    for entry in config.antigravity_homes:
+        if os.path.isdir(os.path.join(entry.home, "antigravity-cli")):
+            adapters.append(AntigravityAdapter(entry.home, account_alias=entry.account_alias))
     return adapters
 
 
@@ -84,6 +89,7 @@ class Collector:
         seq_store: SeqStore,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         roster: Roster | None = None,
+        proc_root: str = "/proc",
     ) -> None:
         self.config = config
         self.adapters = adapters
@@ -97,6 +103,7 @@ class Collector:
         self._retry_at: datetime | None = None
         self._retry_delay = RETRY_MIN
         self._last_heartbeat: datetime | None = None
+        self._last_identity_warning: datetime | None = None
         self.judge = Judge(
             resolver,
             self._emit_judge,
@@ -104,6 +111,7 @@ class Collector:
             condition_for=config.condition_for,
             save=self._save_roster,
             alias_for=config.aliases.get,
+            proc_root=proc_root,
         )
         self._roster = roster
         if roster is not None:
@@ -127,14 +135,15 @@ class Collector:
 
     def tick(self) -> None:
         self._now = self._clock()
+        pending: list[Observation] = []
         for adapter in self.adapters:
             try:
                 observations = adapter.poll()
             except Exception as exc:  # noqa: BLE001 - one failing provider must not stop the others
                 self._log(f"{type(adapter).__name__}: {type(exc).__name__}: {exc}")
                 continue
-            for obs in observations:
-                self.judge.apply(obs)
+            pending.extend(observations)
+        self.judge.apply_batch(pending)
         self.judge.refresh_presence(self._now)
         self.judge.refresh_workload(self._now)
         if self._retry_at is not None and self._now < self._retry_at:
@@ -152,6 +161,10 @@ class Collector:
             return
         batch, self._batch = self._batch, []
         result = self._deliver(batch)
+        if result.shared_host_id and (self._last_identity_warning is None
+                                      or self._now - self._last_identity_warning >= IDENTITY_WARNING_INTERVAL):
+            self._log(SHARED_HOST_WARNING)
+            self._last_identity_warning = self._now
         if not result.ok:
             # Changes are not queued across a disconnection; the next contact starts with a snapshot.
             self._log(f"delivery failed: {result.error}")

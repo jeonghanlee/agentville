@@ -23,6 +23,7 @@
 - A `snapshot` that is not newer than HQ's state by `seq` and `sent_at` is answered with `need_snapshot`; a second such snapshot in answer is applied as a reset of a Branch whose clock moved back ([architecture.md](architecture.md) Section 4.1).
 
 - Transport: HTTP(S) POST of `{"messages": [...]}` to `/api/v1/ingest/messages`; one Branch per batch, at most 1000 messages (a larger batch is rejected with 413). Response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
+- A response can also contain `"warnings": ["shared_host_id"]` when the same `(branch_id, seq)` was stored with different envelope fields or payload. Exact retries produce no warning. The existing duplicate and sequence-reset rules still determine whether a message applies; the warning asks the operator to inspect shared identity or lost sequence state.
 
 ## 3. Envelope
 

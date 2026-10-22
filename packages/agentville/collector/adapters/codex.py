@@ -22,6 +22,7 @@ from typing import Any
 from agentville import version
 from agentville.collector.appserver import AppServerClient, AppServerError, RpcConnection, RpcError
 from agentville.collector.jsonl import JsonlTail
+from agentville.collector.process import Process, ProcessTable
 from agentville.common.observations import Kind, Observation, RawLocation, SessionStatus, ShiftKey, Source
 
 PROVIDER = "codex"
@@ -114,6 +115,7 @@ class _Shift:
     # Reset of the most used window in the latest token_count, for a limit reported only as an error.
     last_reset: datetime | None = None
     source: Source = Source.APP_SERVER
+    process: Process | None = None
 
 
 @dataclass
@@ -134,6 +136,7 @@ class CodexAdapter:
         connect: Callable[[], RpcConnection] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         account_alias: str | None = None,
+        proc_root: str = "/proc",
     ) -> None:
         self.home = home
         self.account_alias = account_alias
@@ -152,6 +155,8 @@ class CodexAdapter:
         self._not_employees: set[str] = set()
         # Rollout mtime when a daemon shift ended; a later write is a run outside the daemon.
         self._daemon_ended: dict[str, float] = {}
+        self._processes = ProcessTable(proc_root)
+        self._startup_files: dict[str, tuple[int, int, int]] = {}
 
     def _default_connect(self) -> RpcConnection:
         client = AppServerClient(socket_path(self.home), client_version=version())
@@ -160,6 +165,7 @@ class CodexAdapter:
 
     def poll(self) -> list[Observation]:
         now = self._clock()
+        self._processes.refresh()
         out: list[Observation] = []
         try:
             if self._conn is None:
@@ -363,6 +369,13 @@ class CodexAdapter:
         known = self._shifts.keys() | self._contractors.keys() | self._ignored | self._rollouts.keys() | self._not_employees
         pattern = os.path.join(glob.escape(self.home), "sessions", "*", "*", "*", "rollout-*.jsonl")
         for path in glob.glob(pattern):
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            file_version = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            if self._scanned_at is None:
+                self._startup_files[path] = file_version
             match = _ROLLOUT_NAME.fullmatch(os.path.basename(path))
             if match is None or match.group(1) in known:
                 continue
@@ -377,13 +390,25 @@ class CodexAdapter:
             except OSError:
                 continue
             if meta and is_employee_rollout(meta):
-                self._start_rollout(thread_id, path, meta, now, out)
+                process = self._processes.match_rollout(path, _from_iso(meta.get("timestamp")), str(meta.get("cwd") or ""))
+                if process is None and self._startup_files.get(path) == file_version:
+                    if path not in self._rollout_tails:
+                        tail = self._rollout_tails[path] = JsonlTail(path)
+                        try:
+                            tail.seek_end()
+                        except OSError:
+                            self._rollout_tails.pop(path, None)
+                    continue
+                self._start_rollout(thread_id, path, meta, now, out, process)
             elif meta is not None:
                 self._not_employees.add(thread_id)
         if self._scanned_at is None:
             self._scanned_at = now
 
-    def _start_rollout(self, thread_id: str, path: str, meta: dict[str, Any], now: datetime, out: list[Observation]) -> None:
+    def _start_rollout(
+        self, thread_id: str, path: str, meta: dict[str, Any], now: datetime,
+        out: list[Observation], process: Process | None = None,
+    ) -> None:
         tail = self._rollout_tails.get(path)
         if tail is None:
             tail = self._rollout_tails[path] = JsonlTail(path)
@@ -392,17 +417,22 @@ class CodexAdapter:
             if self._scanned_at is None or path in self._followed or created is None or created < self._scanned_at:
                 tail.seek_end()
             self._followed.add(path)
-        shift = _Shift(ShiftKey(PROVIDER, f"rollout:{thread_id}"), thread_id, tail, source=Source.SESSION_LOG)
+        shift = _Shift(ShiftKey(PROVIDER, f"rollout:{thread_id}"), thread_id, tail,
+                       source=Source.SESSION_LOG, process=process)
         self._rollouts[thread_id] = shift
         data = {"cwd": str(meta.get("cwd") or ""), "session_id": thread_id, "runtime": {"type": "rollout"},
                 "account_alias": self.account_alias, "max_confidence": "low"}
+        if process is not None:
+            data.update(self._processes.observation_identity(process))
         out.append(self._obs(Kind.PROCESS_STARTED, shift, now, now, data))
         out.append(self._obs(Kind.SESSION_STARTED, shift, now, now, {"session_id": thread_id}))
 
     def _expire_rollouts(self, now: datetime, out: list[Observation]) -> None:
         for shift in list(self._rollouts.values()):
             mtime = _mtime(shift.tail.path) if shift.tail else None
-            if mtime is None or now.timestamp() - mtime > ROLLOUT_WINDOW.total_seconds():
+            live = self._processes.processes.get(shift.process.pid) if shift.process else None
+            exited = shift.process is not None and (live is None or live.identity != shift.process.identity)
+            if exited or mtime is None or now.timestamp() - mtime > ROLLOUT_WINDOW.total_seconds():
                 self._end(shift, now, out)
 
     def _rollout_path(self, thread: dict[str, Any]) -> str | None:
@@ -593,6 +623,7 @@ class CodexAdapter:
         self._read_rollout(shift, now, out)
         if self._rollouts.get(shift.thread_id) is shift:
             del self._rollouts[shift.thread_id]
+            self._ended_by_daemon(shift.thread_id, shift.tail)
         else:
             self._shifts.pop(shift.thread_id, None)
             self._ended_by_daemon(shift.thread_id, shift.tail)

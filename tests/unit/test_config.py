@@ -118,3 +118,14 @@ def test_generated_config_lists_empty_aliases(tmp_path):
     path = tmp_path / "config.yaml"
     load_or_create(str(path), str(tmp_path))
     assert yaml.safe_load(path.read_text())["aliases"] == {}
+
+
+def test_antigravity_discovery_requires_its_subtree(tmp_path):
+    (tmp_path / ".gemini").mkdir()
+    active = tmp_path / ".gemini-work/antigravity-cli"
+    active.mkdir(parents=True)
+    path = tmp_path / "config.yaml"
+    config = load_or_create(str(path), str(tmp_path))
+    assert [(entry.home, entry.account_alias) for entry in config.antigravity_homes] == [
+        (str(active.parent), "antigravity-account-1")]
+    assert parse({"host": {"id": "b"}}).antigravity_homes == []

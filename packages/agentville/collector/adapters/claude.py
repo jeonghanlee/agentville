@@ -168,13 +168,14 @@ class ClaudeAdapter:
         self,
         home: str,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-        is_alive: Callable[[int, str | None], bool] = _default_is_alive,
+        is_alive: Callable[[int, str | None], bool] | None = None,
         account_alias: str | None = None,
+        proc_root: str = "/proc",
     ) -> None:
         self.home = home
         self.account_alias = account_alias
         self._clock = clock
-        self._is_alive = is_alive
+        self._is_alive = is_alive or (lambda pid, start: _default_is_alive(pid, start, proc_root))
         self._shifts: dict[int, _Shift] = {}
         self._attached_at: datetime | None = None
         self._followed: set[str] = set()
@@ -260,6 +261,7 @@ class ClaudeAdapter:
                 Source.SESSION_FILE,
                 {
                     "pid": pid,
+                    "proc_start": str(doc.get("procStart")) if doc.get("procStart") is not None else None,
                     "cwd": shift.cwd,
                     "session_id": doc.get("sessionId"),
                     "kind": doc.get("kind"),

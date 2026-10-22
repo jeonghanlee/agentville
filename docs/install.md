@@ -18,6 +18,9 @@ AgentVille runs as the login user, without root, as systemd user services.
 - Linux with a systemd user instance. Without systemd, start the two programs in the foreground or with any process supervisor, using the same arguments as the `ExecStart` lines of the unit files in `deploy/systemd/`.
 - Python 3.12 or later, `venv`, and `git`.
 - On Branches: Claude Code and/or Codex CLI. Codex runs that use its shared app-server daemon are observed live, including `waiting`. Other Codex runs (e.g. `codex exec`) are observed from their rollout files only, with low confidence and without `waiting` ([Architecture](architecture.md) Section 3.4).
+- Antigravity CLI (`agy`) is also supported through its live presence locks and transcripts. It reports work, completion, idle, error, and unknown activity; it has no supported waiting, thinking, or usage-limit signal. Enable its account home in [Configuration](configuration.md).
+
+For SSH workspaces and containers without a systemd user instance, follow [Run a remote Collector](remote-development.md), including persistent storage, tunnel boundaries, ownership, and manual restart.
 
 | Distribution | Packages |
 |---|---|

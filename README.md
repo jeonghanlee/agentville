@@ -51,6 +51,8 @@ User manual: [jeonghanlee.github.io/agentville](https://jeonghanlee.github.io/ag
 
 Specifications: [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Test Fixtures](docs/fixtures.md).
 
+Work plans: [0.3.0](docs/milestone-0.3.0.md), [0.4.0](docs/milestone-0.4.0.md).
+
 Release history: [CHANGELOG](CHANGELOG.md).
 
 ## Development

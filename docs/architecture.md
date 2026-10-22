@@ -96,7 +96,8 @@ A roster written before seats were unique per provider on the Host may hold dupl
 
 - A subagent is an `AgentInstance` with `parent_instance_id`.
 - In-process subagent: identified by `(parent_instance_id, provider_subagent_id)`.
-- Child-process agent (e.g. another agent CLI launched from the parent's shell): identified by process; parent resolved from the process tree. Not implemented (Section 9).
+- Child-process agent (e.g. Claude launching `codex exec` from its shell): identified by PID and process start ticks; the nearest observed ancestor is resolved through intermediate shell processes. It is a Contractor of that ancestor's root Employee, with `origin: child_process`. If the parent is observed later, the independent Employee shift ends and its ID and history remain off duty; the current child activity and existing Contractors move to the parent's root Employee. Established parent assignment remains fixed and is never inferred from a working directory alone.
+- A process relationship needs a process-backed parent observation. Codex app-server threads expose no PID, so a shared daemon alone cannot identify which loaded thread launched a child; that relationship remains unassigned.
 - A Contractor's lifetime does not exceed its parent's.
 
 ### 1.6 Condition
@@ -214,7 +215,7 @@ An Adapter emits only the observations its provider exposes.
 
 | Observation | Content | Used for |
 |---|---|---|
-| `process.started` | pid, start time, working directory, parent pid, runtime location, highest confidence its sources support | On duty, Project, seat assignment |
+| `process.started` | pid and process start ticks when available, working directory, runtime location, highest confidence its sources support; parent PID is resolved locally through the process table | On duty, Project, seat assignment |
 | `process.exited` | pid | Off duty |
 | `session.started` | session id | Seat assignment |
 | `session.status` | normalized live status: `active`, `idle`, `waiting`, `unknown` | Activity state |
@@ -234,7 +235,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 - Subagent observations carry the parent's shift. A Contractor's id is derived from the parent instance id and the provider subagent id; neither the provider id nor prompts, task descriptions, subagent types, or tool arguments are sent.
 - Contractors are held in memory only, included in snapshots while hired, and ended with their parent shift.
 - A provider usage-limit error reports `limit.reached`, not `agent.error`. `limited` persists through `turn.completed` and `idle` status. It clears on `limit.cleared` (to `idle`), `turn.started`, `tool.started`, or `active` status. `reset_at` is sent while `limited`.
-- Child-process Contractors (Section 1.5) are not yet implemented.
+- The Collector gathers one tick's observations before the Judge assigns Employees. Known shifts that end are processed before replacements, new process-backed parents start before descendants, and other observations retain their order. Child activity uses the same state logic as Employee activity but emits Contractor payloads instead of a second Employee. A child's in-process subagents also belong to the root Employee; all end with that Employee's shift.
 
 ### 3.3 Reading
 
@@ -252,7 +253,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 
 ### 3.4 Provider Sources
 
-Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.163.0).
+Provider structures: Claude Code 2.1.303, Codex CLI 0.163.0 (app-server 0.162.1 / 0.163.0), and Antigravity CLI 1.4.5. Antigravity presence locks and transcript field structure are observed on a live host; state transitions are covered by synthetic fixtures.
 
 #### Claude Code
 
@@ -314,21 +315,30 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - Responses carry no `jsonrpc` field; the client does not require it. Server-to-client requests (approvals) are never answered.
 - On loss of the app-server connection, every Codex shift and Contractor is reported `unknown` until the next seed.
 - Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only, as rollout-only shifts:
-  - Each poll lists `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl` and takes the files modified within the last 30 minutes whose thread is not known from the app-server (loaded, ignored, a Contractor, or a shift). A thread whose daemon shift or Contractor ended is taken only after its rollout is written again.
+  - Each poll lists `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl` and takes the files modified within the last 30 minutes whose thread is not known from the app-server (loaded, ignored, a Contractor, or a shift). At attach, a pre-existing rollout needs a matching live process; otherwise its file version is retained and it starts no shift until the file changes. This prevents completed children appearing as colleagues after a Collector restart or container rebuild. A thread whose daemon or rollout-only shift or Contractor ended is taken only after its rollout is written again.
+  - Rollout ownership first uses a unique codex process holding the rollout open. Descriptor discovery examines only codex processes. When that evidence is unavailable, the match requires a unique codex process whose start is within five seconds before rollout creation (with one second of clock rounding tolerance); an available process working directory must agree with the rollout. An inaccessible working directory does not rule out an otherwise unique start-time match. Ambiguous matches remain unassigned. PID and start ticks are checked again by the Judge before using ancestry.
   - The rollout's `session_meta` record (within its first 5 lines) gives `cwd`. A rollout whose `session_meta` is not yet complete is retried on the next poll; one without it is skipped. Subagent rollouts (`source` naming a subagent, or `parent_thread_id` set) and `thread_source: system` are skipped, as for app-server threads.
   - The shift is `rollout:<thread-id>` with runtime `{"type": "rollout"}`, the account alias of the Codex home, source `session_log`, and confidence `low` for every state.
   - Reading follows Section 3.3: a rollout found at attach is read from its end; one created after attach is read from its start; one that an earlier rollout-only shift of this run followed continues from its last position, and one followed only by a daemon shift is read from its end.
   - State comes from the rollout records as for daemon threads: `task_started`, tool calls and outputs, `task_complete` with the error and limit rules below, `token_count` limits, model and effort. No live status exists, so `waiting` is not produced and a shift found at attach is `unknown` until its next turn or tool record.
-  - The shift ends (`process.exited`) when the rollout has not been written for 30 minutes or is gone. When the daemon later reports the same thread, the rollout-only shift ends and the daemon shift starts in the same poll, continuing the rollout from the same position; seat rule 1 returns it to the same Employee.
+  - A process-backed shift ends (`process.exited`) when that process exits or its PID has a different start time. A rollout-only shift also ends when the rollout has not been written for 30 minutes or is gone. When the daemon later reports the same thread, the rollout-only shift ends and the daemon shift starts in the same poll, continuing the rollout from the same position; seat rule 1 returns it to the same Employee.
 
 #### Antigravity CLI
 
 | Purpose | Source |
 |---|---|
-| Live sessions | `~/.gemini/antigravity-cli/presence/<conversation-uuid>.lock` held by a live `agy` process |
-| Detail | `brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl` (`type`, `source`, `status`: `DONE`, `ERROR`, `RUNNING`) |
+| Live sessions | `<gemini-home>/antigravity-cli/presence/<conversation-uuid>.lock`, matched by device and inode to a held kernel lock in `/proc/locks`, owned by a live `agy` process |
+| Shift identity | Conversation id, owning PID, and process start ticks |
+| Project | Owning process working directory; Common Office if unavailable |
+| Detail | `<gemini-home>/antigravity-cli/brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl`; `created_at`, `step_index`, `type`, `source`, `status`, `tool_calls` |
+| Turn | `USER_INPUT` from `USER_EXPLICIT` starts work; a `PLANNER_RESPONSE` from `MODEL` without tool calls and with `DONE` completes the turn; `RUNNING` starts work |
+| Tool | A `GENERIC` from `MODEL` carries `tool_calls` (`name`, `args`); `RUNNING` starts each step/index once, `DONE` or `ERROR` finishes it. Arguments and output are ignored. |
+| Error | `ERROR_MESSAGE`, or a `PLANNER_RESPONSE` without tool calls and with `ERROR`. Tool errors remain work. |
+| Account | Configured Gemini home containing `antigravity-cli`; separate from Gemini CLI account inference |
 
-No Antigravity Adapter is implemented; the sources above are recorded for one (Section 9). Antigravity waiting and usage-limit signals are not yet identified.
+- The Adapter reports `working`, `completed` followed by `idle`, `error`, or `unknown`, capped at medium confidence. It produces no `thinking`, `waiting`, or `limited` activity without an identified live signal. All documentation uses this state set.
+- At attach, the latest supported complete record in the transcript tail seeds activity, without replaying tool counts or historical turns. Complete historical records are fingerprinted once from activity fields and tool names; only their SHA-256 digests are retained, excluding content and tool arguments. The shift retains these digests until it ends so rotation or truncation cannot replay an already observed record. Subsequent new records are read incrementally; tool completion clears the tool name. A stale lock file without an owning live process produces no colleague. Loss of the held lock or process ends the shift.
+- Existing configurations need `providers.antigravity` enabled explicitly. First-start discovery examines `~/.gemini` and `~/.gemini-*` only when they contain `antigravity-cli`. These names overlap Gemini CLI homes and are not account identity evidence by themselves.
 
 ### 3.5 Configuration
 
@@ -350,6 +360,8 @@ providers:
   codex:
     - {home: ~/.codex, account_alias: codex-account-1}
     - {home: ~/.codex-2, account_alias: codex-account-2}
+  antigravity:
+    - {home: ~/.gemini, account_alias: antigravity-account-1}
 conditions:
   - {provider: claude, fast_mode: true, condition: extra-coffee}
   - {provider: "*", effort: high, condition: study-mode}
@@ -442,6 +454,8 @@ A Branch is reported unreachable when no message arrived within three heartbeat 
 | `GET` | `/api/v1/stats` | Ingest totals since HQ start |
 
 Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
+
+If a stored `(branch_id, seq)` has different `kind`, `event_at`, `sent_at`, or decoded payload, the response includes `"warnings": ["shared_host_id"]`. Exact retries do not warn. Sequence and clock resets retain their existing behavior; lost sequence state can also trigger this diagnostic. The Collector logs the shared-identity warning at most once per minute. The warning does not establish that two Collectors exist and cannot distinguish identical messages.
 
 - Every `GET` under `/api/v1/` is a read endpoint and requires the viewer token when one is set (Section 4.3).
 - Times in query parameters are ISO 8601 with an offset (`Z` or `+hh:mm`). A missing, malformed, or offset-less time is answered with 400.
@@ -538,6 +552,7 @@ Configuration file (YAML, mode 0600 required, read at start only):
 - Copy is plain and factual: interface text states what is shown or what to do, without slogans, decorative captions, or exclamations. Labels use noun phrases; Korean sentences use 합니다체.
 - Language: English and Korean. Every visible string, including accessible names, titles, and alternative text, comes from one dictionary in `i18n.js` through a `t(key, params)` helper. The display settings offer English / 한국어. The default follows the browser language (Korean when it starts with `ko`, otherwise English); the choice is kept in local storage when available. Switching re-renders the page in place and sets `<html lang>`. Dates and times use the matching locale (`en-US` or `ko-KR`) with the Branch time-zone rules below. Branch-provided text (Branch, Project, and Employee aliases, locations, tool names) is never translated.
 - Employee name: the `alias` when set, otherwise the provider name and seat ("Codex 2"); seats are unique per provider on a Branch (Section 1.4). The same name is used in the office, lists, tables, the Timeline, the Work log, and notifications.
+- Provider labels include Antigravity with initials `AG`. Branch aliases that collide include the full Branch id, including colleague detail, selectors, and work-log group headings.
 - Employee detail: current activity, condition, tool name, workload, Project, Branch alias, usage-limit reset time when known, waiting time of the browser day ("Waited today", duration and number of waits, from the work log; not shown while replaying), the `agent_id` in small monospace text for use in the Branch configuration `aliases`, and the Employee's Contractors with provider badge, activity, and tool name.
 - Status filters and Branch indicators highlight waiting Employees, errors, and unverified connections.
 - Employee detail ends with factual notes only: the reason for an unverified, limited, or unmeasured state, and "Last observed" with the time of the Branch's last report.
@@ -637,6 +652,8 @@ agentville/
 | M3 | Pixel office. |
 | M4 | Hardening and release. |
 
+Release work records: [0.3.0](milestone-0.3.0.md) and [0.4.0](milestone-0.4.0.md). Their M identifiers are local to each document.
+
 ## 9. Open Items
 
 ### 9.1 Planned, not implemented
@@ -645,8 +662,6 @@ agentville/
 - History of account and model changes per Employee (Section 1.4). The `account.changed` observation is defined but not emitted.
 - Closing a Branch or Project at HQ, automatic reopening, and its notification (Section 1.8).
 - Monitor count by workload, and a per-Branch workload window and mapping (Section 2.5). The window is fixed at 5 minutes.
-- Child-process Contractors (Section 1.5, Section 3.2).
-- Antigravity Adapter (Section 3.4).
 - Precomputed daily totals: each work log request is computed from the recorded changes (Section 4.5).
 - Contractors in the work log, and a Branch filter in the Timeline.
 

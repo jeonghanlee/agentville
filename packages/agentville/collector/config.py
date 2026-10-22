@@ -81,6 +81,7 @@ class BranchConfig:
     heartbeat_interval: int = 30
     # Employee display names by agent_id; sent as the agent ``alias``.
     aliases: dict[str, str] = field(default_factory=dict)
+    antigravity_homes: list[ProviderHome] = field(default_factory=list)
 
     def branch_payload(self) -> dict[str, Any]:
         return {
@@ -132,6 +133,10 @@ def _homes(entries: Any, provider: str) -> list[ProviderHome]:
 
 
 def _default_document(home: str) -> dict[str, Any]:
+    antigravity = [entry for entry in _discover_homes(home, "gemini")
+                   if os.path.isdir(os.path.join(entry["home"], "antigravity-cli"))]
+    for number, entry in enumerate(antigravity, 1):
+        entry["account_alias"] = account_alias("antigravity", number)
     return {
         "host": {
             "id": str(uuid.uuid4()),
@@ -145,6 +150,7 @@ def _default_document(home: str) -> dict[str, Any]:
         "providers": {
             "claude": _discover_homes(home, "claude", keep_primary=True),
             "codex": _discover_homes(home, "codex"),
+            "antigravity": antigravity,
         },
         "conditions": [dict(rule) for rule in DEFAULT_CONDITIONS],
         "collector": {"poll_interval": 1.0, "heartbeat_interval": 30},
@@ -241,6 +247,7 @@ def parse(document: dict[str, Any]) -> BranchConfig:
         thresholds=thresholds,
         claude_homes=_homes(providers.get("claude"), "claude"),
         codex_homes=_homes(providers.get("codex"), "codex"),
+        antigravity_homes=_homes(providers.get("antigravity"), "antigravity"),
         conditions=list(conditions),
         poll_interval=poll_interval,
         heartbeat_interval=heartbeat_interval,

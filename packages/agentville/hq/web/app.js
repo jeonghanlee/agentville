@@ -124,9 +124,14 @@ function conditionName(condition) {
 function repositoryTag(projectId) {
   return projectId === COMMON ? null : el("span", { class: "room-kind" }, t("room.repository"));
 }
-function branchName(branch) { return branch?.branch?.alias || t("branch.unnamed"); }
+function branchName(branch, peers = current.branches) {
+  const alias = branch?.branch?.alias || t("branch.unnamed");
+  const duplicate = branch && peers.some((other) => other.branch_id !== branch.branch_id
+    && (other.branch?.alias || t("branch.unnamed")) === alias);
+  return duplicate ? alias + " (" + branch.branch_id + ")" : alias;
+}
 function providerInitials(provider) {
-  return provider === "claude" ? "CL" : provider === "codex" ? "CX" : String(provider).slice(0, 2).toUpperCase();
+  return provider === "claude" ? "CL" : provider === "codex" ? "CX" : provider === "antigravity" ? "AG" : String(provider).slice(0, 2).toUpperCase();
 }
 function badge(provider) {
   return el("span", { class: "provider" + (provider === "codex" ? " codex" : "") }, providerInitials(provider));
@@ -167,7 +172,7 @@ function contractorTool(contractor) {
   return contractorState(contractor) === "working" ? contractor.tool || "" : "";
 }
 function providerName(provider) {
-  return provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : String(provider);
+  return provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : provider === "antigravity" ? "Antigravity" : String(provider);
 }
 // A completed turn shows a brief checkmark even when idle follows quickly.
 // Completed and idle can arrive together, so working or thinking turning idle also counts as a finished turn.
@@ -922,7 +927,7 @@ function renderWorklog(root) {
   const controls = worklogControls();
   if (worklogBranch && !live.branches.some((b) => b.branch_id === worklogBranch)) worklogBranch = "";
   kept.worklogBranch.replaceChildren(el("option", { value: "" }, t("worklog.allBranches")),
-    ...live.branches.map((b) => el("option", { value: b.branch_id }, branchName(b))));
+    ...live.branches.map((b) => el("option", { value: b.branch_id }, branchName(b, live.branches))));
   kept.worklogBranch.value = worklogBranch;
   loadWorklog();
   const zone = worklogZone();
@@ -939,7 +944,7 @@ function renderWorklog(root) {
   const body = worklogFailed ? el("p", { class: "empty-list" }, t("worklog.failed"))
     : !worklogData ? el("p", { class: "empty-list" }, t("worklog.loading"))
     : outside || !start ? el("p", { class: "empty-list" }, t("worklog.outside"))
-    : rows.length ? worklogTable(rows, { colleague: colleagueName, branch: (id) => branchName(branches.get(id)),
+    : rows.length ? worklogTable(rows, { colleague: colleagueName, branch: (id) => branchName(branches.get(id), [...branches.values()]),
       project: (r) => r.project_alias || t("project.unnamed"), badge, repository: repositoryTag })
     : el("p", { class: "empty-list" }, t("worklog.none"));
   root.replaceChildren(el("section", { class: "data-card worklog-card" }, el("h2", {}, t("worklog.title")), controls,

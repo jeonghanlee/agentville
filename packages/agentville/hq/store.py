@@ -129,14 +129,18 @@ class IngestResult:
     duplicates: int = 0
     stale: int = 0
     need_snapshot: bool = False
+    shared_host_id: bool = False
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "accepted": self.accepted,
             "duplicates": self.duplicates,
             "stale": self.stale,
             "need_snapshot": self.need_snapshot,
         }
+        if self.shared_host_id:
+            result["warnings"] = ["shared_host_id"]
+        return result
 
 
 def _parse(ts: str) -> datetime:
@@ -337,6 +341,14 @@ class Store:
     def _apply(self, message: dict[str, Any], now: datetime, result: IngestResult) -> bool:
         """Apply one message; True when it was a snapshot applied."""
         branch_id, seq, kind = message["branch_id"], message["seq"], message["kind"]
+        previous = self._db.execute(
+            "SELECT kind, event_at, sent_at, payload FROM messages WHERE branch_id = ? AND seq = ?",
+            (branch_id, seq),
+        ).fetchone()
+        if previous and (previous[0], previous[1], previous[2], json.loads(previous[3])) != (
+            kind, message["event_at"], message["sent_at"], message["payload"]
+        ):
+            result.shared_host_id = True
         clock_reset = False
         if kind == "snapshot":
             row = self._db.execute(

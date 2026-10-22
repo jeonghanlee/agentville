@@ -8,11 +8,12 @@ from __future__ import annotations
 import uuid
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from agentville.collector.project import Project
+from agentville.collector.process import ProcessTable
 from agentville.common.observations import Kind, Observation, SessionStatus, ShiftKey, Source
 from agentville.common.protocol import iso
 
@@ -36,6 +37,7 @@ class Contractor:
     state: str
     state_since: datetime
     tool: str | None = None
+    origin: str = "in_process"
 
 
 @dataclass
@@ -95,6 +97,7 @@ class Judge:
         condition_for: Callable[[str, str | None, dict[str, Any]], str] = lambda provider, model, settings: "normal",
         save: Callable[[list[dict[str, Any]]], None] = lambda records: None,
         alias_for: Callable[[str], str | None] = lambda agent_id: None,
+        proc_root: str = "/proc",
     ) -> None:
         self._resolver = resolver
         self._emit = emit
@@ -105,6 +108,99 @@ class Judge:
         self._alias_for = alias_for
         self.agents: list[Agent] = []
         self._by_shift: dict[ShiftKey, Agent] = {}
+        self._processes = ProcessTable(proc_root)
+        self._shift_processes: dict[ShiftKey, tuple[int, str]] = {}
+        self._child_parents: dict[ShiftKey, tuple[Agent, str]] = {}
+
+    def apply_batch(self, observations: list[Observation]) -> None:
+        """Resolve process ancestry before assigning new Employees in one poll."""
+        self._processes.refresh()
+        groups: dict[ShiftKey, list[Observation]] = {}
+        for obs in observations:
+            groups.setdefault(obs.shift, []).append(obs)
+            if obs.kind is Kind.PROCESS_STARTED:
+                process = self._processes.processes.get(obs.data.get("pid"))
+                if process is not None and str(obs.data.get("proc_start")) == process.start:
+                    self._shift_processes[obs.shift] = process.identity
+        bindings: dict[int, list[ShiftKey]] = {}
+        for shift, identity in self._shift_processes.items():
+            process = self._processes.processes.get(identity[0])
+            if process is not None and process.identity == identity:
+                bindings.setdefault(process.pid, []).append(shift)
+
+        def order(key: ShiftKey) -> int:
+            identity = self._shift_processes.get(key)
+            process = self._processes.processes.get(identity[0]) if identity else None
+            depth = len(list(self._processes.ancestors(process))) if process else 0
+            return depth
+
+        ending = {key for key, batch in groups.items() if key in self._by_shift
+                  and any(o.kind is Kind.PROCESS_EXITED for o in batch)}
+        for obs in observations:
+            if obs.shift in ending:
+                self.apply(obs)
+                if obs.kind is Kind.PROCESS_EXITED:
+                    self._shift_processes.pop(obs.shift, None)
+        starts = [obs for obs in observations if obs.kind is Kind.PROCESS_STARTED and obs.shift not in ending]
+        for obs in sorted(starts, key=lambda o: order(o.shift)):
+            parent_shift = self._process_parent(obs.shift, bindings)
+            if parent_shift is not None:
+                obs = replace(obs, data={**obs.data, "parent_shift": parent_shift})
+            self.apply(obs)
+        if observations:
+            at = max(obs.observed_at for obs in observations)
+            for shift in sorted(list(self._by_shift), key=order):
+                if shift in self._child_parents:
+                    continue
+                parent_shift = self._process_parent(shift, bindings)
+                if parent_shift is not None:
+                    self._reclassify_child(shift, parent_shift, at)
+        for obs in observations:
+            if obs.shift not in ending and obs.kind is not Kind.PROCESS_STARTED:
+                self.apply(obs)
+                if obs.kind is Kind.PROCESS_EXITED:
+                    self._shift_processes.pop(obs.shift, None)
+
+    def _process_parent(self, shift: ShiftKey, bindings: dict[int, list[ShiftKey]]) -> ShiftKey | None:
+        identity = self._shift_processes.get(shift)
+        process = self._processes.processes.get(identity[0]) if identity else None
+        if process is None or process.identity != identity:
+            return None
+        for ancestor in self._processes.ancestors(process):
+            candidates = bindings.get(ancestor.pid, [])
+            if len(candidates) == 1 and candidates[0] in self._by_shift:
+                return candidates[0]
+        return None
+
+    def _reclassify_child(self, shift: ShiftKey, parent_shift: ShiftKey, at: datetime) -> None:
+        """Preserve Employee history while moving its live shift and Contractors to the root."""
+        agent, parent = self._by_shift[shift], self._by_shift[parent_shift]
+        owner = self._child_parents.get(parent_shift)
+        root = owner[0] if owner else parent
+        inst = agent.instance
+        if inst is None or root.instance is None:
+            return
+        descendants = {key: (self._by_shift[key], sub_id)
+                       for key, (previous_root, sub_id) in self._child_parents.items() if previous_root is agent}
+        contractors = dict(inst.contractors)
+        self._on_exited(agent, Observation(Kind.PROCESS_EXITED, shift, at, at, Source.PROCESS))
+        sub_id = f"process:{shift.provider}:{shift.native_id}"
+        self._by_shift[shift] = replace(agent, instance=replace(inst, contractors={}))
+        self._child_parents[shift] = (root, sub_id)
+        contractor_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentville:contractor:{root.instance.instance_id}:{sub_id}"))
+        root.instance.contractors[sub_id] = Contractor(contractor_id, shift.provider, inst.state, at,
+                                                      inst.tool, origin="child_process")
+        self._emit_activity(self._by_shift[shift], at)
+        process_ids = {child_sub_id for _, child_sub_id in descendants.values()}
+        for key, contractor in contractors.items():
+            target = key if key in process_ids or any(key.startswith(prefix + "/") for prefix in process_ids) else f"{sub_id}/{key}"
+            contractor_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentville:contractor:{root.instance.instance_id}:{target}"))
+            moved = replace(contractor, contractor_id=contractor_id)
+            root.instance.contractors[target] = moved
+            self._emit("contractor", at, self.contractor_payload(root.instance, moved, "hired"))
+        for child_shift, (child, child_sub_id) in descendants.items():
+            self._by_shift[child_shift] = child
+            self._child_parents[child_shift] = (root, child_sub_id)
 
     def apply(self, obs: Observation) -> None:
         if obs.kind is Kind.PROCESS_STARTED:
@@ -114,11 +210,20 @@ class Judge:
         if agent is None or agent.instance is None:
             return
         inst = agent.instance
+        owner = self._child_parents.get(obs.shift)
+        if owner is not None and obs.kind in (Kind.SUBAGENT_STARTED, Kind.SUBAGENT_STATUS, Kind.SUBAGENT_ENDED):
+            root, sub_id = owner
+            if root.instance is not None:
+                self.apply(replace(obs, shift=root.instance.shift,
+                                   data={**obs.data, "subagent_id": f"{sub_id}/{obs.data.get('subagent_id')}"}))
+            return
         match obs.kind:
             case Kind.PROCESS_EXITED:
                 self._on_exited(agent, obs)
             case Kind.SESSION_STARTED:
                 inst.session_id = obs.data.get("session_id")
+                if owner is not None:
+                    return
                 if inst.session_id:
                     # Only the colleague who last worked on a session keeps it, for seat rule 1.
                     for other in self.agents:
@@ -154,7 +259,7 @@ class Judge:
                 if inst.state != "waiting":
                     self._set(agent, obs, "working", "high", force=True)
             case Kind.TOOL_FINISHED:
-                inst.tool = None
+                inst.tool = obs.data.get("remaining_tool")
                 if inst.state == "working":
                     self._emit_activity(agent, obs.event_at)
             case Kind.TURN_COMPLETED:
@@ -183,7 +288,25 @@ class Judge:
                 self._emit_agent(agent, obs.event_at)
 
     def _on_started(self, obs: Observation) -> None:
+        if obs.shift in self._by_shift:
+            return
         data = obs.data
+        parent = self._by_shift.get(data.get("parent_shift"))
+        if parent is not None and parent.instance is not None:
+            owner = self._child_parents.get(parent.instance.shift)
+            root = owner[0] if owner is not None else parent
+            if root.instance is None:
+                return
+            sub_id = f"process:{obs.shift.provider}:{obs.shift.native_id}"
+            child = Agent(self._new_id(), root.project, obs.shift.provider, 0, obs.event_at)
+            child.instance = Instance(self._new_id(), obs.shift, obs.event_at, {}, state_since=obs.event_at)
+            self._by_shift[obs.shift] = child
+            self._child_parents[obs.shift] = (root, sub_id)
+            contractor_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"agentville:contractor:{root.instance.instance_id}:{sub_id}"))
+            root.instance.contractors[sub_id] = Contractor(contractor_id, obs.shift.provider, "unknown", obs.event_at,
+                                                          origin="child_process")
+            self._emit_activity(child, obs.event_at)
+            return
         project = self._resolver.resolve(data.get("cwd", ""))
         runtime = data.get("runtime") or {}
         location = runtime.get("location")
@@ -246,9 +369,23 @@ class Judge:
 
     def _on_exited(self, agent: Agent, obs: Observation) -> None:
         assert agent.instance is not None
+        owner = self._child_parents.pop(obs.shift, None)
+        if owner is not None:
+            root, sub_id = owner
+            if root.instance is not None:
+                for key in list(root.instance.contractors):
+                    if key == sub_id or key.startswith(sub_id + "/"):
+                        contractor = root.instance.contractors.pop(key)
+                        self._emit("contractor", obs.event_at, self.contractor_payload(root.instance, contractor, "ended"))
+            self._by_shift.pop(obs.shift, None)
+            return
         # A Contractor's lifetime does not exceed its parent's.
         for contractor in agent.instance.contractors.values():
             self._emit("contractor", obs.event_at, self.contractor_payload(agent.instance, contractor, "ended"))
+        for shift, (root, _) in list(self._child_parents.items()):
+            if root is agent:
+                self._child_parents.pop(shift)
+                self._by_shift.pop(shift, None)
         self._by_shift.pop(obs.shift, None)
         agent.instance = None
         agent.presence_since = obs.event_at
@@ -268,6 +405,8 @@ class Judge:
         self._emit_activity(agent, obs.event_at)
 
     def _emit_agent(self, agent: Agent, at: datetime) -> None:
+        if agent.instance is not None and agent.instance.shift in self._child_parents:
+            return
         payload = self.agent_payload(agent, at)
         agent.reported_presence = payload["presence"]
         self._emit("agent", at, payload)
@@ -340,6 +479,17 @@ class Judge:
         return len(inst.tool_times)
 
     def _emit_activity(self, agent: Agent, at: datetime) -> None:
+        inst = agent.instance
+        owner = self._child_parents.get(inst.shift) if inst else None
+        if owner is not None:
+            root, sub_id = owner
+            contractor = root.instance.contractors.get(sub_id) if root.instance else None
+            if contractor is not None and inst is not None:
+                if contractor.state != inst.state:
+                    contractor.state_since = at
+                contractor.state, contractor.tool = inst.state, inst.tool if inst.state == "working" else None
+                self._emit("contractor", at, self.contractor_payload(root.instance, contractor, "hired"))
+            return
         self._emit("activity", at, self.activity_payload(agent, at))
 
     def agent_payload(self, agent: Agent, now: datetime) -> dict[str, Any]:
@@ -380,7 +530,7 @@ class Judge:
             "contractor_id": contractor.contractor_id,
             "parent_instance_id": inst.instance_id,
             "provider": contractor.provider,
-            "origin": "in_process",
+            "origin": contractor.origin,
             "status": status,
             "state": contractor.state,
             "state_since": iso(contractor.state_since),
