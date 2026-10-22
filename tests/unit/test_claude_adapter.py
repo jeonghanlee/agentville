@@ -240,3 +240,32 @@ def test_shift_carries_the_account_alias(tmp_path):
     _session(tmp_path)
     started = [o for o in adapter.poll() if o.kind is Kind.PROCESS_STARTED]
     assert started[0].data["account_alias"] == "claude-account-2"
+
+
+def _limit_error(resets_at):
+    quota = {"status": "<status>", "rateLimitType": "<type>", "resetsAt": resets_at, "isUsingOverage": False,
+             "overageStatus": "<status>", "overageDisabledReason": "<text>", "unifiedRateLimitFallbackAvailable": False}
+    return {"type": "assistant", "isApiErrorMessage": True, "error": "rate_limit", "quotaLimits": quota,
+            "message": {"model": "<synthetic>", "stop_reason": "stop_sequence", "content": [{"type": "text", "text": "<text>"}]}}
+
+
+def test_usage_limit_record_reports_limit_with_reset(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    reset = datetime(2026, 1, 1, 5, tzinfo=UTC)
+    for value in (1767243600, 1767243600000, "2026-01-01T05:00:00Z", "<text>", None):
+        _transcript(tmp_path, [_limit_error(value)])
+        observations = [(o.kind, o.data) for o in adapter.poll()]
+        expected = reset if value not in ("<text>", None) else None
+        assert observations == [(Kind.LIMIT_REACHED, {"reset_at": expected})], value
+
+
+def test_api_error_without_quota_limits_is_an_error(tmp_path):
+    _session(tmp_path)
+    adapter = _adapter(tmp_path)
+    adapter.poll()
+    record = _limit_error(None)
+    del record["quotaLimits"]
+    _transcript(tmp_path, [record])
+    assert _kinds(adapter.poll()) == [Kind.AGENT_ERROR]

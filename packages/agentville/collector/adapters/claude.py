@@ -56,6 +56,17 @@ def _from_iso(value: Any) -> datetime | None:
     return None
 
 
+def reset_time(value: Any) -> datetime | None:
+    """``quotaLimits.resetsAt`` given as epoch seconds, epoch milliseconds, or ISO 8601."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value / 1000 if value > 1e11 else value, tz=UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
+    at = _from_iso(value)
+    return at.replace(tzinfo=UTC) if at is not None and at.tzinfo is None else at
+
+
 def first_timestamp(path: str, lines: int = 20) -> datetime | None:
     """Timestamp of the earliest record among the file's first lines."""
     try:
@@ -423,7 +434,11 @@ class ClaudeAdapter:
             return []
         if rtype == "assistant":
             found = []
-            if record.get("isApiErrorMessage"):
+            quota = record.get("quotaLimits")
+            if record.get("isApiErrorMessage") and isinstance(quota, dict):
+                # A usage limit; none of the record's error text is sent.
+                found.append((Kind.LIMIT_REACHED, {"reset_at": reset_time(quota.get("resetsAt"))}))
+            elif record.get("isApiErrorMessage"):
                 found.append((Kind.AGENT_ERROR, {"status": record.get("apiErrorStatus")}))
             model = (record.get("requestedModel") or message.get("model"), record.get("effort"))
             if not record.get("isApiErrorMessage") and model != shift.model and any(model):

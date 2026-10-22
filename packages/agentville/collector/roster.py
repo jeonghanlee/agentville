@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from typing import Any
 
 
@@ -26,21 +27,35 @@ def atomic_write(path: str, text: str) -> None:
 
 
 class Roster:
-    """JSON list of Employee records; an unreadable file starts an empty roster."""
+    """JSON list of Employee records.
+
+    An unreadable file starts an empty roster; it is kept as ``<path>.bad`` when a new one is written.
+    """
 
     def __init__(self, path: str, readonly: bool = False) -> None:
         self.path = path
         self.readonly = readonly
+        self._unreadable = False
 
     def load(self) -> list[dict[str, Any]]:
         try:
             with open(self.path, encoding="utf-8") as fh:
                 records = json.load(fh)
-        except (OSError, ValueError):
+            if not isinstance(records, list):
+                raise ValueError("not a list")
+        except FileNotFoundError:
             return []
-        return [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
+        except (OSError, ValueError) as exc:
+            self._unreadable = True
+            print(f"agentville-collector: roster {self.path} unreadable, starting empty: {exc}", file=sys.stderr, flush=True)
+            return []
+        return [r for r in records if isinstance(r, dict)]
 
     def save(self, records: list[dict[str, Any]]) -> None:
         if self.readonly:
             return
+        if self._unreadable:
+            if os.path.exists(self.path):
+                os.replace(self.path, self.path + ".bad")
+            self._unreadable = False
         atomic_write(self.path, json.dumps(records, separators=(",", ":")) + "\n")

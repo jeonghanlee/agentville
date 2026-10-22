@@ -750,9 +750,13 @@ function acceptState(state) {
 function connect(delay = 1000) {
   if (DEMO) return;
   const scheme = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(scheme + "://" + location.host + "/ws/v1/live" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : ""));
+  const socket = new WebSocket(scheme + "://" + location.host + "/ws/v1/live");
   activeSocket = socket;
-  socket.addEventListener("open", () => { everOpened = true; failedOpens = 0; resync = true; });
+  // The viewer token travels in the first message, so it never appears in a URL or access log.
+  socket.addEventListener("open", () => {
+    everOpened = true; failedOpens = 0; resync = true;
+    socket.send(JSON.stringify({ type: "auth", token: TOKEN || null }));
+  });
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(event.data);

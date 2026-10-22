@@ -4,7 +4,7 @@ scenario: S10
 title: Two concurrent agents in one repository, one in tmux; seats return by runtime location
 expect:
 - {seat: 1, ref: a, location: null, presence: on_duty, after: 1}
-- {seat: 2, ref: b, location: 'tmux-1:%1', presence: on_duty, after: 2}
+- {seat: 2, ref: b, location: 'agents:@1.%1', presence: on_duty, after: 2}
 - {seat: 1, state: working, after: 4}
 - {seat: 2, state: idle, after: 4}
 - {seat: 1, state: working, tool: null, after: 7}

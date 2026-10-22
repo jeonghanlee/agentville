@@ -19,7 +19,8 @@
 - On a gap in `seq`, HQ requests a new `snapshot`.
 - Changes during disconnection are not queued. The `snapshot` on reconnect supersedes them.
 - On receiving a `snapshot`, HQ replaces all stored state for that Branch.
-- HQ marks a Branch `unreachable` when no message arrives within a multiple of the last `heartbeat.interval`.
+- HQ marks a Branch `unreachable` when no message arrives within a multiple of the last `heartbeat.interval`, and when no message has arrived since HQ started.
+- A `snapshot` that is not newer than HQ's state by `seq` and `sent_at` is answered with `need_snapshot`; a second such snapshot in answer is applied as a reset of a Branch whose clock moved back ([architecture.md](architecture.md) Section 4.1).
 
 - Transport: HTTP(S) POST of `{"messages": [...]}` to `/api/v1/ingest/messages`; one Branch per batch. Response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
@@ -124,6 +125,6 @@ The following are never sent to HQ:
 - Provider subagent identifiers; `contractor_id` is derived from the parent instance and the provider subagent id.
 - Process command-line arguments and environment variables.
 - Tool arguments, file paths, prompt content.
-- Details of `waiting` requests and `error` causes.
+- Details of `waiting` requests and `error` causes, including provider error and usage-limit fields (Claude `error`, `apiError`, `errorDetails`, `quotaLimits` other than the reset time; Codex `task_complete.error`). A usage-limit reset time is sent only as `reset_at`.
 
 The Employee `alias` is currently always null, so no Employee display name is sent.

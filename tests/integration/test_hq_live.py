@@ -73,14 +73,20 @@ def test_stalled_viewer_does_not_freeze_other_viewers(tmp_path):
 
 
 def test_rejected_socket_receives_its_close_code(tmp_path):
-    server, port = _serve(tmp_path, viewer_token="v" * 16)
+    server, port = _serve(tmp_path, viewer_token="v" * 16, auth_timeout=0.5)
     try:
+        for first in (None, json.dumps({"type": "auth", "token": "w" * 16})):
+            with connect(f"ws://127.0.0.1:{port}/ws/v1/live") as viewer:
+                if first is not None:
+                    viewer.send(first)
+                try:
+                    viewer.recv(timeout=3)
+                except Exception:  # noqa: BLE001 - the close is what is examined
+                    pass
+                assert viewer.close_code == 4401
         with connect(f"ws://127.0.0.1:{port}/ws/v1/live") as viewer:
-            try:
-                viewer.recv(timeout=3)
-            except Exception:  # noqa: BLE001 - the close is what is examined
-                pass
-            assert viewer.close_code == 4401
+            viewer.send(json.dumps({"type": "auth", "token": "v" * 16}))
+            assert json.loads(viewer.recv(timeout=3))["type"] == "state"
         with connect(f"ws://127.0.0.1:{port}/ws/v1/live", additional_headers={"Origin": "https://evil.example"}) as viewer:
             try:
                 viewer.recv(timeout=3)

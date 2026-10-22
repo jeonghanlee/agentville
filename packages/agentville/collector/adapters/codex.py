@@ -23,6 +23,8 @@ PROVIDER = "codex"
 
 _TOOL_CALLS = {"function_call", "custom_tool_call", "local_shell_call"}
 _TOOL_OUTPUTS = {"function_call_output", "custom_tool_call_output", "local_shell_call_output"}
+# task_complete.error kinds after which the turn just ends.
+_TRANSIENT_ERRORS = {"server_overloaded"}
 
 
 def socket_path(home: str) -> str:
@@ -68,6 +70,8 @@ class _Shift:
     open_tools: dict[str, str] = field(default_factory=dict)
     limited: bool = False
     limit_reset: datetime | None = None
+    # Reset of the most used window in the latest token_count, for a limit reported only as an error.
+    last_reset: datetime | None = None
 
 
 @dataclass
@@ -411,10 +415,9 @@ class CodexAdapter:
             if ptype == "token_count":
                 return self._limit(shift, payload.get("rate_limits"))
             if ptype == "task_complete":
-                found = []
-                if payload.get("error"):
-                    found.append((Kind.AGENT_ERROR, {"status": "task_error"}))
-                return found + [(Kind.TURN_COMPLETED, {"duration_ms": payload.get("duration_ms")})]
+                return self._task_error(shift, payload.get("error")) + [
+                    (Kind.TURN_COMPLETED, {"duration_ms": payload.get("duration_ms")})
+                ]
             if ptype == "turn_aborted":
                 return [(Kind.TURN_COMPLETED, {"aborted": payload.get("reason")})]
             if ptype == "thread_settings_applied":
@@ -435,10 +438,26 @@ class CodexAdapter:
         return []
 
     @staticmethod
+    def _task_error(shift: _Shift, error: Any) -> list[tuple[Kind, dict[str, Any]]]:
+        kind = error.get("codex_error_info") if isinstance(error, dict) else None
+        if not error or kind in _TRANSIENT_ERRORS:
+            return []
+        if kind == "usage_limit_exceeded":
+            if shift.limited:
+                return []
+            shift.limited, shift.limit_reset = True, shift.last_reset
+            return [(Kind.LIMIT_REACHED, {"reset_at": shift.last_reset})]
+        return [(Kind.AGENT_ERROR, {"status": "task_error"})]
+
+    @staticmethod
     def _limit(shift: _Shift, rate_limits: Any) -> list[tuple[Kind, dict[str, Any]]]:
         if not isinstance(rate_limits, dict):
             return []
         windows = [w for w in (rate_limits.get("primary"), rate_limits.get("secondary")) if isinstance(w, dict)]
+        known = [w for w in windows if isinstance(w.get("used_percent"), (int, float)) and isinstance(w.get("resets_at"), (int, float))]
+        if known:
+            busiest = max(known, key=lambda w: (w["used_percent"], w["resets_at"]))
+            shift.last_reset = datetime.fromtimestamp(busiest["resets_at"], tz=UTC)
         full = [w for w in windows if isinstance(w.get("used_percent"), (int, float)) and w["used_percent"] >= 100]
         if full:
             resets = [w["resets_at"] for w in full if isinstance(w.get("resets_at"), (int, float))]

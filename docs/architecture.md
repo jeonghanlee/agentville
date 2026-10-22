@@ -145,12 +145,12 @@ conditions:
 | State | Evidence | Location | Rendering |
 |---|---|---|---|
 | `working` | Tool execution started, not finished. Tool failures (tests, compile errors) remain `working`. | Desk | Hands moving, head turning |
-| `thinking` | Explicit model-generation signal. Not inferred when the provider emits none. | Desk | Thought bubble; posture chosen randomly per occurrence (chin on hand or leaning back) |
+| `thinking` | Explicit model-generation signal. Not inferred when the provider emits none. Not produced by the current Adapters (Section 3.4). | Desk | Thought bubble; posture chosen randomly per occurrence (chin on hand or leaning back) |
 | `waiting` | Explicit user-input or approval request. | Desk | Waving hand. No time-based transition. Browser notification from the Web UI (Section 6.4). |
 | `idle` | Alive, no active turn. | Section 2.3 | Section 2.3 |
 | `completed` | Provider turn-completed event. | Desk | Momentary checkmark, then `idle` |
 | `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | Browser notification from the Web UI (Section 6.4) |
-| `limited` | Provider usage-limit event. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No browser notification. |
+| `limited` | Provider usage-limit event, including a turn that ends with a usage-limit error. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No browser notification. |
 | `unknown` | Insufficient or contradictory evidence. | Desk | Dimmed, question mark overhead |
 
 ### 2.3 Idle Progression
@@ -203,7 +203,7 @@ Store files in `$XDG_STATE_HOME/agentville/` (default `~/.local/state/agentville
 
 - The roster is saved when an Employee is emitted or a session id is recorded. It holds no activity, paths, prompts, or tool data.
 - At start, Employees are restored off duty. One that was on duty at the last save is off duty from the start time. Running processes then return to their Employees by the seat rules.
-- An unreadable roster starts empty.
+- An unreadable roster starts empty and is kept aside (Section 3.6).
 
 ### 3.2 Observations
 
@@ -230,7 +230,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 
 - Subagent observations carry the parent's shift. A Contractor's id is derived from the parent instance id and the provider subagent id; neither the provider id nor prompts, task descriptions, subagent types, or tool arguments are sent.
 - Contractors are held in memory only, included in snapshots while hired, and ended with their parent shift.
-- `limited` persists through `turn.completed` and `idle` status. It clears on `limit.cleared` (to `idle`), `turn.started`, `tool.started`, or `active` status. `reset_at` is sent while `limited`.
+- A provider usage-limit error reports `limit.reached`, not `agent.error`. `limited` persists through `turn.completed` and `idle` status. It clears on `limit.cleared` (to `idle`), `turn.started`, `tool.started`, or `active` status. `reset_at` is sent while `limited`.
 - Child-process Contractors (Section 1.5) are not yet implemented.
 
 ### 3.3 Reading
@@ -238,6 +238,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 - Logs are read incrementally from the last position (inode, offset) on every tick.
 - A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start; a resumed one (Claude: first record older than attach; Codex: thread `createdAt` older than attach; either: already followed earlier in the run) is read from its end.
 - Attaching in the middle of a line resumes at the next line. A line that is not valid UTF-8 JSON is skipped.
+- An unreadable `roster.json` is reported once on standard error with its path and reason (Section 3.6).
 - A transcript or rollout that cannot be read is reported and skipped for that poll without affecting other shifts. A JSON-RPC error on one Codex `thread/read` skips that thread for the poll; transport errors reconnect.
 - At attach, model and effort are taken from the last non-error assistant record in the transcript tail.
 - A session file that exists but cannot be parsed keeps the current shift; a shift ends only when its file is gone or its process is not alive.
@@ -254,16 +255,16 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 
 | Purpose | Source |
 |---|---|
-| Live sessions, shift | `~/.claude/sessions/<pid>.json` (`pid`, `procStart`, `sessionId`, `status`, `statusUpdatedAt`, `cwd`, `tmux`, `kind`). Equivalent view: `claude agents --json`. |
+| Live sessions, shift | `~/.claude/sessions/<pid>.json` (`pid`, `procStart`, `sessionId`, `status`, `statusUpdatedAt`, `cwd`, `tmux` as `<session name>:@<window id>.%<pane id>`, `kind`). Equivalent view: `claude agents --json`. |
 | Shift identity | `(pid, procStart)` |
 | Detail | `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` |
 | Turn completed | `system` record, `subtype: turn_duration`; `assistant` `stop_reason: end_turn` |
-| Thinking | `assistant` content item `thinking`; `thinkingDurationMs` |
+| Thinking | `assistant` content item `thinking` (`thinking`, `signature`); record-level `thinkingDurationMs` (integer ms, usually present). The record is written after the block completes. |
 | Tool | `tool_use` (`id`, `name`) → `tool_result` (`tool_use_id`, `is_error`) |
 | Waiting | `sessions/<pid>.json` `status: waiting` with `waitingFor` present; cleared on decision. Not recorded in transcripts while open (trailing `tool_use` without `tool_result`). Outcome afterwards: `permissionDecision` (accept) or `toolDenialKind` (deny). |
 | Session status values | File: `idle`, `busy`, `shell`, `waiting`. `claude agents --json`: `status` as above or `null`; `state`: `working`, `blocked`, `null`. |
-| Usage limit | `quotaLimits` (`status`, `rateLimitType`, `resetsAt`) |
-| Error | `isApiErrorMessage`, `apiError`, `apiErrorStatus` |
+| Usage limit | `assistant` record with `isApiErrorMessage` and a top-level `quotaLimits` object: `status`, `rateLimitType`, `resetsAt`, `isUsingOverage`, `overageStatus`, `overageDisabledReason`, `unifiedRateLimitFallbackAvailable`. The session file has no limit field. |
+| Error | `assistant` record with `isApiErrorMessage`, `message.stop_reason: stop_sequence`, one `text` content block, top-level `error` (short snake_case string), optional `apiError` (string), `apiErrorStatus` (integer), `errorDetails` (string) |
 | Model, effort | `requestedModel`, `effort`, `perTurnEffort`; `attachment` `type: model` |
 | Resume | `--resume` and `--continue` keep the same `sessionId` and append to the same file. |
 | Fork | `--fork-session` creates a new `sessionId` with no reference to the origin. |
@@ -273,7 +274,8 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Account | Claude home (one configuration directory per account) |
 
 - Contractor: an `Agent` `tool_use` hires one, keyed by its `id`; the matching `tool_result` ends it, unless its subagent transcript is still active (a background run), in which case it ends when that transcript reaches `idle` or `error`. The subagent transcript is the `agent-*.jsonl` whose `.meta.json` `toolUseId` matches; it is read from its start. Its `tool_use` sets the tool, `tool_result` clears it, and `stop_reason: end_turn` or `turn_duration` sets `idle`. Without that file the Contractor is `working` with no tool. A session change ends open Contractors.
-- Usage limit and thinking are not yet read.
+- Usage limit: an `isApiErrorMessage` record carrying `quotaLimits` reports `limit.reached` instead of `agent.error`, with `reset_at` from `resetsAt` read as epoch seconds, epoch milliseconds, or ISO 8601; any other value gives no reset time. Other `isApiErrorMessage` records report `agent.error`. Error strings and other `quotaLimits` fields stay on the Branch.
+- Thinking: the record holding a `thinking` block is written only after the block completes, and the session file shows only `busy` meanwhile, so live thinking is not observable and `thinking` is not produced.
 
 #### Codex
 
@@ -286,8 +288,9 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Turn | `turn/started`, `turn/completed` |
 | Tool | `item/started`, `item/completed` |
 | Detail | `<codex-home>/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl` |
-| Usage limit | rollout `event_msg` `token_count.rate_limits`: `primary`, `secondary` (`used_percent`, `window_minutes`, `resets_at` in epoch seconds) |
-| Error | status `systemError`; rollout `task_complete.error` |
+| Usage limit | rollout `event_msg` `token_count` (`type`, `info`, `rate_limits`); `rate_limits` may be null, else `credits`, `individual_limit` (null), `limit_id`, `limit_name`, `plan_type`, `primary`, `secondary`, `rate_limit_reached_type` (null), `spend_control_reached` (null); `primary` and `secondary` are null or `used_percent` (float), `window_minutes` (integer), `resets_at` (epoch seconds) |
+| Error | status `systemError`; rollout `task_complete.error`, an object `codex_error_info` (string; observed `usage_limit_exceeded`, `server_overloaded`) and `message` (string), or a plain string in older rollouts |
+| Reasoning | Retrospective only: rollout `response_item` `type: reasoning`; `event_msg` `item_completed` with `item.type: Reasoning` |
 | Model, effort | rollout `thread_settings_applied`, `turn_context` |
 | Resume | Same session id; appends to the same rollout file. |
 | Fork, Contractor | Thread `forkedFromId`, `parentThreadId`; `state_5.sqlite` `thread_spawn_edges` |
@@ -298,10 +301,11 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - The Collector acts as a read-only app-server client. Only `thread/loaded/list` and `thread/read` are called; no method that starts, resumes, sends to, or interrupts a thread.
 - Only loaded threads are read. Reading a `notLoaded` thread is avoided until its side effects are verified.
 - `thread/loaded/list` and `thread/read` seed state on connect and after reconnect; afterwards state follows `thread/status/changed`. `optOutNotificationMethods` is never set for it.
-- Turn and tool detail come from the thread's rollout file, not from app-server notifications.
+- Turn and tool detail come from the thread's rollout file, not from app-server notifications. Reasoning is recorded only after it completes and a passive client receives no item notifications, so `thinking` is not produced.
 - Threads that are not Employees: subagent threads (`parentThreadId` set or `source.subAgent`), and `threadSource: system` (internal threads, typically with a null `path`, ignored).
 - A loaded subagent thread is a Contractor of the shift of its `parentThreadId` (for a nested subagent, the root shift; seeds read parents before their subagents at any depth); one whose parent is not a shift is not tracked. State follows its thread status (`active` → `working`, `waitingOn*` → `waiting`, `idle`, `systemError` → `error`); the tool comes from its rollout. It ends when the thread is closed, `notLoaded`, absent at a seed, or when the parent shift ends.
 - A `token_count` with any window at `used_percent` ≥ 100 reports `limit.reached` with the latest `resets_at` of those windows; a later one with every window below 100 reports `limit.cleared`.
+- `task_complete.error`: `codex_error_info: usage_limit_exceeded` is not an error; the shift stays `limited`, or, when no full window was seen, reports `limit.reached` with the `resets_at` of the most used window of the latest `token_count` (none when unknown). `server_overloaded` is transient: the turn completes without `agent.error`. Any other kind, and a plain-string error, report `agent.error`. The error text is not sent.
 - Rollout path: `Thread.path`; when null, `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl`.
 - Responses carry no `jsonrpc` field; the client does not require it. Server-to-client requests (approvals) are never answered.
 - On loss of the app-server connection, every Codex shift and Contractor is reported `unknown` until the next seed.
@@ -357,6 +361,7 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 - The first tick emits a `snapshot` instead of individual changes. A `heartbeat` is emitted every `heartbeat_interval`.
 - `seq` is reserved in blocks of 1000 in `$XDG_STATE_HOME/agentville/seq` (default `~/.local/state/agentville/seq`), written with fsync before use; a restart resumes after the reserved bound.
 - A failing Adapter is logged to stderr and skipped for that tick; other Adapters continue.
+- At start, an unreadable `roster.json` (invalid JSON, not a list, or a read error) is logged as one line to stderr naming the file and the reason, and the roster starts empty. Before the next roster is written, the unreadable file is moved to `roster.json.bad`, replacing an earlier one. A missing roster starts empty silently.
 - Time-based presence changes (off duty to on leave) are emitted when the threshold passes, without a new event.
 - Services: `deploy/systemd/agentville-collector.service` and `deploy/systemd/agentville-hq.service` (systemd user units).
 
@@ -384,6 +389,7 @@ Messages of one batch are applied in `seq` order:
 | Non-snapshot message whose `(branch_id, seq)` is already stored | Duplicate; ignored, regardless of `sent_at` |
 | `snapshot` with `seq` not above the last applied, and a stored message with the same `seq` and the same `sent_at` | Duplicate; ignored |
 | `snapshot` with `seq` not above the last applied and `sent_at` earlier than the latest applied `sent_at` | Stale, not applied; response asks for a snapshot |
+| Such a stale `snapshot` again, after HQ asked for one following a stale snapshot and applied no message from the Branch since | The Branch's clock moved back: applied as a reset like the next row, and the latest applied `sent_at` is set to its `sent_at` |
 | Other `snapshot` with `seq` not above the last applied (Branch lost its sequence state) | Stored messages from that `seq` on are discarded; the snapshot is stored and applied and restarts the numbering |
 | `snapshot` | Replaces all current state of the Branch |
 | `seq` lower than the last applied | Stale; stored, not applied |
@@ -393,7 +399,9 @@ Messages of one batch are applied in `seq` order:
 
 The latest applied `sent_at` is not advanced by a value more than 5 minutes ahead of HQ's clock.
 
-A Branch is reported unreachable when no message arrived within three heartbeat intervals (30 s assumed before its first heartbeat).
+A single delayed snapshot is rejected: HQ remembers in memory that it asked a Branch for a snapshot after a stale one, and forgets it when any message of that Branch is applied. Only a Branch that keeps answering with old-clock snapshots is reset.
+
+A Branch is reported unreachable when no message arrived within three heartbeat intervals (30 s assumed before its first heartbeat), or when none has arrived since HQ started; Branches heard since start are kept in memory.
 
 ### 4.2 API
 
@@ -420,7 +428,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Ingest accepts only `Content-Type: application/json` and rejects requests carrying an `Origin` header, so a web page cannot submit messages through the trusted loopback path.
 - On a loopback bind, requests whose `Host` is not `127.0.0.1`, `::1`, `localhost`, the bind address, or a `--server-name` value are rejected (DNS rebinding guard).
 - `--server-name` names the public host of a reverse proxy and requires `--no-trust-loopback` and `--viewer-token-file`.
-- `WS /ws/v1/live` accepts a browser only when its `Origin` matches the request `Host` or names a `--server-name`. Rejected sockets are closed with code 4403 (origin or host) or 4401 (viewer token).
+- `WS /ws/v1/live` accepts a browser only when its `Origin` matches the request `Host` or names a `--server-name`. With a viewer token, the socket is accepted and its first message must be `{"type": "auth", "token": "<viewer token>"}` within 5 s; no state is sent before it. The token is never taken from the URL, so it does not reach proxy access logs. Rejected sockets are closed with code 4403 (origin or host) or 4401 (viewer token missing, wrong, or late).
 - Ingest responds after storing. Each viewer has its own sender holding only the latest state, with a 5 s send limit; a viewer that exceeds it is disconnected without delaying others.
 - The Collector refuses to send a token over plain HTTP to a non-loopback HQ and does not follow redirects.
 - On shutdown HQ checkpoints the WAL and closes the database.
@@ -428,7 +436,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 ## 5. Transport
 
 - The Collector sends each tick's messages as one batch by HTTP(S) POST to `hq.url`. Remote Branches connect outbound only; HQ never connects to a Branch.
-- On delivery failure the batch is dropped and the next successful delivery starts with a snapshot. Retries back off from 1 s to 60 s.
+- On delivery failure the batch is dropped and the next successful delivery starts with a snapshot. Failures include HTTP errors, connection and TLS errors, and responses cut short or malformed (`http.client` exceptions such as `IncompleteRead`, `RemoteDisconnected`, `BadStatusLine`); none ends the Collector. Retries back off from 1 s to 60 s.
 - When HQ reports `need_snapshot`, the next tick sends a snapshot.
 - `agentville-collector --output <path|->` writes JSONL instead of sending, for diagnostics. It reads the `seq` and `roster.json` state files but never writes them.
 - At start the Collector prints `agentville-collector: Branch <alias> (<host.id>) reporting to <hq.url or output>` to standard error. An unusable `hq.url` (unsupported scheme, or a token over plain HTTP to a non-loopback host) stops it with a message.
@@ -450,8 +458,9 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 - Served by HQ at `/` (static HTML, CSS, JavaScript, and bundled artwork; no build step). The initial view is the virtual office.
 - Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after ingest (bursts coalesced), and every 10 s. The page reconnects with backoff up to 30 s.
-- With a viewer token, the page reads it from the URL fragment (`#token=...`), keeps it in session storage, removes it from the address bar, and passes it as the `token` query parameter of the socket.
+- With a viewer token, the page reads it from the URL fragment (`#token=...`), keeps it in session storage, and removes it from the address bar. On each socket open the page sends `{"type": "auth", "token": ...}` as its first message (`null` without a token); HQ without a viewer token ignores it.
 - Close code 4401 shows that a viewer token is required and 4403 that HQ refused the connection; neither is retried.
+- A Branch not heard since HQ started is reported unreachable, so the page shows "Waiting for Branch report" until its first message after an HQ restart.
 - Idle detail (at desk, phone, dozing, fika) is computed in the page from `state_since` and the Branch thresholds.
 - Branch-provided text is rendered as text only, never as markup.
 

@@ -32,6 +32,7 @@ MAX_BATCH = 1000
 MAX_BODY = 4 * 1024 * 1024
 LIVE_REFRESH = 10.0
 SEND_TIMEOUT = 5.0
+AUTH_TIMEOUT = 5.0
 
 
 def _bearer_matches(request: Request, token: str) -> bool:
@@ -93,12 +94,14 @@ def create_app(
     hosts: frozenset[str] | None = LOCAL_HOSTS,
     server_names: frozenset[str] = frozenset(),
     send_timeout: float = SEND_TIMEOUT,
+    auth_timeout: float = AUTH_TIMEOUT,
 ) -> FastAPI:
     """Build the HQ app.
 
     ``tokens`` maps branch_id to its bearer token. With ``trust_loopback``, a Branch
     connecting from loopback needs no token; disable it behind a local reverse proxy.
-    ``viewer_token``, when set, is required on every read endpoint.
+    ``viewer_token``, when set, is required on every read endpoint, and on the live
+    socket as its first message ``{"type": "auth", "token": ...}`` within ``auth_timeout``.
     ``hosts`` lists the accepted Host header names (DNS rebinding guard); None accepts any.
     ``server_names`` are public names of a reverse proxy, accepted as Host and as page Origin.
     """
@@ -136,6 +139,16 @@ def create_app(
             text, viewer.latest = viewer.latest, None
             if text is not None:
                 await asyncio.wait_for(viewer.socket.send_text(text), send_timeout)
+
+    async def authenticated(socket: WebSocket) -> bool:
+        assert viewer_token is not None
+        try:
+            message = await asyncio.wait_for(socket.receive(), auth_timeout)
+            data = json.loads(message.get("text") or "")
+        except (TimeoutError, ValueError):
+            return False
+        token = data.get("token") if isinstance(data, dict) and data.get("type") == "auth" else None
+        return isinstance(token, str) and hmac.compare_digest(token.encode(), viewer_token.encode())
 
     async def drain(socket: WebSocket) -> None:
         while (await socket.receive())["type"] != "websocket.disconnect":
@@ -235,15 +248,15 @@ def create_app(
         origin = socket.headers.get("origin")
         # Browsers apply no CORS to WebSockets; accept only same-origin pages.
         # Rejections are sent after accept() so the page receives the close code.
-        if not host_allowed(host) or (origin is not None and not origin_allowed(origin, host)):
-            reject = 4403
-        elif viewer_token is not None and not hmac.compare_digest(socket.query_params.get("token", ""), viewer_token):
-            reject = 4401
-        else:
-            reject = None
+        allowed = host_allowed(host) and (origin is None or origin_allowed(origin, host))
         await socket.accept()
-        if reject is not None:
-            await socket.close(code=reject)
+        if not allowed:
+            await socket.close(code=4403)
+            return
+        # The viewer token comes in the first message, never in the URL; no state is sent before it.
+        if viewer_token is not None and not await authenticated(socket):
+            with contextlib.suppress(Exception):
+                await socket.close(code=4401)
             return
         viewer = _Viewer(socket)
         viewer.offer(_encode_state(await run_in_threadpool(store.state, clock())))

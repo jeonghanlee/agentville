@@ -47,7 +47,7 @@ Validation is repeated when a provider version changes.
 | S13 | both | Agent-level error | `error` |
 | S14 | both | Normal exit | Off duty |
 
-Generated: Claude S01, S02, S03, S04, S06, S07, S08, S10, S11, S13, S14; Codex S01, S02, S03, S04, S06, S08, S09, S10, S11, S12, S13, S14. Claude S12 awaits verification of its live usage-limit source; S05 awaits child-process Contractor support.
+Generated: Claude S01, S02, S03, S04, S06, S07, S08, S10, S11, S12, S13, S14; Codex S01, S02, S03, S04, S06, S08, S09, S10, S11, S12, S13, S14. S05 awaits child-process Contractor support.
 
 
 Notes on what the generated scenarios can show:
@@ -55,7 +55,10 @@ Notes on what the generated scenarios can show:
 - Codex S03: the failure is only in the tool output text, which is not read; the Employee stays `working` either way.
 - Codex S10: app-server shifts carry no runtime location, so a thread in tmux cannot be told apart; seats follow the session and the lowest free seat.
 - S11: outside a repository, Claude records omit `gitBranch`; Codex `gitInfo` and `session_meta.git` are null.
-- S13: the Claude error record (`isApiErrorMessage`, `apiError`, `apiErrorStatus`) and Codex `task_complete.error` value are placeholders; the Adapters read only their presence.
+- Claude S12: the usage limit is an API error record carrying `quotaLimits`; `resetsAt` is given as epoch seconds and as ISO 8601. A later API error without `quotaLimits` is an `error`.
+- Codex S12: a full window reports `limited`; a turn ending with `task_complete.error.codex_error_info: usage_limit_exceeded` stays `limited`, also when no full window was seen; `server_overloaded` ends the turn without an error. `rate_limits` is null in one `token_count`.
+- S13: the Claude error record (`isApiErrorMessage`, `error`, `apiError`, `apiErrorStatus`, `errorDetails`) and the Codex `task_complete.error` object (`codex_error_info`, `message`) hold placeholders; the Adapters read only the presence of the error, its Codex kind, and Claude `quotaLimits`.
+- Claude `tmux` values have the observed shape `<session>:@<window>.%<pane>` with synthetic values such as `agents:@1.%1`.
 
 ## 5. Layout
 

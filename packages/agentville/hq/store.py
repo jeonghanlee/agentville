@@ -86,6 +86,10 @@ class Store:
             self._db.execute("ALTER TABLE branches ADD COLUMN last_sent_at TEXT")
         self._lock = threading.Lock()
         self.totals = IngestResult()
+        # Branches asked for a snapshot after a stale one, with no message applied since.
+        self._snapshot_requested: set[str] = set()
+        # Branches heard since this HQ started; any other is not reported reachable.
+        self._heard: set[str] = set()
 
     def close(self) -> None:
         with self._lock:
@@ -108,6 +112,7 @@ class Store:
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+            self._heard.add(branch_id)
             self.totals.accepted += result.accepted
             self.totals.duplicates += result.duplicates
             self.totals.stale += result.stale
@@ -116,6 +121,7 @@ class Store:
 
     def _apply(self, message: dict[str, Any], now: datetime, result: IngestResult) -> None:
         branch_id, seq, kind = message["branch_id"], message["seq"], message["kind"]
+        clock_reset = False
         if kind == "snapshot":
             row = self._db.execute(
                 "SELECT last_seq, last_sent_at FROM branches WHERE branch_id = ?", (branch_id,)
@@ -128,11 +134,15 @@ class Store:
                     result.duplicates += 1
                     return
                 if row[1] is not None and _parse(message["sent_at"]) < _parse(row[1]):
-                    # A delayed snapshot from before the current numbering, or a reset
-                    # Branch whose clock is behind; a fresh snapshot settles either case.
-                    result.stale += 1
-                    result.need_snapshot = True
-                    return
+                    if branch_id not in self._snapshot_requested:
+                        # A delayed snapshot from before the current numbering, or a reset
+                        # Branch whose clock is behind; a fresh snapshot settles either case.
+                        self._snapshot_requested.add(branch_id)
+                        result.stale += 1
+                        result.need_snapshot = True
+                        return
+                    # The Branch answered the request with another old snapshot: its clock moved back.
+                    clock_reset = True
                 # The Branch lost its sequence state; its snapshot starts a new numbering.
                 self._db.execute("DELETE FROM messages WHERE branch_id = ? AND seq >= ?", (branch_id, seq))
         inserted = self._db.execute(
@@ -156,7 +166,7 @@ class Store:
         self._touch(branch_id, now, seq)
         sent = self._db.execute("SELECT last_sent_at FROM branches WHERE branch_id = ?", (branch_id,)).fetchone()[0]
         sent_at = _parse(message["sent_at"])
-        if sent_at <= now + MAX_CLOCK_LEAD and (sent is None or _parse(sent) < sent_at):
+        if sent_at <= now + MAX_CLOCK_LEAD and (sent is None or clock_reset or _parse(sent) < sent_at):
             self._db.execute("UPDATE branches SET last_sent_at = ? WHERE branch_id = ?", (message["sent_at"], branch_id))
         payload = message["payload"]
         if kind == "snapshot":
@@ -180,6 +190,7 @@ class Store:
                 )
             else:
                 self._upsert("contractors", "contractor_id", payload["contractor_id"], branch_id, payload)
+        self._snapshot_requested.discard(branch_id)
         result.accepted += 1
 
     def _touch(self, branch_id: str, now: datetime, seq: int) -> None:
@@ -216,7 +227,7 @@ class Store:
                 "SELECT branch_id, payload, last_seq, last_seen_at, heartbeat_interval FROM branches ORDER BY branch_id"
             ):
                 window = timedelta(seconds=(interval or DEFAULT_HEARTBEAT) * UNREACHABLE_FACTOR)
-                reachable = now - _parse(last_seen) <= window
+                reachable = branch_id in self._heard and now - _parse(last_seen) <= window
                 branches.append(
                     {
                         "branch_id": branch_id,

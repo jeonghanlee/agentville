@@ -110,7 +110,7 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 - Condition rules are evaluated in order and the first match wins; unmatched combinations are `normal`. The `extra-coffee` rule needs a fast-mode signal, which no Adapter reports yet.
 - Thresholds are seconds of idleness for phone, dozing, and lounge, and of absence for leave.
 - Values are checked at start. A file holding `hq.token` must not be readable by group or others.
-- State files: `~/.local/state/agentville/seq` and `roster.json` (colleague identities across restarts).
+- State files: `~/.local/state/agentville/seq` and `roster.json` (colleague identities across restarts). An unreadable `roster.json` is reported on standard error, the roster starts empty, and the file is kept as `roster.json.bad` when the new roster is written.
 - `agentville-collector --output -` prints messages as JSONL instead of sending them. It reads the state files but never writes them.
 
 ## Several hosts
@@ -120,20 +120,21 @@ HQ binds to loopback by default. To add Branches on other hosts, HQ gets a token
 ## Security and data
 
 - HQ on loopback accepts Branches on the same host without a token, unless their `host.id` is listed in the token file or `--no-trust-loopback` is set. It rejects foreign `Host` headers, cross-site WebSocket origins, and ingest requests from browsers.
+- The page sends the viewer token as the first message on the live WebSocket, never in a URL, so it does not appear in proxy access logs. HQ sends no state before it and closes the socket with code 4401 when it is missing, wrong, or not received within 5 s.
 - Sent to HQ:
   - Branch: alias, country, time zone, location, thresholds.
   - Colleague: id, display alias (currently always null), project id and alias, provider, seat, presence and its time, `account_alias`, model, settings (such as effort), condition, and, while on duty, the instance id, start time, and runtime (type `tmux`, `shell`, or `app_server`; for tmux, the pane location reported by Claude Code).
   - Activity: session id, state and its start time, source, confidence, tool name, usage-limit reset time (`reset_at`), and workload (tool executions in the last 5 minutes).
   - Contractor: id, parent instance id, provider, origin, status, state and its start time, tool name.
   - For a repository without a remote, the project alias is the repository directory's base name and `project_id` is a hash of the host id and repository path; the path itself is not sent.
-- Never sent to HQ: tool arguments, prompts, file paths, local paths of repositories without a remote, account details beyond `account_alias`, command lines, environment variables, details of waiting requests and errors, provider subagent ids.
+- Never sent to HQ: tool arguments, prompts, file paths, local paths of repositories without a remote, account details beyond `account_alias`, command lines, environment variables, details of waiting requests, errors, and usage limits (only the reset time is sent), provider subagent ids.
 - HQ keeps received messages for 30 days (`--retention-days`) and the current state of each Branch.
 
 ## Web UI
 
 - Views: Virtual office, Dashboard, Colleagues, Projects, Timeline, Branches.
 - Settings: name labels, reduced motion, window light, language (English / 한국어), browser notifications for waiting, error, and Branch reachability.
-- When HQ or a Branch is not reporting, the last observed state stays in place, dimmed and marked unverified.
+- When HQ or a Branch is not reporting, the last observed state stays in place, dimmed and marked unverified. After an HQ restart, a Branch shows "Waiting for Branch report" until its first message arrives.
 
 ## Development
 
