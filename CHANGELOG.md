@@ -6,7 +6,7 @@ This document lists the user-visible changes of each AgentVille release.
 
 **Out of scope:** internal refactoring and test-only changes.
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-10-22
 
 ### Collector
 
