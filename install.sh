@@ -63,7 +63,7 @@ fetch_source() {
         git clone --quiet "$REPO_URL" "$SRC_DIR"
     fi
     if [[ -z "$ref" ]]; then
-        ref="$(git -C "$SRC_DIR" tag --list 'v*' --sort=-v:refname | head -n 1)"
+        ref="$(git -C "$SRC_DIR" tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
         [[ -n "$ref" ]] || ref="origin/HEAD"
     fi
     local commit
