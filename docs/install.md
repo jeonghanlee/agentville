@@ -314,6 +314,7 @@ Branch only:
 ```bash
 cd ~/.local/src/agentville
 git pull
+rm -rf build
 ~/.local/opt/agentville/bin/pip install .
 systemctl --user restart agentville-collector
 ```
@@ -323,11 +324,12 @@ HQ host:
 ```bash
 cd ~/.local/src/agentville
 git pull
+rm -rf build
 ~/.local/opt/agentville/bin/pip install '.[hq]'
 systemctl --user restart agentville-hq agentville-collector
 ```
 
-Installed with `install.sh`: run the same command again; it moves to the latest release (or `--ref`) and restarts the services. It leaves the source on a detached commit, so the `git pull` steps above apply only to a manual installation.
+Installed with `install.sh`: run the same command again; it moves to the latest release (or `--ref`) and, unless `--no-start` is given or systemd is absent, restarts the services. It leaves the source on a detached commit, so the `git pull` steps above apply only to a manual installation.
 
 Configuration, roster, HQ data, and the installed unit files are kept.
 

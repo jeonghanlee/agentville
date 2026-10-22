@@ -86,6 +86,8 @@ install_package() {
         "$python" -m venv "$VENV_DIR"
     fi
     info "Installing $target"
+    # Build output of an earlier commit would otherwise be installed with this one.
+    rm -rf "$SRC_DIR/build"
     "$VENV_DIR/bin/pip" install --quiet --disable-pip-version-check "$target"
     mkdir -p "$BIN_DIR"
     ln -sf "$VENV_DIR/bin/agentville-collector" "$BIN_DIR/"
@@ -177,8 +179,8 @@ main() {
         install_services "$with_hq" "$start"
     else
         info "No systemd user instance; run in the foreground:"
-        [[ "$with_hq" == 1 ]] && printf '    %s\n' "$BIN_DIR/agentville-hq --host 127.0.0.1 --port 8470"
-        printf '    %s\n' "$BIN_DIR/agentville-collector"
+        [[ "$with_hq" == 1 ]] && printf '    %q --host 127.0.0.1 --port 8470\n' "$BIN_DIR/agentville-hq"
+        printf '    %q\n' "$BIN_DIR/agentville-collector"
     fi
 
     info "Installed $("$VENV_DIR/bin/agentville-collector" --version)"
