@@ -307,7 +307,51 @@ HQ reads `tokens.yaml` and `viewer.token` only at start.
 - Branch token: replace its line in `tokens.yaml` and `systemctl --user restart agentville-hq`; on the Branch, set the new `hq.token` and `systemctl --user restart agentville-collector`. Deleting the line and restarting HQ revokes the Branch.
 - Viewer token: write a new value to `viewer.token`, restart HQ, and open the page with the new `#token=`.
 
-## 7. Upgrade
+## 7. External notifications
+
+HQ can post notifications to an [ntfy](https://ntfy.sh) topic, so a phone or desktop subscribed to the topic is notified without an open browser tab. They are off by default.
+
+The rules are those of browser notifications ([Using the Office](using.md), Settings): a colleague starts waiting or has an error, and a Branch stops or resumes reporting. Nothing is sent when HQ starts, for a colleague or Branch seen for the first time, or for changes that arrive with a Branch snapshot, for example after a Collector restart. Each colleague and Branch is notified at most once per 30 s; a change within that time is sent at its end if it still holds. More than three at once become one summary. [Data and Security](data.md) lists what is sent.
+
+Create the file with mode 0600:
+
+```bash
+install -m600 /dev/null ~/.config/agentville/notify.yaml
+```
+
+```yaml
+url: https://ntfy.sh/<topic>                     # https unless the host is loopback
+token_file: ~/.config/agentville/ntfy.token       # optional; mode 0600
+events: [waiting, error, branch]                 # optional; default all three
+language: en                                     # optional; en or ko
+```
+
+| Key | Value |
+|---|---|
+| `url` | The topic URL. Subscribe to the same topic in the ntfy app. |
+| `token_file` | A file holding an ntfy access token, for a server with access control. Mode 0600. |
+| `events` | `waiting`: a colleague starts waiting. `error`: a colleague has an error. `branch`: a Branch stops or resumes reporting. |
+| `language` | Language of the texts: `en` or `ko`. |
+
+On a public server such as ntfy.sh, anyone who knows a topic name can read it. Use a long random name, for example from `python3 -c 'import secrets; print("agentville-" + secrets.token_hex(12))'`, or a server with access control and a token.
+
+Add the option to `ExecStart` in `~/.config/systemd/user/agentville-hq.service`, then reload and restart:
+
+```ini
+ExecStart=%h/.local/bin/agentville-hq --host 127.0.0.1 --port 8470 \
+    --notify-config %h/.config/agentville/notify.yaml
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart agentville-hq
+```
+
+- HQ reads the file at start only; restart HQ after editing it.
+- An invalid file stops HQ with one line, for example `agentville-hq: /home/<user>/.config/agentville/notify.yaml: url must use https unless its host is loopback`.
+- Sending runs in the background and never delays Branch reports. A failure is logged at most once a minute, for example `agentville-hq: notification failed: URLError: <urlopen error [Errno 111] Connection refused>` in `journalctl --user -u agentville-hq`.
+
+## 8. Upgrade
 
 Branch only:
 
@@ -333,7 +377,7 @@ Installed with `install.sh`: run the same command again; it moves to the latest 
 
 Configuration, roster, HQ data, and the installed unit files are kept.
 
-## 8. Uninstall
+## 9. Uninstall
 
 Branch only:
 
@@ -359,6 +403,6 @@ Data left in place, to be removed separately if no longer needed:
 
 | Path | Content |
 |---|---|
-| `~/.config/agentville/` | Collector configuration; on HQ, token files and, in form (a) with the example paths, the TLS certificate and private key |
+| `~/.config/agentville/` | Collector configuration; on HQ, token files, the notification configuration, and, in form (a) with the example paths, the TLS certificate and private key |
 | `~/.local/state/agentville/` | Collector `seq` and `roster.json` |
 | `~/.local/share/agentville/hq.sqlite3` | HQ database (HQ host) |

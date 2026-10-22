@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from agentville import version
 from agentville.common.protocol import iso, load_schema
+from agentville.hq.notify import Notifier
 from agentville.hq.store import Store, now_utc
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ MAX_BODY = 4 * 1024 * 1024
 LIVE_REFRESH = 10.0
 SEND_TIMEOUT = 5.0
 AUTH_TIMEOUT = 5.0
+# Seconds between notification evaluations without ingest; reachability changes with time alone.
+NOTIFY_INTERVAL = 5.0
 # Longest period one changes or work log request may cover.
 MAX_RANGE = timedelta(days=31)
 
@@ -120,6 +123,8 @@ def create_app(
     server_names: frozenset[str] = frozenset(),
     send_timeout: float = SEND_TIMEOUT,
     auth_timeout: float = AUTH_TIMEOUT,
+    notifier: Notifier | None = None,
+    notify_interval: float = NOTIFY_INTERVAL,
 ) -> FastAPI:
     """Build the HQ app.
 
@@ -129,6 +134,7 @@ def create_app(
     socket as its first message ``{"type": "auth", "token": ...}`` within ``auth_timeout``.
     ``hosts`` lists the accepted Host header names (DNS rebinding guard); None accepts any.
     ``server_names`` are public names of a reverse proxy, accepted as Host and as page Origin.
+    ``notifier``, when set, is evaluated after each ingest and every ``notify_interval`` seconds.
     """
     tokens = tokens or {}
     validator = jsonschema.Draft202012Validator(load_schema(), format_checker=_FORMATS)
@@ -175,17 +181,33 @@ def create_app(
         token = data.get("token") if isinstance(data, dict) and data.get("type") == "auth" else None
         return isinstance(token, str) and hmac.compare_digest(token.encode(), viewer_token.encode())
 
+    def evaluate(resynced: frozenset[str] = frozenset()) -> None:
+        assert notifier is not None
+        try:
+            now = clock()
+            notifier.observe(store.state(now), store.heard(), now, resynced)
+        except Exception:  # noqa: BLE001 - notifications never affect ingest
+            log.exception("notification evaluation failed")
+
+    async def notify_loop() -> None:
+        while True:
+            await run_in_threadpool(evaluate)
+            await asyncio.sleep(notify_interval)
+
     async def drain(socket: WebSocket) -> None:
         while (await socket.receive())["type"] != "websocket.disconnect":
             pass
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        task = asyncio.create_task(broadcast_loop())
+        tasks = [asyncio.create_task(broadcast_loop())]
+        if notifier is not None:
+            tasks.append(asyncio.create_task(notify_loop()))
         yield
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         store.close()
 
     app = FastAPI(title="AgentVille HQ", version=version(), lifespan=lifespan)
@@ -226,7 +248,11 @@ def create_app(
         if not last_prune or now - last_prune[0] >= timedelta(hours=1):
             store.prune(now - retention)
             last_prune[:] = [now]
-        return store.ingest(branch_id, messages, now).as_dict()
+        result = store.ingest(branch_id, messages, now)
+        if notifier is not None:
+            # Changes revealed by a snapshot are a resync, not transitions.
+            evaluate(frozenset({branch_id}) if result.resynced else frozenset())
+        return result.as_dict()
 
     @app.get("/health")
     def health() -> dict[str, str]:

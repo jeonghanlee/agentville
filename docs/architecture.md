@@ -383,8 +383,8 @@ aliases: {}
 
 - Process: `agentville-hq` (FastAPI, uvicorn), bound to `127.0.0.1:8470` by default.
 - `--tls-cert` and `--tls-key` (PEM files, used together) make HQ serve HTTPS directly; without them HQ serves plain HTTP.
-- At start HQ checks its token files and TLS certificate and key (loaded into a TLS context), opens the database, and binds and listens on the port itself (`SO_REUSEADDR`, IPv6 when the host contains `:`), handing the socket to uvicorn. Only then does it print `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
-- A missing or unreadable token file, a malformed token file, an unusable certificate or key, a database that cannot be opened, or a port that cannot be bound stops HQ with one line starting with `agentville-hq:`, e.g. `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`.
+- At start HQ checks its token files, the notification configuration (Section 4.6), and TLS certificate and key (loaded into a TLS context), opens the database, and binds and listens on the port itself (`SO_REUSEADDR`, IPv6 when the host contains `:`), handing the socket to uvicorn. Only then does it print `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
+- A missing or unreadable token file, a malformed token file, an invalid notification configuration, an unusable certificate or key, a database that cannot be opened, or a port that cannot be bound stops HQ with one line starting with `agentville-hq:`, e.g. `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`.
 - `agentville-hq --version` and `agentville-collector --version` print the installed package version, which HQ also reports as its API version in `/openapi.json`.
 - Storage: SQLite (WAL) at `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`).
 
@@ -492,6 +492,27 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Rows are listed only for Employees with on-duty or unobserved time, or an entry, in the period. Each row carries the Employee's last agent payload fields `project_alias`, `provider`, `seat`, and `alias`.
 - Contractors are not included.
 
+### 4.6 External Notifications
+
+With `--notify-config <file>`, HQ posts the notifications of Section 6.4 to an ntfy topic, so they reach a subscribed phone or desktop without an open page. Off by default.
+
+Configuration file (YAML, mode 0600 required, read at start only):
+
+| Key | Content |
+|---|---|
+| `url` | ntfy topic URL. `https` required unless the host is loopback; the path names the topic. |
+| `token_file` | Optional. File holding an access token (mode 0600), sent as `Authorization: Bearer <token>`. `~` is expanded. |
+| `events` | Optional list of `waiting`, `error`, `branch`; default all. |
+| `language` | Optional, `en` (default) or `ko`. |
+
+- Other keys, a wrong value, an unreadable or group- or other-accessible file, or an empty token file stop HQ at start with one line `agentville-hq: <file>: <reason>`.
+- Rules, as in the browser (Section 6.4): a colleague entering `waiting` or `error` (a new `state_since` in the same state counts as a new entry), and a Branch becoming unreachable or reachable again. Nothing is sent for the first evaluation after HQ starts, for a colleague or Branch seen for the first time, or for colleagues of a Branch whose ingest applied a snapshot (a resync). A Branch takes part only once it has been heard since HQ started, so Branches reporting again after an HQ restart are not announced.
+- Evaluation runs after each ingest and every 5 s, since reachability changes with time alone.
+- Rate limit: at most one message per subject per 30 s; a change inside that window is held and sent at the first evaluation after it ends, only if the subject is still in that state and it differs from what was last sent. When more than three subjects qualify in one evaluation, one summary is sent instead.
+- Texts are the browser notification texts, read from the Web UI dictionary (`web/i18n.js`) in the configured language.
+- Request: `POST` to `url`, body the text (`text/plain; charset=utf-8`), headers `Title`, `Tags` (`agentville,<event>` with event `waiting`, `error`, `unreachable`, `reachable`, or `summary`), and `Priority` (`default` for waiting and reporting again; `high` for error and unreachable; a summary takes `high` when it includes either). A non-ASCII title is sent as an RFC 2047 encoded word (`=?UTF-8?B?...?=`); control characters become spaces. Redirects are not followed; a loopback server is contacted without environment proxies.
+- Sending runs in one background thread with a queue of 100 messages and a 10 s timeout per request. A message that does not fit is dropped. Failures are logged to standard error as `agentville-hq: notification failed: <reason>`, at most once per minute. Ingest never waits for sending.
+
 ## 5. Transport
 
 - The Collector sends each tick's messages as one batch by HTTP(S) POST to `hq.url`. Remote Branches connect outbound only; HQ never connects to a Branch.
@@ -552,7 +573,7 @@ The `/?demo=1` URL loads fictional Employees from `demo.js` and displays a Demo 
 
 ### 6.4 Browser notifications
 
-The page raises notifications through the Web Notification API (`notify.js`). HQ sends none itself; a notification exists only while a page with the setting turned on is open.
+The page raises notifications through the Web Notification API (`notify.js`). A browser notification exists only while a page with the setting turned on is open. HQ sends the same notifications to an ntfy topic when configured (Section 4.6).
 
 - Setting: "Browser notifications" (브라우저 알림) in display settings, off by default. Turning it on requests the browser permission from that click. The choice is kept in local storage (`agentville-notifications`) when available. The setting shows its state: On (켜짐), Off (꺼짐), blocked by the browser, or not supported. A page that is not a secure context (plain HTTP other than localhost) cannot use notifications; the control is disabled with a note that HTTPS or localhost is required. Demo mode disables the control and never notifies.
 - Triggers, only for transitions the page observes:

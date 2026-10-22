@@ -4,7 +4,7 @@
 
 This document covers the Collector configuration file on each host.
 
-**Out of scope:** HQ command-line options and token files ([Installation](install.md) Section 6).
+**Out of scope:** HQ command-line options, token files, and external notifications ([Installation](install.md) Sections 6 and 7).
 
 Each host that runs a Collector has one local configuration file.
 
