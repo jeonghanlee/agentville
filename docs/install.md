@@ -30,6 +30,25 @@ Debian 12 ships Python 3.11 and is not supported.
 
 ## 2. Download
 
+`install.sh` performs Sections 2 to 4 with the paths below and installs the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/install.sh | bash                 # Branch only
+curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/install.sh | bash -s -- --hq      # HQ host
+```
+
+| Option | Effect |
+|---|---|
+| `--hq` | Also installs HQ and its service. |
+| `--ref <ref>` | Installs a release tag, branch, or commit instead of the latest release tag. |
+| `--hq-url <url>` | Sets `hq.url` in the Collector configuration (Section 6.5). |
+| `--token-file <file>` | Sets `hq.token` from the file (Section 6.5). |
+| `--no-start` | Installs the unit files without enabling or restarting the services. |
+
+It writes the Collector configuration before the first service start, copies a unit file only when none is installed, and then enables and restarts the services. Without a systemd user instance it prints the foreground commands instead. Continue with Section 5.
+
+The manual steps:
+
 ```bash
 git clone https://github.com/jeonghanlee/agentville.git ~/.local/src/agentville
 cd ~/.local/src/agentville
@@ -305,6 +324,8 @@ git pull
 ~/.local/opt/agentville/bin/pip install '.[hq]'
 systemctl --user restart agentville-hq agentville-collector
 ```
+
+Installed with `install.sh`: run the same command again; it moves to the latest release (or `--ref`) and restarts the services.
 
 Configuration, roster, HQ data, and the installed unit files are kept.
 

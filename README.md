@@ -28,7 +28,15 @@ agentville-hq &               # http://127.0.0.1:8470
 agentville-collector
 ```
 
-Open `http://127.0.0.1:8470/`. `http://127.0.0.1:8470/?demo=1` shows fictional colleagues. The quick start runs in this terminal; stop it (Ctrl-C, then `kill %1`) before following the Installation chapter for services, other hosts, and TLS.
+Open `http://127.0.0.1:8470/`. `http://127.0.0.1:8470/?demo=1` shows fictional colleagues. The quick start runs in this terminal; stop it (Ctrl-C, then `kill %1`) before installing the services.
+
+To install as systemd user services, latest release (`--hq` on the HQ host; without it, the Collector only):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/install.sh | bash -s -- --hq
+```
+
+For other hosts and TLS, follow the Installation chapter.
 
 ## Documentation
 

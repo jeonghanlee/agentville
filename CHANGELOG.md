@@ -41,5 +41,5 @@ First release.
 ### Documentation and deployment
 
 - User manual (mdBook) published to GitHub Pages: installation, configuration, using the office, data and security.
-- systemd user units for HQ and the Collector.
+- systemd user units for HQ and the Collector; `install.sh` installs or upgrades in one command.
 - Supported: Linux with Python 3.12 or later (Debian 13, Ubuntu 24.04, Rocky Linux 9/10).
