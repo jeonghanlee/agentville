@@ -63,6 +63,14 @@ agentville-hq --help                                                    # HQ hos
 
 ## 4. Start the services
 
+Create and edit the Collector configuration before the first service start, so the Collector reports to the intended HQ from the beginning. This run writes `~/.config/agentville/config.yaml` (mode 0600) and nothing else:
+
+````bash
+agentville-collector --once --output /dev/null
+````
+
+Set `hq.url` and the other values in that file (see the [README](../README.md#collector-configuration)), then enable the services.
+
 Branch only:
 
 ````bash
@@ -100,7 +108,9 @@ agentville-hq --host 127.0.0.1 --port 8470                              # HQ hos
 agentville-collector
 ````
 
-The first Collector start writes `~/.config/agentville/config.yaml`. Edit it, then `systemctl --user restart agentville-collector`. The settings are described in the [README](../README.md#collector-configuration).
+After a later edit of `config.yaml`, run `systemctl --user restart agentville-collector`.
+
+On the HQ host the Collector may start before HQ listens; its first delivery then fails with `delivery failed: … Connection refused` and the next retry succeeds.
 
 ## 5. Verify
 
