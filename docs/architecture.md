@@ -148,10 +148,10 @@ conditions:
 |---|---|---|---|
 | `working` | Tool execution started, not finished. Tool failures (tests, compile errors) remain `working`. | Desk | Hands moving, head turning |
 | `thinking` | Explicit model-generation signal. Not inferred when the provider emits none. | Desk | Thought bubble; posture chosen randomly per occurrence (chin on hand or leaning back) |
-| `waiting` | Explicit user-input or approval request. | Desk | Waving hand. No time-based transition. Browser notification from the Web UI (6.4). |
+| `waiting` | Explicit user-input or approval request. | Desk | Waving hand. No time-based transition. Browser notification from the Web UI (Section 6.4). |
 | `idle` | Alive, no active turn. | See 2.3 | See 2.3 |
 | `completed` | Provider turn-completed event. | Desk | Momentary checkmark, then `idle` |
-| `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | Browser notification from the Web UI (6.4) |
+| `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | Browser notification from the Web UI (Section 6.4) |
 | `limited` | Provider usage-limit event. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No browser notification. |
 | `unknown` | Insufficient or contradictory evidence. | Desk | Dimmed, question mark overhead |
 
@@ -232,7 +232,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 - Subagent observations carry the parent's shift. A Contractor's id is derived from the parent instance id and the provider subagent id; neither the provider id nor prompts, task descriptions, subagent types, or tool arguments are sent.
 - Contractors are held in memory only, included in snapshots while hired, and ended with their parent shift.
 - `limited` persists through `turn.completed` and `idle` status. It clears on `limit.cleared` (to `idle`), `turn.started`, `tool.started`, or `active` status. `reset_at` is sent while `limited`.
-- Child-process Contractors (§1.5) are not yet implemented.
+- Child-process Contractors (Section 1.5) are not yet implemented.
 
 ### 3.3 Reading
 
@@ -460,7 +460,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Window lighting follows the displayed Branch's local time: morning from 05:00, day from 10:00, evening from 17:00, and night from 20:00. Night windows show a moon and stars while indoor lamps remain warm. When the Branch `time` is a valid IANA time zone, the heading clock, date, window lighting, and usage-limit reset times use that zone and the clock is labeled with the zone; a missing or fictional value falls back to browser-local time labeled "Browser time" (브라우저 시각). The scene caption names the current light period (Morning, Day, Evening, Night).
 - Search, status filters, and room filters select the team list and highlight matching characters. Selecting a Colleague opens their current details. Selection survives Project-page changes while the Employee still matches the filters. Remote participants of local Projects remain visible in shared facilities on every Project page.
 - Dashboard and Colleagues provide tabular views. Workload is shown as the reported count of recent tool executions ("N recent tools"); the window size is not displayed because it is not part of the payload. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
-- Display settings control language, name labels, reduced motion, automatic or manually selected window light, and browser notifications (6.4). The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
+- Display settings control language, name labels, reduced motion, automatic or manually selected window light, and browser notifications (Section 6.4). The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
 - The browser marks activity unverified when its HQ connection is lost or the Branch is unreachable. Tables mark on-duty, off-duty, and on-leave rows of such Branches alike. Placement, pose, and counts keep the last observed state, dimmed and marked with "?".
 
 ### 6.3 Synthetic demonstration mode

@@ -26,7 +26,7 @@ Branch (any host)                                  HQ (one host)
 | HQ | Validates, stores, and serves the current state of every Branch. |
 | Web UI | Static page served by HQ; live updates over WebSocket. |
 
-Specifications: [docs/architecture.md](docs/architecture.md) (domain, state model, sources, HQ, Web UI), [docs/protocol.md](docs/protocol.md) (Branch–HQ messages, data minimization), [docs/fixtures.md](docs/fixtures.md) (synthetic test data).
+Guides: [docs/install.md](docs/install.md) (installation). Specifications: [docs/architecture.md](docs/architecture.md) (domain, state model, sources, HQ, Web UI), [docs/protocol.md](docs/protocol.md) (Branch–HQ messages, data minimization), [docs/fixtures.md](docs/fixtures.md) (synthetic test data).
 
 ## Terms
 
@@ -49,20 +49,14 @@ Specifications: [docs/architecture.md](docs/architecture.md) (domain, state mode
 | Not measured | 재지 못함 | State could not be determined (`unknown`). |
 | Unreachable | 연락 끊김 | No message from a Branch within three heartbeat intervals. |
 
-## Requirements
-
-- Linux with Python 3.12 or later.
-- Claude Code and/or Codex CLI on the observed hosts. Codex live state requires its shared app-server daemon.
-
 ## Install
 
-From a clone, on every host:
+See the [Installation Guide](docs/install.md) for requirements, download, install, services, connecting other hosts, upgrade, and removal. In short, from a clone:
 
 ````bash
-pipx install '.[hq]'        # HQ host and Branches; '.' alone is enough for a Branch only
+python3 -m venv ~/.local/opt/agentville && ~/.local/opt/agentville/bin/pip install '.[hq]'
+ln -sf ~/.local/opt/agentville/bin/agentville-* ~/.local/bin/
 ````
-
-`agentville-hq` and `agentville-collector` are installed in `~/.local/bin`. A virtual environment works as well (`python3 -m venv ... && pip install '.[hq]'`); adjust `ExecStart` in the service units to its `bin` directory.
 
 ## Run on one host
 

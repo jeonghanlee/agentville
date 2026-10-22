@@ -2,7 +2,7 @@
 
 ## 1. Policy
 
-- Fixtures are synthetic. They are built from the verified structure in [architecture.md](architecture.md) §3.4.
+- Fixtures are synthetic. They are built from the verified structure in [architecture.md](architecture.md) Section 3.4.
 - No content derived from real logs, session files, or app-server responses is stored in the repository.
 - Fixtures are used by automated tests only. The Collector never reads them at runtime.
 - Fixtures are produced by a generator per provider (`tests/fixtures/<provider>/generate.py`). Edit the generator, not the generated files.
