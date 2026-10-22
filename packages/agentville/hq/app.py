@@ -68,7 +68,17 @@ _FORMATS = jsonschema.FormatChecker(formats=())
 
 @_FORMATS.checks("date-time", raises=ValueError)
 def _date_time(value: object) -> bool:
-    return not isinstance(value, str) or datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is not None
+    if not isinstance(value, str):
+        return True
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return False
+    try:
+        # A time whose UTC form falls outside the datetime range is not a usable time.
+        parsed.astimezone(UTC)
+    except OverflowError:
+        return False
+    return True
 
 
 def _time(value: str | None, name: str) -> datetime:
@@ -81,7 +91,10 @@ def _time(value: str | None, name: str) -> datetime:
         raise HTTPException(status_code=400, detail=f"{name} must be an ISO 8601 time") from None
     if parsed.tzinfo is None:
         raise HTTPException(status_code=400, detail=f"{name} must include a time zone")
-    return parsed.astimezone(UTC)
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError:
+        raise HTTPException(status_code=400, detail=f"{name} is out of range") from None
 
 
 def _period(start: str | None, end: str | None) -> tuple[datetime, datetime]:

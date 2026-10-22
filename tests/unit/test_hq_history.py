@@ -253,3 +253,15 @@ def test_history_endpoints_reject_bad_times(tmp_path):
     assert empty.get("/api/v1/history").json() == {"from": None, "to": iso(s(100))}
     assert empty.get("/api/v1/state", params={"at": iso(s(50))}).status_code == 400
     assert empty.get("/api/v1/worklog", params={"from": iso(s(0)), "to": iso(s(50))}).json()["rows"] == []
+
+
+def test_times_outside_the_datetime_range_are_rejected(tmp_path):
+    store = _store(tmp_path)
+    Branch(store).send(0, "snapshot", snapshot([], []))
+    client = _client(store, s(100))
+    assert client.get("/api/v1/state", params={"at": "0001-01-01T00:00:00+00:01"}).status_code == 400
+    assert client.get("/api/v1/worklog", params={"from": "0001-01-01T00:00:00+01:00", "to": iso(s(10))}).status_code == 400
+    assert client.get("/api/v1/changes", params={"from": iso(s(0)), "to": "9999-12-31T23:59:59-01:00"}).status_code == 400
+    message = Envelope("b1", seq=10).wrap("heartbeat", s(1), {"interval": 30}, s(1))
+    message["event_at"] = "0001-01-01T00:00:00+01:00"
+    assert client.post("/api/v1/ingest/messages", json={"messages": [message]}).status_code == 422

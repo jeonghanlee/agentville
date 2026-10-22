@@ -441,6 +441,7 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 - Every `GET` under `/api/v1/` is a read endpoint and requires the viewer token when one is set (Section 4.3).
 - Times in query parameters are ISO 8601 with an offset (`Z` or `+hh:mm`). A missing, malformed, or offset-less time is answered with 400.
+- A time whose UTC form falls outside the representable range (years 1 to 9999) is answered with 400; in ingest such a `date-time` fails schema validation (422).
 - `state?at=` answers 400 for a time before `history_from` or after now, and before the first message (`from` null). `reachable` is the value derived for that time (Section 4.4); `last_seq` and `last_seen_at` are those of the last message received by then.
 - `history`: `from` is `history_from`, or null before the first message; `to` is HQ's current time.
 - `changes` and `worklog` take a period of at most 31 days (`to` after `from`; otherwise 400). The period is clipped to the kept history and to now; the response `from` and `to` are the clipped period.
