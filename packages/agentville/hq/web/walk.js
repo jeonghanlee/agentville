@@ -19,15 +19,24 @@ export function createWalkers(root, { motionAllowed, changed }) {
     const from = walk.path[walk.index], to = walk.path[walk.index + 1] || from;
     return Math.abs(to[0] - from[0]) < .05 ? walk.facing : to[0] < from[0] ? "left" : "right";
   }
+  // Heading down-screen shows the front view, up-screen the rear view; level stretches keep the last view.
+  // Floor points are percent of the 3:2 artwork, so a vertical step counts 2/3 of a horizontal one on screen.
+  function view(walk) {
+    const from = walk.path[walk.index], to = walk.path[walk.index + 1] || from;
+    const down = (to[1] - from[1]) * 2 / 3, across = Math.abs(to[0] - from[0]);
+    return Math.abs(down) < .2 * across || Math.abs(down) < .01 ? walk.view : down > 0 ? "front" : "back";
+  }
   function place(walk) {
     const node = [...root.querySelectorAll(".agent")].find((actor) => actor.dataset.employeeKey === walk.key);
     if (!node) return;
     const [x, y] = position(walk);
     walk.facing = facing(walk);
+    walk.view = view(walk);
     node.style.left = x.toFixed(3) + "%";
     node.style.top = y.toFixed(3) + "%";
     node.style.zIndex = String(walkerDepth(x, y));
     node.dataset.coffeeFacing = walk.facing;
+    node.dataset.walkView = walk.view;
   }
   function finish(walk) {
     walks.delete(walk.key);
@@ -70,8 +79,11 @@ export function createWalkers(root, { motionAllowed, changed }) {
       const walk = { key, path, index: 0, travelled: 0, arrive, carrying,
         speed: old?.speed || SPEED[0] + Math.random() * (SPEED[1] - SPEED[0]), facing: old?.facing || "right" };
       walk.goal = path[path.length - 1];
+      // A level first stretch takes its view from the overall heading.
+      walk.view = old?.view || (walk.goal[1] > path[0][1] ? "front" : "back");
       walks.set(key, walk);
       walk.facing = facing(walk);
+      walk.view = view(walk);
       if (!running) { running = true; previous = performance.now(); requestAnimationFrame(frame); }
       return walk;
     },
@@ -79,7 +91,7 @@ export function createWalkers(root, { motionAllowed, changed }) {
       const walk = walks.get(key);
       if (!walk) return null;
       const [x, y] = position(walk);
-      return { x, y, goal: walk.goal, facing: facing(walk), carrying: walk.carrying, depth: walkerDepth(x, y) };
+      return { x, y, goal: walk.goal, facing: facing(walk), view: view(walk), carrying: walk.carrying, depth: walkerDepth(x, y) };
     },
     stop(key) { walks.delete(key); },
     active() { return walks.size > 0; },

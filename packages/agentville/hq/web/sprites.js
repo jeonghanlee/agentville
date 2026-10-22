@@ -6,7 +6,15 @@ const PEOPLE_SIZE = [1536, 1024];
 const CATS_SIZE = [1024, 1536];
 const SLEEPING = [[40,60,485,414],[575,88,450,379],[1047,59,464,417],[23,556,506,407],[557,575,473,395],[1043,557,470,412]];
 const COFFEE_STANDING = [[273,18,212,480],[649,40,215,455],[1027,24,216,475],[272,514,221,468],[674,519,192,466],[1045,514,210,476]];
+// Walking legs per appearance: the atlas x where the two legs part, and the top of the legs as a share of the frame
+// height, for the front standing row of the employees atlas and for the coffee-standing (rear) frames.
+const WALK_LEGS = {
+  front: [[146,.72],[392,.72],[641,.72],[883,.72],[1135,.72],[1380,.72]],
+  back: [[364,.68],[749,.68],[1130,.68],[386,.68],[747,.68],[1130,.68]],
+};
 const CAT_SCALE = 34 / 385;
+// Width of the still underlay kept inside each moving cat part's edge, in sprite units (about five atlas pixels).
+const CAT_SEAM = .45;
 const BOOK_COVERS = [["#7f9570","#647b58"], ["#b67c57","#8f5f42"], ["#8995ad","#6a7590"], ["#c9a25c","#a07e3f"]];
 const PEOPLE = [
   [[78,38,143,335], [65,386,161,300], [75,690,184,282]],
@@ -57,6 +65,7 @@ function localRect(frame, region) {
 export function employeeSprite(look, state, detail, condition, contractor, desk, workstation, cup = randomMug()) {
   if (desk === "lying") return sleepingSprite(look, state);
   if (desk === "coffee-back") return coffeeSprite(look,state,detail,cup);
+  if (desk === "walking") return walkingSprite(look,state,detail,cup);
   const pose = desk.startsWith("back") ? 2 : desk === "front" ? 1 : 0;
   const frame = PEOPLE[look.style][pose];
   const head = localRect(frame, [frame[0],frame[1],frame[2],HEAD_END[look.style][pose]-frame[1]]);
@@ -114,7 +123,18 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
   if (detail === "fika") {
     const [front, back] = BOOK_COVERS[(cup?.mug ?? 0) % BOOK_COVERS.length];
     const centre = [(left[0]+left[2]/2+right[0]+right[2]/2)/2, Math.min(left[1]+left[3]/2, right[1]+right[3]/2) - 4.4];
-    svg.querySelector(".pointer-hand").insertAdjacentHTML("beforebegin", '<g class="lounge-book" transform="translate(' + (centre[0]-3.6).toFixed(2) + ' ' + centre[1].toFixed(2) + ')" stroke="#5f5440" stroke-width=".3" stroke-linejoin="round">'
+    if (pose === 2) {
+      // Facing away, the reader holds the book up beside the head: the viewer sees its outer covers and spine with
+      // the page edges along the top. It sits behind the head and body, which are nearer the viewer; the hands
+      // stay in front of its lower corners, so it rests in the grip.
+      const top = Math.min(left[1], right[1]) - 4.6;
+      svg.querySelector(".still-copy").insertAdjacentHTML("beforebegin", '<g class="lounge-book lounge-book-back" transform="translate(' + (centre[0]-2.6).toFixed(2) + ' ' + top.toFixed(2) + ') rotate(-6 4 6)" stroke="#5f5440" stroke-width=".3" stroke-linejoin="round">'
+        + '<path class="book-leaf" d="M4 .7q1.7-1.9 3.4-.7Q5.6 1 4 .7Z" fill="#fbf5e3" stroke-width=".25"/>'
+        + '<path d="M.3 1.5Q2.1.1 4 .7q1.9-.6 3.7.8v.7H.3Z" fill="#f1e8ce"/>'
+        + '<path d="M.3 1.5Q2.1.1 4 .7q1.9-.6 3.7.8" fill="none" stroke="#d9cba6" stroke-width=".25"/>'
+        + '<path d="M0 1.9 3.6 1.2v5.3L0 6.9Z" fill="' + back + '"/><path d="M8 1.9 4.4 1.2v5.3L8 6.9Z" fill="' + front + '"/>'
+        + '<path d="M3.6 1.2h.8v5.3h-.8Z" fill="#5f5440"/><path d="M5.3 3.2l1.8.3M.9 3.5l1.8-.3" stroke="#f1e8ce" stroke-width=".45"/></g>');
+    } else svg.querySelector(".pointer-hand").insertAdjacentHTML("beforebegin", '<g class="lounge-book" transform="translate(' + (centre[0]-3.6).toFixed(2) + ' ' + centre[1].toFixed(2) + ')" stroke="#5f5440" stroke-width=".3" stroke-linejoin="round">'
       + '<path d="M.3 .9q1.6-1.4 3.3-.7 1.7-.7 3.3.7v.6H.3Z" fill="#f1e8ce"/>'
       + '<path d="M0 1 3.6.4v4.4L0 5.4Z" fill="' + front + '"/><path d="M7.2 1 3.6.4v4.4l3.6.6Z" fill="' + back + '"/>'
       + '<path d="M1 2.4l1.8-.3M4.4 2.1l1.8.3" stroke="#f1e8ce" stroke-width=".45"/>'
@@ -199,6 +219,37 @@ function coffeeSprite(look, state, detail, cup) {
   return svg;
 }
 
+// One leg-split view of a standing frame: the whole figure steps with a small bob while the leg that carries the
+// weight is held on the floor, so the other foot lifts. Legs only ever move down against the body, which the full
+// figure underneath covers, so no copy or gap shows at the part edges.
+function steppingFigure(file, frame, [split, top], id) {
+  const art = viewport(file, frame, PEOPLE_SIZE, 32, 43);
+  const legTop = frame[1] + frame[3] * top, bottom = frame[1] + frame[3];
+  const legs = [[frame[0], legTop, split - frame[0], bottom - legTop], [split, legTop, frame[0] + frame[2] - split, bottom - legTop]]
+    .map((region) => localRect(frame, region));
+  return '<defs>' + legs.map((leg,i) => '<clipPath id="' + id + '-leg' + i + '">' + rect(leg) + '</clipPath>').join("") + '</defs>'
+    + '<g class="walk-figure">' + art + legs.map((_,i) => '<g class="walk-leg walk-leg-' + (i ? "far" : "near") + '" clip-path="url(#' + id + '-leg' + i + ')">' + art + '</g>').join("") + '</g>';
+}
+
+// A walking colleague: the rear coffee-standing frame while heading up-screen, the front standing frame while heading
+// down-screen. Both face right here (the front frame faces lower-left in the atlas, so it is mirrored); the page
+// mirrors the whole sprite for leftward walks and picks the view with data-walk-view on the colleague.
+// A carried drink stays in the hands of the rear view; the front frames already hold their own items or have
+// their hands in their pockets, so the drink is not drawn there.
+function walkingSprite(look, state, detail, cup) {
+  const id = "walk-parts-" + (++sequence);
+  const svg = document.createElementNS(NS,"svg");
+  svg.setAttribute("viewBox","0 0 32 43");
+  svg.setAttribute("class","character textured-character coffee-character walking-character");
+  svg.setAttribute("aria-hidden","true");
+  svg.dataset.activity = state;
+  svg.dataset.pose = "walking";
+  svg.innerHTML = '<g class="walk-view walk-back">' + steppingFigure("coffee-standing" + (look.suffix || "") + ".png", COFFEE_STANDING[look.style], WALK_LEGS.back[look.style], id + "-back")
+    + (detail === "coffee-cup" ? '<g class="walk-cup">' + drinkArtwork(cup,21,20) + '</g>' : '') + '</g>'
+    + '<g class="walk-view walk-front"><g transform="matrix(-1 0 0 1 32 0)">' + steppingFigure("employees" + (look.suffix || "") + ".png", PEOPLE[look.style][0], WALK_LEGS.front[look.style], id + "-front") + '</g></g>';
+  return svg;
+}
+
 export function catSprite(coat) {
   const frames = CAT_FRAMES[coat] || CAT_FRAMES.ginger;
   const svg = document.createElementNS(NS,"svg");
@@ -221,10 +272,18 @@ function walkingCat(coat, frame) {
   const names = ["cat-tail", "cat-leg cat-leg-back", "cat-leg cat-leg-far", "cat-leg cat-leg-front", "cat-head"];
   // Legs swing from the hip, the tail from its base, the head from the neck (lower left of its box).
   const pivots = parts.map(([x,y,w,h],i) => i === 0 ? [x+w/2, y+h] : i === 4 ? [x+w*.3, y+h*.85] : [x+w/2, y]);
-  // A still copy of the head stays underneath, so a nodding head leaves no gap at the neck.
+  // A still copy underneath keeps the art opaque along every part edge, where the body mask and the part clip
+  // both antialias and would otherwise let the floor show through as thin seams. It leaves out the inner area
+  // of the tail and legs (inset by CAT_SEAM near the hip or tail base, and open on their free end), so a
+  // swinging part leaves no copy behind; the head stays whole underneath, so a nodding head leaves no gap at the neck.
+  const inset = ([x,y,w,h]) => [x+CAT_SEAM,y+CAT_SEAM,Math.max(0,w-2*CAT_SEAM),Math.max(0,h-2*CAT_SEAM)];
+  const free = ([x,y,w,h],i) => i === 0 ? [x,y,w,h*.6] : [x,y+h*.4,w,h*.6];
   return '<defs><mask id="' + id + '-body" maskUnits="userSpaceOnUse" x="0" y="0" width="44" height="34">'
     + rect([0,0,44,34],"white") + parts.slice(0,4).map((part) => rect(part,"black")).join("") + '</mask>'
+    + '<mask id="' + id + '-under" maskUnits="userSpaceOnUse" x="0" y="0" width="44" height="34">'
+    + rect([0,0,44,34],"white") + parts.slice(0,4).map((part,i) => rect(inset(part),"black") + rect(free(part,i),"black")).join("") + '</mask>'
     + parts.map((part,i) => '<clipPath id="' + id + '-' + i + '">' + rect(part) + '</clipPath>').join("") + '</defs>'
+    + '<g class="cat-still" mask="url(#' + id + '-under)">' + art + '</g>'
     + '<g mask="url(#' + id + '-body)">' + art + '</g>'
     + parts.map((part,i) => '<g class="' + names[i] + '" style="transform-origin:' + pivots[i][0].toFixed(2) + 'px ' + pivots[i][1].toFixed(2) + 'px" clip-path="url(#' + id + '-' + i + ')">' + art + '</g>').join("");
 }

@@ -61,7 +61,8 @@ const companions = new Map();
 const screensOff = new Map();
 const completions = new Map();
 const lastStates = new Map();
-const facilityOccupancy = new Map();
+// Seat reservations per shown room: Map of colleague key to seat index, or null while waiting or overflowing.
+const seatOccupancy = new Map();
 let daylight = null;
 let furniture = null;
 let decor = null;
@@ -312,6 +313,13 @@ function renderRooms(ctx) {
   $("previous-floor").disabled = floor === 0;
   $("next-floor").disabled = floor >= count - 1;
 }
+// The reservation scope of a shown room. Facilities are kept per Branch; desk rooms also follow the shown floor
+// page and the repository in that room, so another Branch or page starts with fresh desk assignments.
+function seatScope(ctx, room) {
+  if (Object.hasOwn(WAITING_SPOTS, room)) return keyOf(branchId, "facility:" + room);
+  const project = room.startsWith("studio") ? ctx.page[Number(room.slice(6))]?.id : COMMON;
+  return keyOf(branchId, "desk:" + room + ":" + floor + ":" + project);
+}
 // Where a colleague stands for a place: in front of a chair, beside the bed, or on a standing spot.
 // Seats also name the free side of the chair, which walkers pass through when sitting down or getting up.
 function placeOf(room, index, home, spot) {
@@ -346,11 +354,16 @@ function renderCharacters(ctx) {
     if (!groups.has(room)) groups.set(room, []);
     groups.get(room).push(row);
   }
-  // Reserve facility seats until departure; insertion order keeps the waiting line stable.
-  for (const room of Object.keys(WAITING_SPOTS)) {
-    const id = keyOf(branchId,room);
-    if (!facilityOccupancy.has(id)) facilityOccupancy.set(id,new Map());
-    const occupants = facilityOccupancy.get(id);
+  // Every room keeps its seats for the visit: a colleague holds its desk, lounge chair, or bed until it leaves the room,
+  // newcomers take the lowest free seat (people arrive in seat-number order), and the others stay put.
+  // Facilities keep a waiting line in first-arrival order; desk rooms show further people as "+N".
+  // Desk assignments start over when the shown Branch or floor page changes.
+  const scopes = new Set();
+  for (const room of new Set([...groups.keys(), ...Object.keys(WAITING_SPOTS)])) {
+    const id = seatScope(ctx, room);
+    scopes.add(id);
+    if (!seatOccupancy.has(id)) seatOccupancy.set(id,new Map());
+    const occupants = seatOccupancy.get(id);
     const people = groups.get(room) || [];
     const members = new Set(people.map((row) => row.key));
     for (const key of occupants.keys()) if (!members.has(key)) occupants.delete(key);
@@ -363,7 +376,8 @@ function renderCharacters(ctx) {
       occupants.set(key,free); occupied.add(free);
     }
   }
-  const fika = facilityOccupancy.get(keyOf(branchId,"fika"));
+  for (const id of seatOccupancy.keys()) if (!scopes.has(id) && !JSON.parse(id)[1].startsWith("facility:")) seatOccupancy.delete(id);
+  const fika = seatOccupancy.get(seatScope(ctx,"fika"));
   coffee?.sync([...fika].filter(([,index]) => index !== null)
     .map(([key,index]) => [key,ROOM_LAYOUT.fika.seats[index]]),branchId);
   lounge?.sync([...fika.keys()].map((key) => [key, JSON.parse(key)[1]]));
@@ -371,11 +385,11 @@ function renderCharacters(ctx) {
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room];
-    const occupants = facilityOccupancy.get(keyOf(branchId,room));
-    const waiting = occupants ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
+    const occupants = seatOccupancy.get(seatScope(ctx,room));
+    const waiting = WAITING_SPOTS[room] ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
     const shownWaiting = waiting.slice(0,WAITING_SPOTS[room]?.length || 0);
     if (waiting.includes(selected) && !shownWaiting.includes(selected)) shownWaiting[shownWaiting.length-1] = selected;
-    const placed = people.map((row,i) => ({ row, index: occupants ? occupants.get(row.key) : i }))
+    const placed = people.map((row) => ({ row, index: occupants.get(row.key) }))
       .filter(({ row,index }) => index === null ? shownWaiting.includes(row.key) : index < layout.seats.length);
     placed.forEach(({ row,index }) => {
       let node = actors.get(row.key);
@@ -401,7 +415,7 @@ function renderCharacters(ctx) {
       const home = spot ? [...spot,"standing",Math.floor(spot[1])+1] : layout.seats[index];
       const walk = moveWalker(row.key, visit?.point ? { foot: visit.point, approach: null } : placeOf(room, index, home, spot));
       const counter = !walk && visit?.point;
-      const seat = walk ? [walk.x, walk.y, "coffee-back", walk.depth]
+      const seat = walk ? [walk.x, walk.y, "walking", walk.depth]
         : counter ? [...visit.point, "coffee-back", walkerDepth(...visit.point)] : home;
       const desk = seat[2];
       node.classList.add(walk || counter ? "coffee-standing" : spot ? "standing" : desk === "lying" ? "reclining" : "seated");
@@ -410,6 +424,7 @@ function renderCharacters(ctx) {
       node.dataset.seatFacing = desk;
       node.dataset.coffeePhase = visit?.phase || (walk ? "walking" : "");
       node.dataset.coffeeFacing = walk?.facing || (counter ? "right" : "");
+      node.dataset.walkView = walk?.view || "";
       node.dataset.queuePosition = spot ? String(waiting.indexOf(row.key)+1) : "";
       node.dataset.seatIndex = index === null ? "" : String(index);
       node.style.width = desk === "lying" ? "8%" : SEATED_WIDTH + "%";
@@ -535,7 +550,7 @@ function renderTeam(ctx) {
     [t("detail.tool"), row.state === "working" ? row.activity?.tool || "-" : "-"],
     [t("detail.workload"), row.verified ? workloadText(row) : "-"]];
   if (resetLabel(row)) stats.push([t("detail.limit"), resetLabel(row)]);
-  const occupants = facilityOccupancy.get(keyOf(branchId,roomOf(row)));
+  const occupants = seatOccupancy.get(keyOf(branchId,"facility:" + roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
   if (waiting) stats.push([t("detail.place"), t(roomOf(row) === "infirmary" ? "queue.bed" : "queue.seat")]);
   const note = !row.verified ? t(hqConnected() ? "detail.awaiting" : "detail.unverified") : row.state === "limited" ? t("detail.limited")

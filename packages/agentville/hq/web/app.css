@@ -133,10 +133,18 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 .agent.unverified::before { content: "?"; position: absolute; top: -3px; right: -3px; z-index: 1; width: 11px; height: 11px; border: 1px solid #d3d6c6; border-radius: 50%; background: #fffef8; color: var(--unknown); font: 600 8px/11px var(--sans); text-align: center; }
 .state-label.unverified { opacity: .7; }.unverified-mark { font-weight: 700; }.unverified-count::after { content: "?"; }
 .metric.unverified strong { opacity: .55; }.metric small { display: block; color: var(--unknown); font-size: 9px; }
-.coffee-standing[data-coffee-phase^="walking"] .coffee-person { transform-origin: 16px 40px; animation: coffee-step .55s ease-in-out infinite; }
+/* Walking views (sprites.js walkingSprite, walk.js): the front standing frame while heading down-screen, the rear frame
+   while heading up-screen. Each step bobs the figure and holds the weight-bearing leg on the floor, so the feet alternate. */
+.walking-character .walk-front, .agent[data-walk-view="front"] .walking-character .walk-back { display: none; }
+.agent[data-walk-view="front"] .walking-character .walk-front { display: inline; }
+.agent.walking .walk-view { animation: walk-bob .56s linear infinite; }
+.agent.walking .walk-leg-near { animation: walk-plant-near .56s linear infinite; }
+.agent.walking .walk-leg-far { animation: walk-plant-far .56s linear infinite; }
+@keyframes walk-bob { 0%,50%,100% { transform: translateY(0); } 25%,75% { transform: translateY(-.6px); } }
+@keyframes walk-plant-near { 0%,50%,100% { transform: translateY(0); } 25% { transform: translateY(.6px); } }
+@keyframes walk-plant-far { 0%,50%,100% { transform: translateY(0); } 75% { transform: translateY(.6px); } }
 .brewing-steam { animation: float 2s ease-in-out infinite; }
 .coffee-status { position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: #fff7e7; color: #8d7953; border: 1px solid #e0d2b8; border-radius: 4px; font-size: 8px; padding: 2px 4px; }
-@keyframes coffee-step { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: translateY(-.6px) rotate(1.5deg); } }
 
 .agent.seated .body { animation: none; }
 .scene.is-empty .furniture-front, .scene.is-empty .wall-art, .scene.is-empty .flower-layer { opacity: .45; }
