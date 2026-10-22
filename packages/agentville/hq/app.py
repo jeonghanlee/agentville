@@ -21,6 +21,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from agentville import version
 from agentville.common.protocol import load_schema
 from agentville.hq.store import Store, now_utc
 
@@ -163,7 +164,7 @@ def create_app(
             await task
         store.close()
 
-    app = FastAPI(title="AgentVille HQ", version="0.0.1", lifespan=lifespan)
+    app = FastAPI(title="AgentVille HQ", version=version(), lifespan=lifespan)
 
     def host_allowed(netloc: str) -> bool:
         return hosts is None or _hostname(netloc) in hosts | server_names
@@ -231,8 +232,10 @@ def create_app(
         except (ValueError, RecursionError) as exc:
             raise HTTPException(status_code=400, detail="invalid JSON") from exc
         messages = body.get("messages") if isinstance(body, dict) else None
-        if not isinstance(messages, list) or not messages or len(messages) > MAX_BATCH:
+        if not isinstance(messages, list) or not messages:
             raise HTTPException(status_code=400, detail="messages must be a non-empty list")
+        if len(messages) > MAX_BATCH:
+            raise HTTPException(status_code=413, detail=f"at most {MAX_BATCH} messages per batch")
         ids = [m.get("branch_id") if isinstance(m, dict) else None for m in messages]
         if not all(isinstance(i, str) for i in ids) or len(set(ids)) != 1:
             raise HTTPException(status_code=400, detail="one branch per batch")

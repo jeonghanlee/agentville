@@ -17,7 +17,7 @@ AgentVille runs as the login user, without root, as systemd user services.
 
 - Linux with a systemd user instance. Without systemd, start the two programs in the foreground or with any process supervisor, using the same arguments as the `ExecStart` lines of the unit files in `deploy/systemd/`.
 - Python 3.12 or later, `venv`, and `git`.
-- On Branches: Claude Code and/or Codex CLI. Codex live state requires its shared app-server daemon.
+- On Branches: Claude Code and/or Codex CLI. Codex runs that use its shared app-server daemon are observed live, including `waiting`. Other Codex runs (e.g. `codex exec`) are observed from their rollout files only, with low confidence and without `waiting` ([Architecture](architecture.md) Section 3.4).
 
 | Distribution | Packages |
 |---|---|
@@ -29,6 +29,27 @@ AgentVille runs as the login user, without root, as systemd user services.
 Debian 12 ships Python 3.11 and is not supported.
 
 ## 2. Download
+
+`install.sh` performs Sections 2 to 4 with the paths below and installs the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/install.sh | bash                 # Branch only
+curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/install.sh | bash -s -- --hq      # HQ host
+```
+
+| Option | Effect |
+|---|---|
+| `--hq` | Also installs HQ and its service. |
+| `--ref <ref>` | Installs a release tag, branch, or commit instead of the latest release tag. |
+| `--hq-url <url>` | Sets `hq.url` in the Collector configuration (Section 6.5). |
+| `--token-file <file>` | Sets `hq.token` from the file (Section 6.5). |
+| `--no-start` | Installs the unit files without enabling or restarting the services. |
+
+It writes the Collector configuration before the first service start, copies a unit file only when none is installed, and then enables and restarts the services and checks that they are running. Without a systemd user instance it prints the foreground commands instead. It stops without changes when `~/.local/src/agentville` has local changes. Continue with Section 5.
+
+A Branch reporting to an HQ on another host needs a token for its `host.id` (Section 6.1), which the first run writes. Run the script once, create the token on HQ (Section 6.2), then run it again with `--hq-url` set to the HQ HTTPS address (Sections 6.3 and 6.5) and `--token-file` naming a file that holds only this Branch's token value, not the `<host.id>: <token>` line.
+
+The manual steps:
 
 ```bash
 git clone https://github.com/jeonghanlee/agentville.git ~/.local/src/agentville
@@ -63,8 +84,8 @@ The commands in this guide call the programs by name, so `~/.local/bin` must be 
 Check:
 
 ```bash
-agentville-collector --help
-agentville-hq --help                                                    # HQ host
+agentville-collector --version                                          # agentville-collector 0.1.0
+agentville-hq --version                                                 # HQ host: agentville-hq 0.1.0
 ```
 
 ## 4. Start the services
@@ -95,13 +116,17 @@ systemctl --user daemon-reload
 systemctl --user enable --now agentville-hq agentville-collector
 ```
 
-HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener), choose another port, for example 8471, before enabling the services:
+HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener, and HQ stops with `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`), choose another port, for example 8471. If the listener is an HQ you started yourself (for example from the README quick start), stop it instead of changing the port.
 
-- in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`;
+To change the port:
+
+- in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`, then run `systemctl --user daemon-reload` and `systemctl --user restart agentville-hq`;
 - in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
 - use the same port in the addresses of Section 5.
 
-User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user; this is optional and is the only step that needs root:
+HQ keeps its database in `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`; the directory is created with mode 0700). To place it elsewhere, add `--db <path>` to `ExecStart`. Received messages are kept for 30 days; `--retention-days <n>` changes that. The current state of each Branch is kept regardless.
+
+User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user (optional; the services themselves never need root):
 
 ```bash
 sudo loginctl enable-linger <user>
@@ -120,7 +145,7 @@ On the HQ host the Collector may start before HQ listens; its first delivery the
 
 ## 5. Verify
 
-Each program writes one line to standard error at start:
+Each program writes one line to standard error at start; HQ writes it once its port is bound and its TLS certificate, if any, is loaded:
 
 ```text
 agentville-hq: serving http://127.0.0.1:8470/ (database /home/<user>/.local/share/agentville/hq.sqlite3)
@@ -134,7 +159,7 @@ journalctl --user -u agentville-collector -n 50
 journalctl --user -u agentville-hq -n 50                                # HQ host
 ```
 
-A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with a message containing `agentville-collector:` or `agentville-hq:`.
+A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with one line starting with `agentville-collector:` or `agentville-hq:` that names the file or option and the reason, for example `agentville-collector: invalid configuration: collector.poll_interval must be greater than 0` or `agentville-hq: cannot read /home/<user>/.config/agentville/tokens.yaml: No such file or directory`.
 
 On the HQ host:
 
@@ -187,9 +212,16 @@ systemctl --user daemon-reload
 systemctl --user restart agentville-hq
 ```
 
-Unit files expand `%h` to the home directory; they do not expand `~`.
+Unit files expand `%h` to the home directory; they do not expand `~`. Without systemd, run the command after `ExecStart=` in the foreground, in its own terminal, with `~` in place of `%h`; where this guide says `systemctl --user restart ...`, stop the program (Ctrl-C) and start it again.
 
-**(a) HQ serves HTTPS directly.** HQ needs a PEM certificate and key for `hq.example.org`, readable by the login user (key mode 0600). The Collector verifies the certificate against the host's system trust store, so each Branch must trust its issuer. The paths below are examples.
+**(a) HQ serves HTTPS directly.** HQ needs a PEM certificate and key for `hq.example.org`, readable by the login user (key mode 0600). The Collector verifies the certificate against the host's system trust store, so each Branch, and the HQ host for its own Collector, must trust its issuer. Until it does, the Collector logs `delivery failed: ... CERTIFICATE_VERIFY_FAILED`. To trust a self-signed certificate, copy HQ's `cert.pem` (named in the example below) to each host first; for an internal CA, use the CA certificate instead of `cert.pem`. Then:
+
+| System | Command |
+|---|---|
+| Debian, Ubuntu | `sudo cp cert.pem /usr/local/share/ca-certificates/agentville-hq.crt && sudo update-ca-certificates` |
+| Rocky Linux | `sudo cp cert.pem /etc/pki/ca-trust/source/anchors/agentville-hq.pem && sudo update-ca-trust` |
+
+The paths below are examples.
 
 ```ini
 ExecStart=%h/.local/bin/agentville-hq --host 0.0.0.0 --port 8470 --allow-remote \
@@ -264,7 +296,7 @@ Then `systemctl --user restart agentville-collector`. The startup line reads `ag
 
 ### 6.6 Open the office
 
-The viewer token is in `~/.config/agentville/viewer.token` on the HQ host. Open `https://hq.example.org/#token=<viewer token>` (form (a): `https://hq.example.org:8470/#token=<viewer token>`). The page moves the token to session storage and removes it from the address bar.
+The viewer token is in `~/.config/agentville/viewer.token` on the HQ host. Open `https://hq.example.org/#token=<viewer token>` (form (a): `https://hq.example.org:8470/#token=<viewer token>`) in a new tab; if the page is already open, add the fragment and reload. The page moves the token to session storage and removes it from the address bar. A wrong or old token shows the same "Viewer token required" as a missing one; reopen with the current value of `viewer.token`.
 
 In form (b), a browser on the HQ host can also open `http://127.0.0.1:8470/#token=<viewer token>`.
 
@@ -282,6 +314,7 @@ Branch only:
 ```bash
 cd ~/.local/src/agentville
 git pull
+rm -rf build
 ~/.local/opt/agentville/bin/pip install .
 systemctl --user restart agentville-collector
 ```
@@ -291,9 +324,12 @@ HQ host:
 ```bash
 cd ~/.local/src/agentville
 git pull
+rm -rf build
 ~/.local/opt/agentville/bin/pip install '.[hq]'
 systemctl --user restart agentville-hq agentville-collector
 ```
+
+Installed with `install.sh`: run the same command again; it moves to the latest release (or `--ref`) and, unless `--no-start` is given or systemd is absent, restarts the services. It leaves the source on a detached commit, so the `git pull` steps above apply only to a manual installation.
 
 Configuration, roster, HQ data, and the installed unit files are kept.
 
@@ -323,6 +359,6 @@ Data left in place, to be removed separately if no longer needed:
 
 | Path | Content |
 |---|---|
-| `~/.config/agentville/` | Collector configuration; on HQ, token files |
+| `~/.config/agentville/` | Collector configuration; on HQ, token files and, in form (a) with the example paths, the TLS certificate and private key |
 | `~/.local/state/agentville/` | Collector `seq` and `roster.json` |
 | `~/.local/share/agentville/hq.sqlite3` | HQ database (HQ host) |

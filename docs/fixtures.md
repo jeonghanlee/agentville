@@ -46,8 +46,9 @@ Validation is repeated when a provider version changes.
 | S12 | both | Usage limit reached | `limited` |
 | S13 | both | Agent-level error | `error` |
 | S14 | both | Normal exit | Off duty |
+| S15 | codex | A run outside the app-server daemon, later loaded by it | Rollout-only shift, handover |
 
-Generated: Claude S01, S02, S03, S04, S06, S07, S08, S10, S11, S12, S13, S14; Codex S01, S02, S03, S04, S06, S08, S09, S10, S11, S12, S13, S14. S05 awaits child-process Contractor support.
+Generated: Claude S01, S02, S03, S04, S06, S07, S08, S10, S11, S12, S13, S14; Codex S01, S02, S03, S04, S06, S08, S09, S10, S11, S12, S13, S14, S15. S05 awaits child-process Contractor support.
 
 
 Notes on what the generated scenarios can show:
@@ -57,6 +58,7 @@ Notes on what the generated scenarios can show:
 - S11: outside a repository, Claude records omit `gitBranch`; Codex `gitInfo` and `session_meta.git` are null.
 - Claude S12: the usage limit is an API error record carrying `quotaLimits`; `resetsAt` is given as epoch seconds and as ISO 8601. A later API error without `quotaLimits` is an `error`.
 - Codex S12: a full window reports `limited`; a turn ending with `task_complete.error.codex_error_info: usage_limit_exceeded` stays `limited`, also when no full window was seen; `server_overloaded` ends the turn without an error. `rate_limits` is null in one `token_count`.
+- Codex S15: the rollout is created empty at attach, so it is read from its start; the daemon then reports the thread with `thread/started` and the same Employee continues. The 30-minute end by inactivity depends on file modification times, which the replay does not control; unit tests cover it.
 - S13: the Claude error record (`isApiErrorMessage`, `error`, `apiError`, `apiErrorStatus`, `errorDetails`) and the Codex `task_complete.error` object (`codex_error_info`, `message`) hold placeholders; the Adapters read only the presence of the error, its Codex kind, and Claude `quotaLimits`.
 - Claude `tmux` values have the observed shape `<session>:@<window>.%<pane>` with synthetic values such as `agents:@1.%1`.
 

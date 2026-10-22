@@ -15,9 +15,21 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e '.[hq,test]'
       - run: python -m pytest -q
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run install.sh against this commit
+        env:
+          AGENTVILLE_REPO: ${{ github.workspace }}
+        run: ./install.sh --hq --no-start --ref "$GITHUB_SHA"
+      - run: ~/.local/bin/agentville-hq --version && ~/.local/bin/agentville-collector --version

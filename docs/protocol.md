@@ -22,7 +22,7 @@
 - HQ marks a Branch `unreachable` when no message arrives within a multiple of the last `heartbeat.interval`, and when no message has arrived since HQ started.
 - A `snapshot` that is not newer than HQ's state by `seq` and `sent_at` is answered with `need_snapshot`; a second such snapshot in answer is applied as a reset of a Branch whose clock moved back ([architecture.md](architecture.md) Section 4.1).
 
-- Transport: HTTP(S) POST of `{"messages": [...]}` to `/api/v1/ingest/messages`; one Branch per batch. Response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
+- Transport: HTTP(S) POST of `{"messages": [...]}` to `/api/v1/ingest/messages`; one Branch per batch, at most 1000 messages (a larger batch is rejected with 413). Response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 ## 3. Envelope
 
@@ -66,7 +66,7 @@ Carries the full current state of one Employee.
 |---|---|
 | `instance_id` | `AgentInstance` identifier. |
 | `started_at` | UTC start time. |
-| `runtime` | Runtime summary: `{"type": "tmux", "location": <tmux pane location reported by Claude Code>}`, `{"type": "shell"}`, or `{"type": "app_server"}` (Codex). |
+| `runtime` | Runtime summary: `{"type": "tmux", "location": <tmux pane location reported by Claude Code>}`, `{"type": "shell"}`, `{"type": "app_server"}` (Codex thread on the app-server daemon), or `{"type": "rollout"}` (Codex run outside the daemon, observed from its rollout file only; [architecture.md](architecture.md) Section 3.4). The schema allows any object; these are the values sent. |
 
 ### 4.2 `activity`
 
@@ -78,10 +78,10 @@ Carries the full current state of one Employee.
 | `state` | `working`, `thinking`, `waiting`, `idle`, `completed`, `error`, `limited`, `unknown` |
 | `state_since` | UTC start time of the state. Used by the UI for idle progression. |
 | `source` | `session_file`, `session_log`, `app_server`, `hook`, `process` |
-| `confidence` | `high`, `medium`, `low` |
+| `confidence` | `high`, `medium`, `low`. Always `low` for a Codex run observed from its rollout file only. |
 | `tool` | Tool name when `working`, e.g. `Bash`, `Edit`. |
 | `reset_at` | Usage-limit reset time when `limited`, if known. |
-| `workload` | Number of tool executions started in the last 5 minutes. |
+| `workload` | Number of tool executions started in the last 5 minutes. A new `activity` is sent when it changes, including by time alone. |
 
 ### 4.3 `contractor`
 

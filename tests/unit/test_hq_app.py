@@ -53,6 +53,12 @@ def test_rejects_invalid_batches(tmp_path):
     assert client.post("/api/v1/ingest/messages", content=b"not json", headers={"Content-Type": "application/json"}).status_code == 400
 
 
+def test_oversized_batch_is_reported_as_such(tmp_path):
+    client = _client(tmp_path)
+    response = client.post("/api/v1/ingest/messages", json={"messages": [_snapshot()] * 1001})
+    assert (response.status_code, response.json()["detail"]) == (413, "at most 1000 messages per batch")
+
+
 def test_viewer_token_guards_reads_and_stats(tmp_path):
     client = _client(tmp_path)
     client.post("/api/v1/ingest/messages", json={"messages": [_snapshot()]})

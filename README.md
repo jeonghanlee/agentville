@@ -23,11 +23,20 @@ git clone https://github.com/jeonghanlee/agentville.git ~/.local/src/agentville
 cd ~/.local/src/agentville
 python3 -m venv ~/.local/opt/agentville && ~/.local/opt/agentville/bin/pip install '.[hq]'
 mkdir -p ~/.local/bin && ln -sf ~/.local/opt/agentville/bin/agentville-* ~/.local/bin/
+export PATH="$HOME/.local/bin:$PATH"   # a new login does this on Debian/Ubuntu once ~/.local/bin exists
 agentville-hq &               # http://127.0.0.1:8470
 agentville-collector
 ```
 
-Open `http://127.0.0.1:8470/`. `http://127.0.0.1:8470/?demo=1` shows fictional colleagues. For services, other hosts, and TLS, follow the Installation chapter.
+Open `http://127.0.0.1:8470/`. `http://127.0.0.1:8470/?demo=1` shows fictional colleagues. The quick start runs in this terminal; stop it (Ctrl-C, then `kill %1`) before installing the services.
+
+To install as systemd user services, latest release (`--hq` on the HQ host; without it, the Collector only):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/install.sh | bash -s -- --hq
+```
+
+For other hosts and TLS, follow the Installation chapter.
 
 ## Documentation
 
@@ -41,6 +50,8 @@ User manual: [jeonghanlee.github.io/agentville](https://jeonghanlee.github.io/ag
 | [Data and Security](docs/data.md) | What is sent to HQ and what never is. |
 
 Specifications: [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Test Fixtures](docs/fixtures.md).
+
+Release history: [CHANGELOG](CHANGELOG.md).
 
 ## Development
 

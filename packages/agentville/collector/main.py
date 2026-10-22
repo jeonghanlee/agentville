@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, TextIO
 
+from agentville import version
 from agentville.collector.adapters.claude import ClaudeAdapter
 from agentville.collector.adapters.codex import CodexAdapter
 from agentville.collector.config import BranchConfig, load_or_create, state_dir
@@ -134,6 +135,7 @@ class Collector:
             for obs in observations:
                 self.judge.apply(obs)
         self.judge.refresh_presence(self._now)
+        self.judge.refresh_workload(self._now)
         if self._retry_at is not None and self._now < self._retry_at:
             return
         if self._needs_snapshot:
@@ -194,6 +196,7 @@ def jsonl_deliver(stream: TextIO) -> Deliver:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentville-collector", description="AgentVille Branch Collector")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version()}")
     parser.add_argument("--config", help="configuration file (default: $XDG_CONFIG_HOME/agentville/config.yaml)")
     parser.add_argument("--output", help="write JSONL messages to this path (- for stdout) instead of sending to HQ")
     parser.add_argument("--once", action="store_true", help="poll once and exit")
@@ -203,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
         config = load_or_create(args.config)
     except ValueError as exc:
         raise SystemExit(f"agentville-collector: invalid configuration: {exc}") from None
+    except OSError as exc:
+        raise SystemExit(f"agentville-collector: configuration {exc.filename or args.config}: {exc.strerror or exc}") from None
     stop = False
 
     def request_stop(signum: int, frame: Any) -> None:
