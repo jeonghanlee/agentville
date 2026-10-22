@@ -1,0 +1,26 @@
+name: release
+
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Extract the release notes from CHANGELOG.md
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '
+            $0 ~ "^## " tag "( |$)" { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $GITHUB_REF_NAME" >&2; exit 1; }
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "AgentVille $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
