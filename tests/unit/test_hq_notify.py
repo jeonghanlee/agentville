@@ -152,13 +152,19 @@ def test_configuration_files_must_be_private_and_valid(tmp_path):
     path, token = tmp_path / "notify.yaml", tmp_path / "ntfy.token"
     path.write_text(f"url: {URL}\ntoken_file: {token}\nlanguage: ko\n")
     path.chmod(0o644)
-    with pytest.raises(SystemExit, match="chmod 600"):
+    with pytest.raises(SystemExit) as error:
         load_notify_config(str(path))
+    assert str(error.value) == f"agentville-hq: {path}: must not be accessible by group or others (chmod 600)"
     path.chmod(0o600)
-    with pytest.raises(SystemExit, match="cannot read"):
+    with pytest.raises(SystemExit) as error:
         load_notify_config(str(path))
-    token.write_text("tk_secret\n")
+    assert str(error.value) == f"agentville-hq: {token}: No such file or directory"
+    token.write_text("\n")
     token.chmod(0o600)
+    with pytest.raises(SystemExit) as error:
+        load_notify_config(str(path))
+    assert str(error.value) == f"agentville-hq: {token}: holds no token"
+    token.write_text("tk_secret\n")
     config = load_notify_config(str(path))
     assert (config.token, config.language) == ("tk_secret", "ko")
     path.write_text("url: [\n")

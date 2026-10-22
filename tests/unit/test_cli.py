@@ -79,8 +79,8 @@ def _hq(tmp_path, *options):
 
 def test_hq_reports_missing_or_malformed_token_files(tmp_path):
     missing = str(tmp_path / "missing")
-    _refused(hq_main.main, _hq(tmp_path, "--tokens", missing), "agentville-hq", f"cannot read {missing}")
-    _refused(hq_main.main, _hq(tmp_path, "--viewer-token-file", missing), "agentville-hq", f"cannot read {missing}")
+    _refused(hq_main.main, _hq(tmp_path, "--tokens", missing), "agentville-hq", f"{missing}: No such file or directory")
+    _refused(hq_main.main, _hq(tmp_path, "--viewer-token-file", missing), "agentville-hq", f"{missing}: No such file or directory")
     malformed = _private(tmp_path / "tokens.yaml", "b1: [\n")
     _refused(hq_main.main, _hq(tmp_path, "--tokens", malformed), "agentville-hq", "YAML syntax error at line 2")
 

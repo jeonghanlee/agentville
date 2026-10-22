@@ -34,12 +34,12 @@ def data_dir() -> str:
 def _read_private(path: str) -> str:
     try:
         if stat.S_IMODE(os.stat(path).st_mode) & 0o077:
-            raise SystemExit(f"agentville-hq: {path} must not be accessible by group or others (chmod 600)")
+            raise SystemExit(f"agentville-hq: {path}: must not be accessible by group or others (chmod 600)")
         with open(path, encoding="utf-8") as fh:
             return fh.read()
     except (OSError, UnicodeDecodeError) as exc:
         reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)
-        raise SystemExit(f"agentville-hq: cannot read {path}: {reason}") from None
+        raise SystemExit(f"agentville-hq: {path}: {reason}") from None
 
 
 def _load_yaml(path: str) -> Any:
@@ -57,11 +57,11 @@ def load_tokens(path: str | None) -> dict[str, str]:
         return {}
     document = _load_yaml(path) or {}
     if not isinstance(document, dict):
-        raise SystemExit(f"agentville-hq: {path} must be a mapping of branch_id to token")
+        raise SystemExit(f"agentville-hq: {path}: must be a mapping of branch_id to token")
     tokens = {}
     for branch_id, token in document.items():
         if not isinstance(token, str) or len(token) < MIN_TOKEN:
-            raise SystemExit(f"agentville-hq: token for {branch_id} must be a string of at least {MIN_TOKEN} characters")
+            raise SystemExit(f"agentville-hq: {path}: token for {branch_id} must be a string of at least {MIN_TOKEN} characters")
         tokens[str(branch_id)] = token
     return tokens
 
@@ -76,7 +76,7 @@ def load_notify_config(path: str) -> NotifyConfig:
         token_file = os.path.expanduser(config.token_file)
         token = _read_private(token_file).strip()
         if not token:
-            raise SystemExit(f"agentville-hq: {token_file} holds no token")
+            raise SystemExit(f"agentville-hq: {token_file}: holds no token")
         config = dataclasses.replace(config, token=token)
     return config
 

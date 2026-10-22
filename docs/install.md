@@ -159,7 +159,7 @@ journalctl --user -u agentville-collector -n 50
 journalctl --user -u agentville-hq -n 50                                # HQ host
 ```
 
-A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with one line starting with `agentville-collector:` or `agentville-hq:` that names the file or option and the reason, for example `agentville-collector: invalid configuration: collector.poll_interval must be greater than 0` or `agentville-hq: cannot read /home/<user>/.config/agentville/tokens.yaml: No such file or directory`.
+A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with one line starting with `agentville-collector:` or `agentville-hq:` that names the file or option and the reason, for example `agentville-collector: invalid configuration: collector.poll_interval must be greater than 0` or `agentville-hq: /home/<user>/.config/agentville/tokens.yaml: No such file or directory`.
 
 On the HQ host:
 
