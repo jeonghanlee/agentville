@@ -3,11 +3,11 @@
 Release line: 0.3.0
 Milestone index: 0.3.0
 Canonical path: `docs/milestone-0.3.0.md`
-Canonical branch or ref: `feature/0.3.0`
-Git upstream: origin/feature/0.3.0
+Canonical branch or ref: `master`
+Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: The retained release candidate and tag target is 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. Its Python 3.12/3.13 and actual installer CI passed. Obtain separately previewed authority for fast-forward master integration including the verification-only checkpoint, master push, annotated 0.3.0 creation at the retained candidate, and single-tag publication. This checkpoint does not change the candidate. Then verify released objects, run the published-tag installation path, and close this line before docs/milestone-0.4.0.md.
+Next session entry point: Master was fast-forwarded from 39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b to a561b5ed5542219af5e430f64bd8d3fe97e86ce3. Create annotated 0.3.0 at the retained candidate 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf, then execute the separately delegated master and single-tag pushes. Record each result before the next dependent action, verify the published installation, and close this line before docs/milestone-0.4.0.md.
 
 ## Scope
 
@@ -25,8 +25,8 @@ Out of scope: 0.4.0 features, release publication, changes to running services, 
 | M2 | Antigravity Adapter | Milestone | Complete | No | M1, D1 | Live Antigravity sessions report presence and observable activity; [detail](#m2---antigravity-adapter) |
 | M3 | Remote development environments | Milestone | Complete | No | M2, D1 | SSH and container procedures preserve identity and reach HQ securely; [detail](#m3---remote-development-environments) |
 | G1 | Late parent observation policy | External gate | Complete | No | | D2 selects later reclassification while preserving the former Employee record; [detail](#g1---late-parent-observation-policy) |
-| M4 | Release 0.3.0 | Milestone | Blocked | No | M1, M2, M3, G2 | Reviewed candidate is tagged, published, installed, and verified; [detail](#m4---release-030) |
-| G2 | Git execution authority | External gate | Open | No | | Owner authorizes each exact Git operation before execution; [detail](#g2---git-execution-authority) |
+| M4 | Release 0.3.0 | Milestone | In progress | No | M1, M2, M3, G2 | Reviewed candidate is tagged, published, installed, and verified; [detail](#m4---release-030) |
+| G2 | Git execution authority | External gate | Complete | No | | Owner authorizes each exact Git operation before execution; [detail](#g2---git-execution-authority) |
 
 ### Decisions
 
@@ -274,7 +274,7 @@ The owner selected option 1 on 2026-10-22: reclassify after parent evidence arri
 Origin: 0.3.0 / M4
 Identity History: none
 GitHub Issue: none
-Status: Blocked
+Status: In progress
 
 ##### Summary
 
@@ -295,7 +295,7 @@ Out of scope: deploying to existing user services, implementing 0.4.0, and chang
 ##### Dependencies And Decisions
 
 - M1-M3 are Complete with local checks, accepted self-review, fetched-origin landing evidence, and successful Python 3.12/3.13 and installer CI. Release publication remains pending.
-- G2 is open; resume as Not started after execution authority is supplied.
+- G2 completed on 2026-10-22 after the owner delegated the previewed commit, master Push, Release, and single-tag Push scopes. M4 resumes as In progress.
 - The owner requested formal release, master integration, and subsequent 0.4.0 work on 2026-10-22, and selected fast-forward integration. Release-plan acceptance and implementation authority are recorded below. The earlier implementation and CHANGELOG commit delegation and initial branch push were bounded and consumed; later Git actions need their matching scopes.
 - Public REST observation on 2026-10-22 found releases 0.1.0 and 0.2.0 and no remote milestones. Git SSH observation found master at `39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b` and no 0.3.0 tag. Local gh authentication returned 401; Git SSH reads succeeded. Recheck live state before execution.
 - `.github/workflows/release.yml` creates the Release when a numeric tag is pushed. Do not also create a duplicate Release manually. The workflow's extraction consumes the prepared CHANGELOG section.
@@ -347,7 +347,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | 1 | Commit reviewed implementation and CHANGELOG separately | Owner delegated the two commits and initial push on 2026-10-22 | Named commits preserve reviewed bytes | cc8168af4eae02ce05c921c9ccf191a9b0e62723 and 42236e561ed5614a6c6e9da7d8cee6cccad4a981; fetched origin/feature/0.3.0 matches HEAD; CI run 39864177993 succeeded |
 | 2 | Commit version-only 0.3.0 change and readiness evidence separately | Owner delegated version and verification-record commits on 2026-10-22 | Candidate checks identify immutable commit | Pre-change plan/evidence: 8a01d7bc5794e25504283694a20359b6026ab1fb. Version-only commit: b73739a4b3ce5d47177d788945769e3cad38d400. Retained readiness candidate and tag target: 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. This verification-only checkpoint records its observed CI and does not change that target. |
 | 3 | Push candidate branch and inspect test workflow | Owner delegated one candidate-branch push on 2026-10-22; executed | Exact candidate passes supported Python CI | Observed 2026-10-22T23:39:57.659785+00:00: fetched origin/feature/0.3.0 equals 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf; committed package, test, version, and milestone paths match. [Run 39873163675](https://github.com/jeonghanlee/agentville/actions/runs/39873163675) succeeded for pytest (3.12), pytest (3.13), and install. |
-| 4 | Fast-forward master with the retained candidate and verification-only checkpoint | Explicit authorization for previewed merge or user execution | No history rewrite or unresolved merge | Pending |
+| 4 | Fast-forward master with the retained candidate and verification-only checkpoint | Owner delegated the previewed Release sequence on 2026-10-22 | No history rewrite or unresolved merge | Observed 2026-10-22T23:48:40.533492+00:00: git merge --ff-only a561b5ed5542219af5e430f64bd8d3fe97e86ce3 moved local master from 39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b to that exact commit; no merge commit or source changes. |
 | 5 | Create annotated refs/tags/0.3.0 at the resolved candidate | Release scope with exact preview or user execution | Immutable annotated tag | Pending |
 | 6 | Push master and the one tag; tag push triggers release.yml | Separately applicable Push and Tag push authority, or user execution | Remote objects match local accepted objects; Release is created once | Pending |
 | 7 | Record released checks, M1-M4 closure, and next-line entry point | Commit scope or user execution | Closure evidence is committed after publication | Pending |
@@ -378,7 +378,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | Release Verification 7 | Not run | Released installation | Pending | none |
 | Release Verification 8 | Not run | Committed documents | Pending | none |
 
-Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. The owner accepted the release plan and selected fast-forward integration on 2026-10-22. Version and verification-record commits plus one candidate-branch push were delegated on 2026-10-22. Master integration and tag publication still need their matching execution scopes.
+Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. The owner accepted the release plan and selected fast-forward integration on 2026-10-22. Version and verification-record commits plus one candidate-branch push were delegated on 2026-10-22. The owner supplied the separately previewed master integration, master Push, annotated-tag creation, single-tag Push, and verification-record Commit scopes on 2026-10-22.
 
 ##### Closure Evidence
 
@@ -388,11 +388,11 @@ Release-preparation review: one standalone second-person self-review of the CHAN
 
 Origin: 0.3.0 / G2
 GitHub Issue: none
-Status: Open
+Status: Complete
 
 ##### Summary
 
-The owner delegated the implementation and CHANGELOG commits and initial branch push, then the pre-change evidence commit and push, then version and verification-record commits and one candidate-branch push on 2026-10-22. Master integration, master push, annotated-tag creation, and tag publication remain separately governed. M4 cannot complete release execution under the current partial authorization.
+The owner accepted the fast-forward release plan and separately delegated the previewed Commit/add, master Push, Release, and single-tag Push scopes on 2026-10-22. These bounded scopes authorize the recorded release actions; their results remain separate evidence under M4.
 
 ##### Completion Criteria
 
@@ -402,11 +402,11 @@ The owner delegated the implementation and CHANGELOG commits and initial branch 
 
 | Observed At | Result | Evidence |
 | --- | --- | --- |
-| 2026-10-22 | Open | Commit/add and candidate-branch Push are delegated for version and verification records. The earlier implementation, CHANGELOG, and pre-change-evidence commits and pushes are complete. Master integration and annotated-tag publication still require their separately previewed scopes. |
+| 2026-10-22 | Complete | The owner supplied Commit/add, master Push, Release, and single-tag Push scopes after the exact merge and tag targets and commands were previewed. |
 
 ##### Closure Evidence
 
-- none
+- Decision Date: 2026-10-22. Accepted fast-forward release plan and matching explicit execution scopes for the previewed commands.
 
 ## Backlog
 
