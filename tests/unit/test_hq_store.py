@@ -149,3 +149,42 @@ def test_far_future_sent_at_is_not_remembered(tmp_path):
     result = s.ingest("b1", [reset.wrap("snapshot", T0, snapshot([agent("b")], []), T0)], T0)
     assert result.accepted == 1
     assert [a["agent_id"] for a in s.state(T0)["agents"]] == ["b"]
+
+
+def test_branch_whose_clock_moved_back_is_reset_by_its_answering_snapshot(tmp_path):
+    s, env = store(tmp_path), Envelope("b1", seq=100)
+    later = T0 + timedelta(minutes=10)
+    s.ingest("b1", [env.wrap("snapshot", later, snapshot([agent("old")], []), later)], later)
+    reset = Envelope("b1")
+    first = s.ingest("b1", [reset.wrap("snapshot", T0, snapshot([agent("new")], []), T0),
+                            reset.wrap("heartbeat", T0, {"interval": 30}, T0)], later)
+    assert (first.accepted, first.need_snapshot) == (0, True)
+    answer = s.ingest("b1", [reset.wrap("snapshot", T0, snapshot([agent("new")], []), T0)], later)
+    assert (answer.accepted, answer.stale, answer.need_snapshot) == (1, 0, False)
+    assert [a["agent_id"] for a in s.state(later)["agents"]] == ["new"]
+    beat = s.ingest("b1", [reset.wrap("heartbeat", T0, {"interval": 30}, T0)], later)
+    assert (beat.accepted, beat.need_snapshot) == (1, False)
+    again = s.ingest("b1", [reset.wrap("snapshot", T0, snapshot([agent("next")], []), T0)], later)
+    assert again.accepted == 1
+
+
+def test_late_snapshot_after_normal_traffic_is_still_rejected(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    late = env.wrap("snapshot", T0, snapshot([agent("old")], []), T0)
+    first = env.wrap("snapshot", T0, snapshot([agent("new")], []), T0 + timedelta(seconds=6))
+    s.ingest("b1", [first], T0)
+    assert s.ingest("b1", [late], T0).stale == 1
+    s.ingest("b1", [env.wrap("heartbeat", T0, {"interval": 30}, T0 + timedelta(seconds=7))], T0)
+    assert s.ingest("b1", [late], T0).stale == 1
+    assert [a["agent_id"] for a in s.state(T0)["agents"]] == ["new"]
+
+
+def test_branch_not_heard_since_start_is_unreachable(tmp_path):
+    s, env = store(tmp_path), Envelope("b1")
+    s.ingest("b1", [env.wrap("snapshot", T0, snapshot([], []), T0)], T0)
+    assert s.state(T0)["branches"][0]["reachable"]
+    s.close()
+    restarted = store(tmp_path)
+    assert not restarted.state(T0)["branches"][0]["reachable"]
+    restarted.ingest("b1", [env.wrap("heartbeat", T0, {"interval": 30}, T0)], T0)
+    assert restarted.state(T0)["branches"][0]["reachable"]

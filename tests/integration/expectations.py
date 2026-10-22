@@ -109,8 +109,8 @@ def check(replay, step, exp, refs, select):
         assert agent.instance is not None and agent.instance.instance_id == refs[exp["same_shift_as"]], where
 
 
-# Placeholders for prompts, tool input, and provider identifiers that must stay on the Branch.
-PRIVATE = ("<text>", "<tool-input>", "<tool-output>", "/home/user", "toolu_")
+# Placeholders for prompts, tool input, error and quota details, and provider identifiers that must stay on the Branch.
+PRIVATE = ("<text>", "<tool-input>", "<tool-output>", "<error>", "<status>", "<rate-limit-type>", "/home/user", "toolu_")
 
 
 def check_messages(messages):

@@ -59,10 +59,11 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 /* Office cats share the floor's depth order and leave controls clickable. */
 .office-cat { position: absolute; width: 4%; min-width: 20px; aspect-ratio: 44/34; transform: translate(-50%,-100%); pointer-events: none; }
 .cat-art { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 1px 0 #69554033); }
-.cat-facing { transform-origin: 22px 17px; }
-.office-cat[data-facing="left"] .cat-facing { transform: scaleX(-1); }
+.cat-facing { transform-origin: 22px 17px; transform: scaleX(var(--cat-flip,1)) rotate(var(--cat-tilt,0deg)); transition: transform .32s ease-in-out; }
 .cat-walking, .cat-sitting, .cat-grooming, .cat-sleeping, .cat-eyes-closed, .cat-groom-paw { display: none; }
 .office-cat[data-state="walk"] .cat-walking,
+.office-cat[data-state="settle"] .cat-walking,
+.office-cat[data-state="rise"] .cat-sitting,
 .office-cat[data-state="sit"] .cat-sitting,
 .office-cat[data-state="groom"] .cat-grooming,
 .office-cat[data-state="groom"] .cat-groom-paw,
@@ -72,18 +73,27 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 .office-cat[data-state="groom"] .cat-eyes-open { display: none; }
 .office-cat[data-state="nap"] .cat-eyes-closed,
 .office-cat[data-state="groom"] .cat-eyes-closed { display: inline; }
-.cat-tail { transform-origin: 12px 24px; animation: cat-tail 2.6s ease-in-out infinite; }
-.cat-leg { transform-origin: 20px 25px; animation: cat-step var(--cat-step,.45s) ease-in-out infinite; }
-.cat-leg-back { animation-direction: reverse; }
-.cat-leg-far { animation-delay: calc(var(--cat-step,.45s) * -.5); }
-.cat-walking .cat-torso, .cat-walking .cat-head { animation: cat-bob var(--cat-step,.45s) ease-in-out infinite; }
+/* Walk cycle: the page sets --cat-phase from distance walked, so each paused keyframe track shows the matching
+   step. Diagonal leg pairs alternate (lift, swing, plant, push); the body bobs and the head nods twice per cycle;
+   the tail sways a quarter cycle behind. */
+.cat-tail { animation: cat-tail-sway 1s ease-in-out infinite paused; animation-delay: calc((var(--cat-phase,0) + .25) * -1s); }
+.cat-leg { animation: cat-gait 1s linear infinite paused; animation-delay: calc(var(--cat-phase,0) * -1s); }
+.cat-leg-back { animation-delay: calc((var(--cat-phase,0) + .5) * -1s); }
+.cat-leg-far { animation-delay: calc((var(--cat-phase,0) + .56) * -1s); }
+.cat-walking .cat-torso { animation: cat-bob .5s linear infinite paused; animation-delay: calc(var(--cat-phase,0) * -1s); }
+.cat-head { animation: cat-nod .5s linear infinite paused; animation-delay: calc((var(--cat-phase,0) + .12) * -1s); }
+.office-cat[data-state="rise"] .cat-sitting .cat-torso { transform-origin: 30px 33px; animation: cat-rise .42s ease-out forwards; }
+.office-cat[data-state="settle"] .cat-walking .cat-torso { transform-origin: 34px 33px; animation: cat-settle .52s ease-in forwards; }
 .cat-groom-paw { transform-origin: 27px 26px; animation: cat-wash 1.2s ease-in-out infinite; }
 .cat-sleep-breath { transform-origin: 22px 31px; animation: cat-breathe 3s ease-in-out infinite; }
 .cat-sleep-symbol { animation: float 2.8s ease-in-out infinite; }
 .office-cat.is-paused * { animation-play-state: paused !important; }
-@keyframes cat-step { 0%,100% { transform: translateX(-1px) rotate(-7deg); } 50% { transform: translate(1px,-1px) rotate(7deg); } }
-@keyframes cat-bob { 50% { transform: translateY(-.6px); } }
-@keyframes cat-tail { 50% { transform: rotate(12deg); } }
+@keyframes cat-gait { 0% { transform: rotate(-15deg); } 12.5% { transform: rotate(-8deg); } 25% { transform: rotate(0deg); } 37.5% { transform: rotate(8deg); } 50% { transform: rotate(15deg); } 62.5% { transform: translateY(-1.1px) rotate(7deg); } 75% { transform: translateY(-1.5px) rotate(-3deg); } 87.5% { transform: translateY(-.8px) rotate(-11deg); } 100% { transform: rotate(-15deg); } }
+@keyframes cat-tail-sway { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(9deg); } }
+@keyframes cat-nod { 0%,100% { transform: rotate(0deg); } 30% { transform: translateY(.35px) rotate(2deg); } 65% { transform: translateY(-.15px) rotate(-1deg); } }
+@keyframes cat-rise { to { transform: translateY(-1.2px) rotate(-4deg) scaleY(1.04); } }
+@keyframes cat-settle { to { transform: rotate(7deg) translateY(1px); } }
+@keyframes cat-bob { 0%,50%,100% { transform: translateY(0); } 25%,75% { transform: translateY(-.55px); } }
 @keyframes cat-blink { 0%,91%,97%,100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
 @keyframes cat-wash { 0%,100% { transform: rotate(0deg); } 45%,65% { transform: rotate(-14deg) translateY(-1px); } }
 @keyframes cat-breathe { 50% { transform: scaleY(.94); } }
@@ -103,6 +113,7 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 .agent.reclining { width: 8%; aspect-ratio: 48/40; transform: translate(-50%,-50%); }
 .agent.coffee-standing { transform: translate(-50%,-100%); transition-duration: 2s; }
 .agent.coffee-standing[data-coffee-facing="left"] > .character { transform: scaleX(-1); }
+.agent.walking { transition: opacity .2s; }
 /* Presentation-only state cues: completed checkmark, switched-off screen, and dimmed unknown activity. */
 .done-check { position: absolute; top: -4px; right: -9px; z-index: 1; display: grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; background: var(--working); color: #fffef8; box-shadow: 0 1px 2px #3f513533; animation: done-pop 4s ease forwards; pointer-events: none; }
 .done-check .icon { width: 9px; height: 9px; stroke-width: 3; }
@@ -122,13 +133,23 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 .agent.unverified::before { content: "?"; position: absolute; top: -3px; right: -3px; z-index: 1; width: 11px; height: 11px; border: 1px solid #d3d6c6; border-radius: 50%; background: #fffef8; color: var(--unknown); font: 600 8px/11px var(--sans); text-align: center; }
 .state-label.unverified { opacity: .7; }.unverified-mark { font-weight: 700; }.unverified-count::after { content: "?"; }
 .metric.unverified strong { opacity: .55; }.metric small { display: block; color: var(--unknown); font-size: 9px; }
-.coffee-standing[data-coffee-phase^="walking"] .coffee-person { transform-origin: 16px 40px; animation: coffee-step .55s ease-in-out infinite; }
+/* Walking views (sprites.js walkingSprite, walk.js): the front standing frame while heading down-screen, the rear frame
+   while heading up-screen. Each step bobs the figure and holds the weight-bearing leg on the floor, so the feet alternate. */
+.walking-character .walk-front, .agent[data-walk-view="front"] .walking-character .walk-back { display: none; }
+.agent[data-walk-view="front"] .walking-character .walk-front { display: inline; }
+.agent.walking .walk-view { animation: walk-bob .56s linear infinite; }
+.agent.walking .walk-leg-near { animation: walk-plant-near .56s linear infinite; }
+.agent.walking .walk-leg-far { animation: walk-plant-far .56s linear infinite; }
+@keyframes walk-bob { 0%,50%,100% { transform: translateY(0); } 25%,75% { transform: translateY(-.6px); } }
+@keyframes walk-plant-near { 0%,50%,100% { transform: translateY(0); } 25% { transform: translateY(.6px); } }
+@keyframes walk-plant-far { 0%,50%,100% { transform: translateY(0); } 75% { transform: translateY(.6px); } }
 .brewing-steam { animation: float 2s ease-in-out infinite; }
 .coffee-status { position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: #fff7e7; color: #8d7953; border: 1px solid #e0d2b8; border-radius: 4px; font-size: 8px; padding: 2px 4px; }
-@keyframes coffee-step { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: translateY(-.6px) rotate(1.5deg); } }
 
 .agent.seated .body { animation: none; }
-.scene.is-empty .furniture-front { opacity: .45; }
+.scene.is-empty .furniture-front, .scene.is-empty .wall-art, .scene.is-empty .flower-layer { opacity: .45; }
+/* Code-drawn wall paintings and flowers (decor.js) follow the room light like the artwork beneath them. */
+.wall-art, .flower-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: brightness(var(--room-brightness,1)) saturate(var(--room-saturation,1)); }
 /* Window light follows local time; lamps remain warm after sunset. */
 .daylight-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 95; pointer-events: none; }
 .window-tint { mix-blend-mode: multiply; opacity: var(--window-opacity,0); }
@@ -203,7 +224,34 @@ dialog { width: min(430px,calc(100% - 32px)); color: var(--ink); background: #fc
 .character.textured-character[data-work-gesture] .hand-left { transform-origin: var(--left-pivot); }
 .character.textured-character[data-work-gesture] .hand-right { transform-origin: var(--right-pivot); }
 .character.textured-character[data-work-gesture^="mouse-"] .pointer-hand { transform: translate(var(--mouse-x,1.2px),var(--mouse-y,.3px)); }
-.fika .held-item, .extra-coffee:not(.working):not(.phone) .held-item { transform-origin: var(--left-pivot); animation: sip 5s ease-in-out infinite; }
+.extra-coffee:not(.working):not(.phone):not(.fika) .held-item { transform-origin: var(--left-pivot); animation: sip 5s ease-in-out infinite; }
+/* Lounge activities (lounge.js): each colleague sips on its own rhythm, reads, or talks with a neighbour in glyphs. */
+.fika .held-item { transform-origin: var(--left-pivot); transition: transform var(--sip-move,.5s) ease-in-out; }
+.fika .character[data-sip="up"][data-sip-style="raise"] .held-item { transform: translate(1px,-5px) rotate(-8deg); }
+.fika .character[data-sip="up"][data-sip-style="hold"] .held-item { transform: translate(.4px,-2.2px) rotate(-3deg); }
+.fika .character[data-sip-style="stir"] .held-item { transform: translateY(.6px); }
+.coffee-cup .stir-spoon { display: none; }
+.fika .character[data-sip-style="stir"] .stir-spoon { display: inline; }
+.fika .character[data-sip="up"][data-sip-style="stir"] :is(.stir-spoon,.stir-straw) { transform-box: fill-box; transform-origin: 30% 100%; animation: stir .5s ease-in-out infinite; }
+.lounge-book { display: none; }
+.fika .character[data-lounge="read"] .lounge-book { display: inline; }
+.fika .character[data-lounge="read"] .hand-prop, .fika .character[data-lounge="sit"] .hand-prop { display: none; }
+.fika .character[data-lounge="read"] .head { transform-origin: 16px 22px; transform: translateY(.5px) rotate(2deg); }
+.book-leaf { opacity: 0; transform-box: fill-box; transform-origin: 0% 100%; }
+.fika .character[data-page="turn"] .book-leaf { opacity: 1; animation: page-turn .6s ease-in-out forwards; }
+.fika .character .head { transition: transform .35s ease; }
+.fika .character[data-turn="left"] .head { transform-origin: 16px 22px; transform: translateX(-.7px) rotate(-5deg); }
+.fika .character[data-turn="right"] .head { transform-origin: 16px 22px; transform: translateX(.7px) rotate(5deg); }
+.talk-bubble { position: absolute; bottom: 93%; left: 50%; z-index: 2; width: max(12px,36%); aspect-ratio: 1; padding: 2px; background: #fffef8; border: 1px solid #d9cfb6; border-radius: 4px; box-shadow: 0 1px 2px #564b2622; pointer-events: none; animation: bubble-pop .18s ease-out; }
+.talk-bubble[data-side="left"] { transform: translateX(-100%); }
+.talk-bubble[data-side="right"] { transform: translateX(0); }
+.talk-bubble svg { display: block; width: 100%; height: 100%; }
+.talk-bubble::after { content: ""; position: absolute; bottom: -3px; width: 4px; height: 4px; background: #fffef8; border-right: 1px solid #d9cfb6; border-bottom: 1px solid #d9cfb6; transform: rotate(45deg); }
+.talk-bubble[data-side="left"]::after { right: 3px; }
+.talk-bubble[data-side="right"]::after { left: 3px; }
+@keyframes stir { 0%,100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
+@keyframes page-turn { 0% { transform: scaleX(1); } 60% { transform: scaleX(-.2) translateY(-.4px); } 100% { transform: scaleX(-1); opacity: 0; } }
+@keyframes bubble-pop { from { opacity: 0; } to { opacity: 1; } }
 .held-item .hand-left { animation: none; }
 .phone .held-item { transform: translateY(-2px); }
 .sleeping-body { transform-origin: 20px 20px; animation: sleeping-breath 4s ease-in-out infinite; }

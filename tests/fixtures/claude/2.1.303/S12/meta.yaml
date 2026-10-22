@@ -1,0 +1,17 @@
+provider: claude
+version: 2.1.303
+scenario: S12
+title: Usage limit reached; limited persists through turn end and idle until a new turn
+expect:
+- {state: idle, reset_at: null, after: 1}
+- {state: working, reset_at: null, after: 5}
+- {state: limited, reset_at: '2026-01-01T05:00:00.000Z', model: model-a, after: 6}
+- {state: limited, after: 7}
+- {state: limited, reset_at: '2026-01-01T05:00:00.000Z', after: 8}
+- {state: working, reset_at: null, after: 9}
+- state: idle
+  states_since_start: [unknown, idle, working, limited, working, completed, idle]
+  after: 12
+- {state: limited, reset_at: '2026-01-08T00:00:00.000Z', after: 15}
+- {state: error, reset_at: null, after: 16}
+- {presence: off_duty, after: 17}

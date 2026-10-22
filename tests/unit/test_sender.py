@@ -69,3 +69,29 @@ def test_loopback_hq_bypasses_environment_proxy(monkeypatch):
     finally:
         for server in servers:
             server.shutdown()
+
+
+class Truncating(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):  # noqa: N802
+        self.rfile.read(int(self.headers["Content-Length"]))
+        if self.server.mode == "status":
+            self.wfile.write(b"NOT HTTP\r\n\r\n")
+        else:
+            self.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"acc")
+        self.wfile.flush()
+        self.close_connection = True
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.mark.parametrize("mode", ["truncated", "status"])
+def test_connection_closed_mid_response_is_a_failed_delivery(mode):
+    server = http.server.HTTPServer(("127.0.0.1", 0), Truncating)
+    server.mode = mode
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        result = HttpSender(f"http://127.0.0.1:{server.server_port}")([{"kind": "heartbeat"}])
+        assert not result.ok and result.error
+    finally:
+        server.shutdown()

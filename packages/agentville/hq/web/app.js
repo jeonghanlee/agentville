@@ -4,9 +4,14 @@ import { demoState } from "./demo.js";
 import { updateWorkGestures, WORK_MOTION_INTERVAL } from "./motion.js";
 import { createOfficeCats } from "./cats.js";
 import { mountFurniture } from "./furniture.js";
+import { mountDecor } from "./decor.js";
 import { createDaylight, branchZone } from "./daylight.js";
 import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
+import { createLounge } from "./lounge.js";
+import { createWalkers } from "./walk.js";
+import { APPROACH, NODES, route, distance, clear, blockedBy } from "./floor.js";
+import { walkerDepth } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
 
@@ -38,9 +43,10 @@ const SCREENS = {
   studio1: ["1147,287 1190,302 1190,333 1147,317", "1270,337 1313,352 1313,385 1270,370"],
   common: ["202,493 247,511 247,546 202,528", "328,541 378,558 378,592 328,574"],
 };
+// Standing spots on open floor, clear of furniture for a walker's feet (floor.js).
 const WAITING_SPOTS = {
-  fika: [[34,79],[40,84],[46,89],[52,94],[65,82],[60,89]],
-  infirmary: [[78,81],[84,78],[73,84],[78,87]],
+  fika: [[38,78.5],[42.5,82.5],[46.5,86.5],[52,89.5],[66.4,80.6],[57.5,88.7]],
+  infirmary: [[78,81],[84,78],[73.5,83.2],[80.5,83.5]],
 };
 const EMPTY = { branches: [], agents: [], activities: [], contractors: [] };
 const MAX_EVENTS = 60;
@@ -56,10 +62,17 @@ const companions = new Map();
 const screensOff = new Map();
 const completions = new Map();
 const lastStates = new Map();
-const facilityOccupancy = new Map();
+// Seat reservations per shown room: Map of colleague key to seat index, or null while waiting or overflowing.
+const seatOccupancy = new Map();
 let daylight = null;
 let furniture = null;
+let decor = null;
 let coffee = null;
+let lounge = null;
+let walkers = null;
+// Last floor place of each shown colleague, so a change of place becomes a walk.
+const places = new Map();
+const motionAllowed = () => !matchMedia("(prefers-reduced-motion: reduce)").matches && !document.body.classList.contains("reduce-motion");
 let cats = null;
 let notifications = null;
 // The first state of each socket is a baseline: it records states without notifying.
@@ -301,6 +314,40 @@ function renderRooms(ctx) {
   $("previous-floor").disabled = floor === 0;
   $("next-floor").disabled = floor >= count - 1;
 }
+// The reservation scope of a shown room. Facilities are kept per Branch; desk rooms also follow the shown floor
+// page and the repository in that room, so another Branch or page starts with fresh desk assignments.
+function seatScope(ctx, room) {
+  if (Object.hasOwn(WAITING_SPOTS, room)) return keyOf(branchId, "facility:" + room);
+  const project = room.startsWith("studio") ? ctx.page[Number(room.slice(6))]?.id : COMMON;
+  return keyOf(branchId, "desk:" + room + ":" + floor + ":" + project);
+}
+// Where a colleague stands for a place: in front of a chair, beside the bed, or on a standing spot.
+// Seats also name the free side of the chair, which walkers pass through when sitting down or getting up.
+function placeOf(room, index, home, spot) {
+  if (spot) return { foot: spot, approach: null };
+  const side = APPROACH[room]?.[index];
+  if (home[2] === "lying") return { foot: side ? NODES[side] : home.slice(0,2), approach: null };
+  return { foot: [home[0], home[1] + (home[2].startsWith("back") ? 2.2 : 3.6)], approach: side ? NODES[side] : null };
+}
+// A changed place starts a walk along the floor routes; the first sighting, another Branch, or reduced motion places directly.
+function moveWalker(key, target) {
+  const last = places.get(key);
+  places.set(key, { ...target, scope: branchId });
+  const current = walkers?.get(key);
+  if (!walkers || !last || last.scope !== branchId || !motionAllowed()) { walkers?.stop(key); return null; }
+  if (distance(current ? current.goal : last.foot, target.foot) < .05) return current;
+  const start = current ? [current.x, current.y] : last.foot;
+  // A walker leaves a seat through its free side; one turned around on the step into or out of a seat first
+  // reaches the free end of that step, since the step itself touches the seat.
+  const leave = current ? (clear(...current.stretch) ? [] : [current.stretch.find((point) => !blockedBy(point)) || current.stretch[0]])
+    : last.approach ? [last.approach] : [];
+  const path = [start, ...route(leave[0] || start, target.approach || target.foot).slice(leave.length ? 0 : 1),
+    ...(target.approach ? [target.foot] : [])].filter((point, i, all) => i === 0 || distance(point, all[i-1]) > .01);
+  if (path.length < 2) return null;
+  const visit = coffee?.get(key);
+  walkers.start(key, path, () => coffee?.arrived(key), visit?.phase === "walking-back");
+  return walkers.get(key);
+}
 function renderCharacters(ctx) {
   const groups = new Map();
   for (const row of ctx.office) {
@@ -311,11 +358,16 @@ function renderCharacters(ctx) {
     if (!groups.has(room)) groups.set(room, []);
     groups.get(room).push(row);
   }
-  // Reserve facility seats until departure; insertion order keeps the waiting line stable.
-  for (const room of Object.keys(WAITING_SPOTS)) {
-    const id = keyOf(branchId,room);
-    if (!facilityOccupancy.has(id)) facilityOccupancy.set(id,new Map());
-    const occupants = facilityOccupancy.get(id);
+  // Every room keeps its seats for the visit: a colleague holds its desk, lounge chair, or bed until it leaves the room,
+  // newcomers take the lowest free seat (people arrive in seat-number order), and the others stay put.
+  // Facilities keep a waiting line in first-arrival order; desk rooms show further people as "+N".
+  // Desk assignments start over when the shown Branch or floor page changes.
+  const scopes = new Set();
+  for (const room of new Set([...groups.keys(), ...Object.keys(WAITING_SPOTS)])) {
+    const id = seatScope(ctx, room);
+    scopes.add(id);
+    if (!seatOccupancy.has(id)) seatOccupancy.set(id,new Map());
+    const occupants = seatOccupancy.get(id);
     const people = groups.get(room) || [];
     const members = new Set(people.map((row) => row.key));
     for (const key of occupants.keys()) if (!members.has(key)) occupants.delete(key);
@@ -328,18 +380,20 @@ function renderCharacters(ctx) {
       occupants.set(key,free); occupied.add(free);
     }
   }
-  const lounge = facilityOccupancy.get(keyOf(branchId,"fika"));
-  coffee?.sync([...lounge].filter(([,index]) => index !== null)
+  for (const id of seatOccupancy.keys()) if (!scopes.has(id) && !JSON.parse(id)[1].startsWith("facility:")) seatOccupancy.delete(id);
+  const fika = seatOccupancy.get(seatScope(ctx,"fika"));
+  coffee?.sync([...fika].filter(([,index]) => index !== null)
     .map(([key,index]) => [key,ROOM_LAYOUT.fika.seats[index]]),branchId);
+  lounge?.sync([...fika.keys()].map((key) => [key, JSON.parse(key)[1]]));
   const used = new Set(), hired = new Set(), dark = new Set();
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room];
-    const occupants = facilityOccupancy.get(keyOf(branchId,room));
-    const waiting = occupants ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
+    const occupants = seatOccupancy.get(seatScope(ctx,room));
+    const waiting = WAITING_SPOTS[room] ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
     const shownWaiting = waiting.slice(0,WAITING_SPOTS[room]?.length || 0);
     if (waiting.includes(selected) && !shownWaiting.includes(selected)) shownWaiting[shownWaiting.length-1] = selected;
-    const placed = people.map((row,i) => ({ row, index: occupants ? occupants.get(row.key) : i }))
+    const placed = people.map((row) => ({ row, index: occupants.get(row.key) }))
       .filter(({ row,index }) => index === null ? shownWaiting.includes(row.key) : index < layout.seats.length);
     placed.forEach(({ row,index }) => {
       let node = actors.get(row.key);
@@ -362,13 +416,19 @@ function renderCharacters(ctx) {
       const visit = coffee?.get(row.key);
       const waitingIndex = shownWaiting.indexOf(row.key);
       const spot = waitingIndex >= 0 ? WAITING_SPOTS[room][waitingIndex] : null;
-      const seat = visit?.seat || (spot ? [...spot,"standing",Math.floor(spot[1])+1] : layout.seats[index]);
+      const home = spot ? [...spot,"standing",Math.floor(spot[1])+1] : layout.seats[index];
+      const walk = moveWalker(row.key, visit?.point ? { foot: visit.point, approach: null } : placeOf(room, index, home, spot));
+      const counter = !walk && visit?.point;
+      const seat = walk ? [walk.x, walk.y, "walking", walk.depth]
+        : counter ? [...visit.point, "coffee-back", walkerDepth(...visit.point)] : home;
       const desk = seat[2];
-      node.classList.add(visit ? "coffee-standing" : spot ? "standing" : desk === "lying" ? "reclining" : "seated");
+      node.classList.add(walk || counter ? "coffee-standing" : spot ? "standing" : desk === "lying" ? "reclining" : "seated");
+      if (walk) node.classList.add("walking");
       node.dataset.room = room;
       node.dataset.seatFacing = desk;
-      node.dataset.coffeePhase = visit?.phase || "";
-      node.dataset.coffeeFacing = visit?.facing || "";
+      node.dataset.coffeePhase = visit?.phase || (walk ? "walking" : "");
+      node.dataset.coffeeFacing = walk?.facing || (counter ? "right" : "");
+      node.dataset.walkView = walk?.view || "";
       node.dataset.queuePosition = spot ? String(waiting.indexOf(row.key)+1) : "";
       node.dataset.seatIndex = index === null ? "" : String(index);
       node.style.width = desk === "lying" ? "8%" : SEATED_WIDTH + "%";
@@ -377,8 +437,11 @@ function renderCharacters(ctx) {
       node.style.zIndex = String(seat[3]);
       // Keep unchanged SVG nodes alive so data refreshes do not restart gestures.
       const workstation = WORKSTATIONS[room]?.[index] ? { seat, keys: WORKSTATIONS[room][index] } : null;
-      const cup = coffee?.cup(row.key);
-      const detail = visit ? visit.cup ? "coffee-cup" : visit.phase === "waiting" ? "coffee-wait" : "coffee-walk" : row.detail;
+      // Lounge colleagues hold their own drink; a counter visit shows the drink being fetched.
+      const drink = row.detail === "fika" && lounge ? lounge.drink(row.key, row.agent.agent_id) : null;
+      const cup = visit?.drink || drink || coffee?.cup(row.key);
+      const detail = walk ? (walk.carrying ? "coffee-cup" : "coffee-walk")
+        : counter ? (visit.phase === "waiting" ? "coffee-wait" : "coffee-walk") : row.detail;
       // Limited Employees switch off the visible desk screen, or show a small dark monitor when none is visible.
       const glass = row.state === "limited" && !visit && !spot ? SCREENS[room]?.[index] : null;
       if (glass) {
@@ -408,12 +471,14 @@ function renderCharacters(ctx) {
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
         if (done) children.push(el("span", { class: "done-check", title: stateName("completed") }, icon("check")));
-        if (visit?.phase === "waiting") children.push(el("span", { class: "coffee-status" }, t("coffee.brewing")));
+        if (counter && visit.phase === "waiting") children.push(el("span", { class: "coffee-status" },
+          t({ coffee: "coffee.brewing", tea: "drink.steeping" }[visit.drink?.kind || "coffee"] || "drink.pouring")));
         if (spot) children.push(el("span", { class: "queue-status" },
           t(room === "infirmary" ? "queue.bed" : "queue.seat") + " / " + node.dataset.queuePosition));
         node.replaceChildren(...children);
         node.dataset.appearance = appearance;
       }
+      lounge?.decorate(node, row.key);
       // Each Contractor shows its own activity; further Contractors collapse into "+N".
       const shown = row.contractors.slice(0, MAX_CONTRACTORS);
       shown.forEach((contractor, i) => {
@@ -457,7 +522,7 @@ function renderCharacters(ctx) {
     }
   }
   for (const [key,node] of actors) {
-    if (!used.has(key)) { node.remove(); actors.delete(key); }
+    if (!used.has(key)) { node.remove(); actors.delete(key); walkers?.stop(key); places.delete(key); }
   }
   for (const [key,node] of companions) {
     if (!hired.has(key)) { node.remove(); companions.delete(key); }
@@ -489,7 +554,7 @@ function renderTeam(ctx) {
     [t("detail.tool"), row.state === "working" ? row.activity?.tool || "-" : "-"],
     [t("detail.workload"), row.verified ? workloadText(row) : "-"]];
   if (resetLabel(row)) stats.push([t("detail.limit"), resetLabel(row)]);
-  const occupants = facilityOccupancy.get(keyOf(branchId,roomOf(row)));
+  const occupants = seatOccupancy.get(keyOf(branchId,"facility:" + roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
   if (waiting) stats.push([t("detail.place"), t(roomOf(row) === "infirmary" ? "queue.bed" : "queue.seat")]);
   const note = !row.verified ? t(hqConnected() ? "detail.awaiting" : "detail.unverified") : row.state === "limited" ? t("detail.limited")
@@ -622,6 +687,7 @@ function render() {
   $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "summary.onDuty"],
     ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
     el("span", { class: "summary-item" }, icon(symbol), el("strong", {}, n), t(label))));
+  decor?.update(branchId);
   renderFilters(ctx); renderRooms(ctx); renderCharacters(ctx); renderTeam(ctx);
   $("scene-empty").hidden = ctx.present.length > 0;
   $("scene").classList.toggle("is-empty", ctx.present.length === 0);
@@ -688,9 +754,13 @@ function acceptState(state) {
 function connect(delay = 1000) {
   if (DEMO) return;
   const scheme = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(scheme + "://" + location.host + "/ws/v1/live" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : ""));
+  const socket = new WebSocket(scheme + "://" + location.host + "/ws/v1/live");
   activeSocket = socket;
-  socket.addEventListener("open", () => { everOpened = true; failedOpens = 0; resync = true; });
+  // The viewer token travels in the first message, so it never appears in a URL or access log.
+  socket.addEventListener("open", () => {
+    everOpened = true; failedOpens = 0; resync = true;
+    socket.send(JSON.stringify({ type: "auth", token: TOKEN || null }));
+  });
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(event.data);
@@ -773,7 +843,9 @@ document.addEventListener("keydown", (event) => {
 });
 $("settings-dialog").addEventListener("click", (event) => { if (event.target === $("settings-dialog")) $("settings-dialog").close(); });
 daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.querySelector(".scene-sun"), $("setting-daylight"));
-coffee = createCoffeeBreaks($("characters"),render);
+lounge = createLounge($("characters"), { motionAllowed });
+walkers = createWalkers($("characters"), { motionAllowed, changed: render });
+coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
 if (DEMO) {
   acceptState(demoState());
@@ -783,6 +855,7 @@ if (DEMO) {
 changeZoom(100);
 cats = createOfficeCats($("characters"));
 applyLanguage();
+decor = mountDecor($("world"));
 furniture = mountFurniture($("world"));
 furniture.update();
 if (!DEMO) connect();

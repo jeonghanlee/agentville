@@ -1,7 +1,7 @@
 provider: codex
 version: 0.163.0
 scenario: S12
-title: Usage limit reached; a new turn after reset resumes work
+title: Usage limit by full window or turn error; a new turn resumes work; overload is no error
 expect:
 - {state: idle, reset_at: null, after: 1}
 - {state: working, reset_at: null, after: 3}
@@ -11,3 +11,12 @@ expect:
 - state: idle
   states_since_start: [unknown, idle, working, limited, working, completed, idle]
   after: 9
+- {state: limited, reset_at: '2026-01-01T05:00:00.000Z', after: 11}
+- {state: limited, reset_at: '2026-01-01T05:00:00.000Z', after: 13}
+- {state: working, reset_at: null, after: 15}
+- {state: limited, reset_at: '2026-01-08T00:00:00.000Z', after: 17}
+- {state: working, after: 19}
+- state: idle
+  states_since_start: [unknown, idle, working, limited, working, completed, idle, working, limited, working, limited, working,
+    completed, idle]
+  after: 21

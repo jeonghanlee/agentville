@@ -105,13 +105,36 @@ def test_live_socket_sends_state_on_connect_and_after_ingest(tmp_path):
         assert update["state"]["branches"][0]["branch_id"] == "b1"
 
 
-def test_live_socket_requires_viewer_token_when_set(tmp_path):
-    app = create_app(Store(str(tmp_path / "hq.sqlite3")), clock=lambda: T0, loopback=frozenset({"testclient"}), hosts=HOSTS, viewer_token="v")
+def _closed_with(ws):
+    with pytest.raises(WebSocketDisconnect) as closed:
+        ws.receive_json()
+    return closed.value.code
+
+
+def test_live_socket_requires_viewer_token_in_first_message(tmp_path):
+    app = create_app(Store(str(tmp_path / "hq.sqlite3")), clock=lambda: T0, loopback=frozenset({"testclient"}), hosts=HOSTS,
+                     viewer_token="v", auth_timeout=0.2)
     client = TestClient(app)
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect("/ws/v1/live") as ws:
-            ws.receive_json()
+    with client.websocket_connect("/ws/v1/live") as ws:
+        assert _closed_with(ws) == 4401
     with client.websocket_connect("/ws/v1/live?token=v") as ws:
+        assert _closed_with(ws) == 4401
+    for first in ({"type": "auth", "token": "wrong"}, {"type": "auth", "token": None}, {"type": "auth", "token": "ü"},
+                  {"token": "v"}, ["auth", "v"]):
+        with client.websocket_connect("/ws/v1/live") as ws:
+            ws.send_json(first)
+            assert _closed_with(ws) == 4401
+    with client.websocket_connect("/ws/v1/live") as ws:
+        ws.send_text("not json")
+        assert _closed_with(ws) == 4401
+    with client.websocket_connect("/ws/v1/live") as ws:
+        ws.send_json({"type": "auth", "token": "v"})
+        assert ws.receive_json()["type"] == "state"
+
+
+def test_live_socket_without_viewer_token_ignores_auth_message(tmp_path):
+    with _client(tmp_path) as client, client.websocket_connect("/ws/v1/live") as ws:
+        ws.send_json({"type": "auth", "token": None})
         assert ws.receive_json()["type"] == "state"
 
 

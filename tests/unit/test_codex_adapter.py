@@ -329,3 +329,65 @@ def test_token_count_at_full_window_reports_limit_with_reset(tmp_path):
     assert step(_token_count(20.0, 40.0)) == [(Kind.LIMIT_CLEARED, {})]
     assert judge.agents[0].instance.state == "idle"
     assert judge.activity_payload(judge.agents[0], NOW)["reset_at"] is None
+
+
+def _task_complete(error):
+    return json.dumps({"timestamp": "2026-01-01T00:00:01Z", "type": "event_msg",
+                       "payload": {"type": "task_complete", "error": error}}) + "\n"
+
+
+def _limited_stepper(tmp_path):
+    rollout = tmp_path / "r.jsonl"
+    rollout.write_text("")
+    thread = {"id": "t1", "cwd": "/r", "path": str(rollout), "status": {"type": "active", "activeFlags": []}}
+    conn = Scripted({"t1": thread}, loaded=["t1"])
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: conn, clock=lambda: NOW)
+    judge = Judge(_Resolver(), lambda kind, at, payload: None)
+
+    def step(line):
+        with open(rollout, "a") as fh:
+            fh.write(line)
+        observations = adapter.poll()
+        for obs in observations:
+            judge.apply(obs)
+        return [(o.kind, o.data) for o in observations]
+
+    step("")
+    return step, judge
+
+
+def test_usage_limit_error_keeps_the_employee_limited(tmp_path):
+    step, judge = _limited_stepper(tmp_path)
+    step(_token_count(100.0, 40.0))
+    error = {"codex_error_info": "usage_limit_exceeded", "message": "<text>"}
+    assert [k for k, _ in step(_task_complete(error))] == [Kind.TURN_COMPLETED]
+    payload = judge.activity_payload(judge.agents[0], NOW)
+    assert (payload["state"], payload["reset_at"]) == ("limited", "2026-01-01T05:00:00.000Z")
+
+
+def test_usage_limit_error_without_full_window_reports_limit(tmp_path):
+    step, judge = _limited_stepper(tmp_path)
+    step(_token_count(97.0, 40.0))
+    error = {"codex_error_info": "usage_limit_exceeded", "message": "<text>"}
+    assert step(_task_complete(error)) == [(Kind.LIMIT_REACHED, {"reset_at": datetime(2026, 1, 1, 5, tzinfo=UTC)}),
+                                           (Kind.TURN_COMPLETED, {"duration_ms": None})]
+    assert judge.agents[0].instance.state == "limited"
+
+
+def test_usage_limit_error_before_any_token_count_has_no_reset(tmp_path):
+    step, judge = _limited_stepper(tmp_path)
+    error = {"codex_error_info": "usage_limit_exceeded", "message": "<text>"}
+    assert step(_task_complete(error))[0] == (Kind.LIMIT_REACHED, {"reset_at": None})
+    assert judge.agents[0].instance.state == "limited"
+
+
+def test_server_overloaded_is_transient_and_other_errors_remain(tmp_path):
+    step, judge = _limited_stepper(tmp_path)
+    overloaded = {"codex_error_info": "server_overloaded", "message": "<text>"}
+    assert [k for k, _ in step(_task_complete(overloaded))] == [Kind.TURN_COMPLETED]
+    assert judge.agents[0].instance.state == "idle"
+    step(_record("task_started"))
+    assert [k for k, _ in step(_task_complete({"codex_error_info": "<other>", "message": "<text>"}))] == [
+        Kind.AGENT_ERROR, Kind.TURN_COMPLETED]
+    step(_record("task_started"))
+    assert [k for k, _ in step(_task_complete("<text>"))] == [Kind.AGENT_ERROR, Kind.TURN_COMPLETED]

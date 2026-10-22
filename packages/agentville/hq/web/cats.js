@@ -1,25 +1,13 @@
 import { catArtwork } from "./art.js";
 import { t } from "./i18n.js";
+import { NODES, neighbourIds, distance } from "./floor.js";
+import { walkerDepth } from "./furniture.js";
 
-// Connected floor positions follow the open aisle and the edge of the lounge rug.
-const FLOOR = [
-  { x: 29, y: 47, links: [1] },
-  { x: 37, y: 52, links: [0, 2] },
-  { x: 41, y: 56, links: [1, 3] },
-  { x: 39, y: 69, links: [2, 4] },
-  { x: 35, y: 74, links: [3, 5, 6] },
-  { x: 30, y: 77, links: [4, 6] },
-  { x: 41, y: 80, links: [4, 5, 7] },
-  { x: 48, y: 86, links: [6, 8] },
-  { x: 54, y: 90, links: [7, 9] },
-  { x: 62, y: 85, links: [8, 10] },
-  { x: 67, y: 80, links: [9, 11] },
-  { x: 69, y: 72, links: [10, 12] },
-  { x: 68, y: 66, links: [11] },
-];
+// Cats roam the corridor and lounge part of the shared floor graph (floor.js), so they also keep off furniture.
+const ROAM = new Set(["s0c", "c1", "c2", "c2b", "c3", "c4", "l1", "c5", "l2", "c6", "c7", "c7b", "c8a", "c8", "c9", "c10", "f5", "f6", "k3", "i1", "i2"]);
 const CATS = [
-  { coat: "ginger", name: "Cheese", starts: [4, 5, 6] },
-  { coat: "tuxedo", name: "Pepper", starts: [9, 10, 11] },
+  { coat: "ginger", name: "Cheese", starts: ["c2", "c3", "c4"] },
+  { coat: "tuxedo", name: "Pepper", starts: ["c8", "c9", "c10"] },
 ];
 const RESTS = [
   { state: "sit", duration: [2200, 4500] },
@@ -27,13 +15,17 @@ const RESTS = [
   { state: "nap", duration: [7000, 11000] },
 ];
 const WALK_CHANCE = .55;
-const SPEED = [1.8, 2.6];
-const STEP_PERIOD = [.35, .55];
+// One gait cycle (both diagonal leg pairs stepping once) moves the body by STRIDE percent of the floor width
+// at the default cat size; speed = stride / cycle period, so paws do not slide.
+const STRIDE = .8;
+const CYCLE = [.46, .62];
 const BLINK_PERIOD = [5, 8];
+const RISE_MS = 420, SETTLE_MS = 520, SETTLE_NAP_MS = 700;
+// Speed eases in after rising, down before stopping, and briefly at corners where the cat turns.
+const EASE_IN = .7, EASE_OUT = .9, CORNER = .7, CORNER_SPEED = .35;
 const MAX_FRAME_MS = 80;
-const MIN_WALK_MS = 1500;
 const RETRY_MS = 1600;
-const FLOOR_ASPECT = 1024 / 1536;
+const CAT_WIDTH = 4, CAT_MIN_PX = 20;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const choose = (items) => items[Math.floor(Math.random() * items.length)];
 const between = ([min, max]) => min + Math.random() * (max - min);
@@ -46,15 +38,17 @@ export function createOfficeCats(root) {
     node.className = "office-cat";
     node.dataset.coat = coat;
     node.dataset.state = "sit";
-    node.dataset.facing = Math.random() < .5 ? "left" : "right";
     node.style.setProperty("--cat-blink", between(BLINK_PERIOD).toFixed(3) + "s");
     node.setAttribute("role", "img");
     const label = document.createElement("span");
     label.className = "cat-name";
     node.append(catArtwork(coat), label);
     root.append(node);
-    const cat = { node, label, name, point, previous: -1, target: null, x: FLOOR[point].x,
-      y: FLOOR[point].y, state: "sit", remaining: between(RESTS[0].duration) };
+    const [x, y] = NODES[point];
+    // Each cat keeps its own pace for the whole visit.
+    const cat = { node, label, name, point, previous: "", target: null, x, y, state: "sit", phase: Math.random(),
+      cycle: between(CYCLE), remaining: between(RESTS[0].duration), facing: Math.random() < .5 ? -1 : 1, next: null };
+    face(cat, cat.facing, 0);
     place(cat);
     return cat;
   });
@@ -72,38 +66,57 @@ export function createOfficeCats(root) {
   function place(cat) {
     cat.node.style.left = cat.x.toFixed(3) + "%";
     cat.node.style.top = cat.y.toFixed(3) + "%";
-    cat.node.style.zIndex = String(Math.floor(cat.y));
+    cat.node.style.zIndex = String(walkerDepth(cat.x, cat.y));
   }
-
+  // Turning flips the body through a short scale transition; slopes tilt it slightly.
+  function face(cat, facing, tilt) {
+    cat.facing = facing;
+    cat.node.dataset.facing = facing < 0 ? "left" : "right";
+    cat.node.style.setProperty("--cat-flip", String(facing));
+    cat.node.style.setProperty("--cat-tilt", tilt.toFixed(1) + "deg");
+  }
+  function setState(cat, state) {
+    cat.state = state;
+    cat.node.dataset.state = state;
+  }
   function rest(cat, pose = choose(RESTS)) {
-    cat.state = pose.state;
-    cat.remaining = between(pose.duration);
-    cat.node.dataset.state = cat.state;
+    // Stopping: a settling step lowers the hindquarters first, then the cat sits; a nap follows a short sit.
+    cat.next = pose;
+    setState(cat, "settle");
+    cat.remaining = SETTLE_MS;
   }
-
+  function stride() {
+    const width = root.getBoundingClientRect().width || 1;
+    return STRIDE * Math.max(CAT_WIDTH, CAT_MIN_PX / width * 100) / CAT_WIDTH;
+  }
+  function choosePath(cat) {
+    const options = neighbourIds(cat.point).filter((id) => ROAM.has(id)
+      && !cats.some((other) => other !== cat && (other.point === id || other.target === id)));
+    if (!options.length) return null;
+    const forward = options.filter((id) => id !== cat.previous);
+    return choose(forward.length ? forward : options);
+  }
   function walk(cat) {
-    const available = FLOOR[cat.point].links.filter((point) =>
-      !cats.some((other) => other !== cat && (other.point === point || other.target === point)));
-    if (!available.length) {
-      rest(cat, { state: "sit", duration: [RETRY_MS, RETRY_MS] });
-      return;
-    }
-    const forward = available.filter((point) => point !== cat.previous);
-    cat.target = choose(forward.length ? forward : available);
-    const to = FLOOR[cat.target];
-    cat.duration = Math.max(MIN_WALK_MS,
-      Math.hypot(to.x - cat.x, (to.y - cat.y) * FLOOR_ASPECT) / between(SPEED) * 1000);
-    cat.elapsed = 0;
-    cat.state = "walk";
-    cat.node.dataset.state = "walk";
-    cat.node.dataset.facing = to.x < cat.x ? "left" : "right";
-    cat.node.style.setProperty("--cat-step", between(STEP_PERIOD).toFixed(3) + "s");
+    const target = choosePath(cat);
+    if (!target) { cat.next = null; setState(cat, "sit"); cat.remaining = RETRY_MS; return; }
+    cat.target = target;
+    cat.from = [cat.x, cat.y];
+    cat.travelled = 0;
+    // Rising: a short stand-up before the first step.
+    setState(cat, cat.state === "walk" ? "walk" : "rise");
+    cat.remaining = cat.state === "rise" ? RISE_MS : 0;
+    const to = NODES[target];
+    if (Math.abs(to[0] - cat.x) > .05) face(cat, to[0] < cat.x ? -1 : 1, slope(cat.from, to));
+  }
+  function slope(from, to) {
+    const dx = Math.abs(to[0] - from[0]) || .01, dy = (to[1] - from[1]) * (1024 / 1536);
+    return Math.max(-8, Math.min(8, Math.atan2(dy, dx) * 180 / Math.PI * .35));
   }
 
   let previousFrame = performance.now(), wasPaused = null;
   function tick(now) {
-    const delta = Math.min(now - previousFrame, MAX_FRAME_MS);
-    previousFrame = now;
+    const delta = Math.max(0, Math.min(now - previousFrame, MAX_FRAME_MS));
+    previousFrame = Math.max(previousFrame, now);
     const paused = document.hidden || !!root.closest("[hidden]") || reducedMotion.matches
       || document.body.classList.contains("reduce-motion");
     if (paused !== wasPaused) {
@@ -111,23 +124,59 @@ export function createOfficeCats(root) {
       wasPaused = paused;
     }
     if (!paused) {
+      const unit = stride();
       for (const cat of cats) {
+        if (cat.state === "rise") {
+          cat.remaining -= delta;
+          if (cat.remaining <= 0) { setState(cat, "walk"); cat.easeIn = true; }
+          continue;
+        }
         if (cat.state === "walk") {
-          cat.elapsed += delta;
-          const progress = Math.min(1, cat.elapsed / cat.duration);
-          const from = FLOOR[cat.point], to = FLOOR[cat.target];
-          cat.x = from.x + (to.x - from.x) * progress;
-          cat.y = from.y + (to.y - from.y) * progress;
+          const to = NODES[cat.target], length = distance(cat.from, to);
+          const left = length - cat.travelled;
+          // Look ahead: will the cat stop at this point, or turn sharply onto the next segment?
+          if (cat.after === undefined) cat.after = Math.random() < WALK_CHANCE ? "walk" : "rest";
+          let factor = 1;
+          if (cat.easeIn) factor = Math.min(factor, .3 + .7 * Math.min(1, cat.travelled / EASE_IN));
+          if (cat.after === "rest") factor = Math.min(factor, .25 + .75 * Math.min(1, left / EASE_OUT));
+          else factor = Math.min(factor, CORNER_SPEED + (1 - CORNER_SPEED) * Math.min(1, left / CORNER));
+          const speed = unit / cat.cycle * factor;
+          const step = Math.min(left, speed * delta / 1000);
+          cat.travelled += step;
+          cat.phase = (cat.phase + step / unit) % 1;
+          const progress = length ? cat.travelled / length : 1;
+          cat.x = cat.from[0] + (to[0] - cat.from[0]) * progress;
+          cat.y = cat.from[1] + (to[1] - cat.from[1]) * progress;
+          cat.node.style.setProperty("--cat-phase", cat.phase.toFixed(3));
           place(cat);
-          if (progress === 1) {
+          if (progress >= 1) {
             cat.previous = cat.point;
             cat.point = cat.target;
             cat.target = null;
-            if (Math.random() < WALK_CHANCE) walk(cat); else rest(cat);
+            cat.easeIn = cat.after === "rest";
+            const after = cat.after;
+            cat.after = undefined;
+            if (after === "walk") { walk(cat); cat.easeIn = false; }
+            else rest(cat);
           }
+        } else if (cat.state === "settle") {
+          cat.remaining -= delta;
+          if (cat.remaining > 0) continue;
+          const pose = cat.next || RESTS[0];
+          if (pose.state === "nap" && !cat.napping) {
+            cat.napping = true;
+            setState(cat, "sit");
+            cat.remaining = SETTLE_NAP_MS;
+            continue;
+          }
+          cat.napping = false;
+          setState(cat, pose.state);
+          cat.remaining = between(pose.duration);
         } else {
           cat.remaining -= delta;
-          if (cat.remaining <= 0) walk(cat);
+          if (cat.remaining > 0) continue;
+          if (cat.napping) { cat.napping = false; setState(cat, "nap"); cat.remaining = between(cat.next.duration); continue; }
+          walk(cat);
         }
       }
     }

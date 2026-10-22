@@ -13,7 +13,7 @@
   "name": "<text>",
   "nameSince": 1767225730000,
   "nameSource": "user",
-  "tmux": "tmux-1:%4",
+  "tmux": "agents:@1.%4",
   "version": "2.1.303",
   "peerFeatures": [],
   "peerProtocol": 1,

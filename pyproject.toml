@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentville"
 version = "0.0.1"
-description = "An open virtual world for AI agents."
+description = "A self-hosted, read-only virtual office for AI coding agents (Claude Code, Codex)."
 license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [

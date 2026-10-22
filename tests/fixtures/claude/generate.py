@@ -67,7 +67,7 @@ class Scenario:
 
     # Session files.
 
-    def session(self, at, pid, session_id, status, tmux="tmux-1:%1", waiting_for=None,
+    def session(self, at, pid, session_id, status, tmux="agents:@1.%1", waiting_for=None,
                 kind="interactive", name_source="user", bridge=None, job_id=None, cwd=CWD):
         start = self.started.setdefault(pid, at)
         self.cwds.setdefault(session_id, cwd)
@@ -250,10 +250,21 @@ def assistant(scenario, blocks, stop, model_on_all=False, model="model-a", effor
     return out
 
 
-def api_error(scenario):
-    """Assistant record standing in for a failed API request."""
+def api_error(scenario, details=True):
+    """Assistant record standing in for a failed API request; the detail keys are optional."""
     records = assistant(scenario, [text()], "stop_sequence")
-    records[0].update({"isApiErrorMessage": True, "apiError": "<text>", "apiErrorStatus": 500})
+    records[0].update({"isApiErrorMessage": True, "error": "<error>"})
+    if details:
+        records[0].update({"apiError": "<text>", "apiErrorStatus": 500, "errorDetails": "<text>"})
+    return records
+
+
+def limit_error(scenario, resets_at):
+    """API error record of a reached usage limit, carrying quotaLimits."""
+    records = api_error(scenario, details=False)
+    records[0]["quotaLimits"] = {"status": "<status>", "rateLimitType": "<rate-limit-type>", "resetsAt": resets_at,
+                                 "isUsingOverage": False, "overageStatus": "<status>",
+                                 "overageDisabledReason": "<text>", "unifiedRateLimitFallbackAvailable": False}
     return records
 
 
@@ -419,14 +430,14 @@ def s03(root):
 
 def s06(root):
     s = Scenario(root, "S06", "Resume returns to the session's Employee; fork takes a free or new seat")
-    s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1"); s.check(seat=1, ref="a", session_id=SA)
-    s.session(t(1), 1002, SB, "idle", tmux="tmux-1:%2"); s.check(seat=2, ref="b", session_id=SB)
+    s.session(t(0), 1001, SA, "idle", tmux="agents:@1.%1"); s.check(seat=1, ref="a", session_id=SA)
+    s.session(t(1), 1002, SB, "idle", tmux="agents:@1.%2"); s.check(seat=2, ref="b", session_id=SB)
     turn(s, 2, SA, 1001)
     turn(s, 5, SB, 1002); s.check(seat=2, state="idle")
     s.remove(t(60), 1001); s.check(seat=1, presence="off_duty", same_as="a")
     s.remove(t(61), 1002); s.check(seat=2, presence="off_duty", same_as="b")
     # --resume SB from the pane seat 1 last used: the session outranks location and the lowest free seat.
-    s.session(t(120), 1003, SB, "idle", tmux="tmux-1:%1")
+    s.session(t(120), 1003, SB, "idle", tmux="agents:@1.%1")
     s.check(pid=1003, seat=2, presence="on_duty", same_as="b", session_id=SB, state="idle")
     s.check(seat=1, presence="off_duty", same_as="a")
     # The resumed session appends to the same transcript; only the new records are read.
@@ -437,7 +448,7 @@ def s06(root):
     s.records(t(124), SB, assistant(s, [text()], "end_turn") + [turn_done()])
     s.session(t(124), 1003, SB, "idle"); s.check(pid=1003, state="idle", workload=1)
     # --fork-session from SB: a new session id with no reference to SB takes the lowest free seat.
-    s.session(t(130), 1004, SD, "idle", tmux="tmux-1:%4")
+    s.session(t(130), 1004, SD, "idle", tmux="agents:@1.%4")
     s.check(pid=1004, seat=1, presence="on_duty", same_as="a", session_id=SD)
     s.records(t(131), SD, [prompt()]); s.check(pid=1004, state="working")
     s.check(pid=1003, state="idle")
@@ -478,7 +489,7 @@ def s08(root):
 def s10(root):
     s = Scenario(root, "S10", "Two concurrent agents in one repository, one in tmux; seats return by runtime location")
     s.session(t(0), 1001, SA, "idle", tmux=None); s.check(seat=1, ref="a", location=None, presence="on_duty")
-    s.session(t(1), 1002, SB, "idle", tmux="tmux-1:%1"); s.check(seat=2, ref="b", location="tmux-1:%1", presence="on_duty")
+    s.session(t(1), 1002, SB, "idle", tmux="agents:@1.%1"); s.check(seat=2, ref="b", location="agents:@1.%1", presence="on_duty")
     s.records(t(2), SA, [prompt()])
     s.session(t(2), 1001, SA, "busy"); s.check(seat=1, state="working"); s.check(seat=2, state="idle")
     s.records(t(3), SB, [prompt()])
@@ -488,7 +499,7 @@ def s10(root):
     s.remove(t(60), 1001); s.check(seat=1, presence="off_duty", same_as="a")
     s.remove(t(61), 1002); s.check(seat=2, presence="off_duty", same_as="b")
     # New sessions after restart: the tmux pane selects seat 2 over the lower free seat 1.
-    s.session(t(120), 1003, SC, "idle", tmux="tmux-1:%1"); s.check(pid=1003, seat=2, same_as="b", presence="on_duty")
+    s.session(t(120), 1003, SC, "idle", tmux="agents:@1.%1"); s.check(pid=1003, seat=2, same_as="b", presence="on_duty")
     s.session(t(121), 1004, SD, "idle", tmux=None); s.check(pid=1004, seat=1, same_as="a", presence="on_duty")
     s.check(agent_count=2)
     s.save()
@@ -496,9 +507,9 @@ def s10(root):
 
 def s11(root):
     s = Scenario(root, "S11", "An agent outside any repository works in the Common Office")
-    s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1")
+    s.session(t(0), 1001, SA, "idle", tmux="agents:@1.%1")
     s.check(project="github.com/example/repo", seat=1, ref="r", presence="on_duty")
-    s.session(t(1), 1002, SB, "idle", tmux="tmux-1:%2", cwd=OUTSIDE)
+    s.session(t(1), 1002, SB, "idle", tmux="agents:@1.%2", cwd=OUTSIDE)
     s.check(project="common-office", seat=1, ref="c", presence="on_duty", state="idle")
     s.records(t(2), SB, [prompt()])
     s.session(t(2), 1002, SB, "busy"); s.check(project="common-office", state="working")
@@ -509,6 +520,30 @@ def s11(root):
     s.session(t(5), 1002, SB, "idle"); s.check(project="common-office", state="idle", same_as="c")
     s.remove(t(60), 1002); s.check(project="common-office", seat=1, presence="off_duty", same_as="c")
     s.check(project="github.com/example/repo", seat=1, presence="on_duty", same_as="r", agent_count=2)
+    s.save()
+
+
+def s12(root):
+    s = Scenario(root, "S12", "Usage limit reached; limited persists through turn end and idle until a new turn")
+    s.session(t(0), 1001, SA, "idle"); s.check(state="idle", reset_at=None)
+    s.records(t(1), SA, [prompt()])
+    s.session(t(1), 1001, SA, "busy")
+    s.records(t(2), SA, assistant(s, [tool_use("toolu_01", "Bash")], "tool_use"))
+    s.records(t(3), SA, [tool_result("toolu_01")]); s.check(state="working", reset_at=None)
+    s.records(t(4), SA, limit_error(s, int((BASE + timedelta(hours=5)).timestamp())))
+    s.check(state="limited", reset_at="2026-01-01T05:00:00.000Z", model="model-a")
+    s.records(t(5), SA, [turn_done()]); s.check(state="limited")
+    s.session(t(5), 1001, SA, "idle"); s.check(state="limited", reset_at="2026-01-01T05:00:00.000Z")
+    s.records(t(18000), SA, [prompt()]); s.check(state="working", reset_at=None)
+    s.session(t(18000), 1001, SA, "busy")
+    s.records(t(18001), SA, assistant(s, [text()], "end_turn") + [turn_done()])
+    s.session(t(18001), 1001, SA, "idle")
+    s.check(state="idle", states_since_start=["unknown", "idle", "working", "limited", "working", "completed", "idle"])
+    s.records(t(18010), SA, [prompt()])
+    s.session(t(18010), 1001, SA, "busy")
+    s.records(t(18011), SA, limit_error(s, iso(BASE + timedelta(days=7)))); s.check(state="limited", reset_at="2026-01-08T00:00:00.000Z")
+    s.records(t(18012), SA, api_error(s)); s.check(state="error", reset_at=None)
+    s.remove(t(18100), 1001); s.check(presence="off_duty")
     s.save()
 
 
@@ -536,17 +571,17 @@ def s13(root):
 
 def s14(root):
     s = Scenario(root, "S14", "Normal exit; resume and runtime location select the returning Employee")
-    s.session(t(0), 1001, SA, "idle", tmux="tmux-1:%1"); s.check(presence="on_duty", seat=1, ref="a")
+    s.session(t(0), 1001, SA, "idle", tmux="agents:@1.%1"); s.check(presence="on_duty", seat=1, ref="a")
     s.session(t(10), 1003, SB, "idle", tmux=None, kind="bg", name_source=None, bridge="<bridge-id>")
     s.check(presence="on_duty", seat=2, ref="b")
     s.remove(t(60), 1001); s.check(presence="off_duty", seat=1, same_as="a")
     s.remove(t(70), 1003); s.check(presence="off_duty", seat=2, same_as="b")
-    s.session(t(120), 1002, SB, "idle", tmux="tmux-1:%9"); s.check(presence="on_duty", seat=2, same_as="b", pid=1002)
-    s.session(t(130), 1004, SC, "idle", tmux="tmux-1:%1"); s.check(presence="on_duty", seat=1, same_as="a", pid=1004)
+    s.session(t(120), 1002, SB, "idle", tmux="agents:@1.%9"); s.check(presence="on_duty", seat=2, same_as="b", pid=1002)
+    s.session(t(130), 1004, SC, "idle", tmux="agents:@1.%1"); s.check(presence="on_duty", seat=1, same_as="a", pid=1004)
     s.remove(t(200), 1002); s.check(presence="off_duty", seat=2, same_as="b")
     s.save()
 
 
 if __name__ == "__main__":
-    for build in (s01, s02, s03, s04, s06, s07, s08, s10, s11, s13, s14):
+    for build in (s01, s02, s03, s04, s06, s07, s08, s10, s11, s12, s13, s14):
         build(sys.argv[1])

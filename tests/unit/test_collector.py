@@ -250,11 +250,41 @@ def test_employee_on_duty_at_last_save_is_restored_off_duty_from_restart(tmp_pat
     assert [(a["presence"], a["presence_since"]) for a in _snapshot_agents(out)] == [("off_duty", "2026-01-01T02:00:00.000Z")]
 
 
-def test_unreadable_roster_starts_empty(tmp_path):
+def test_unreadable_roster_starts_empty(tmp_path, capsys):
     (tmp_path / "roster.json").write_text("{not json")
-    collector, out = _rostered(tmp_path, ScriptedAdapter(), [T0])
+    (tmp_path / "roster.json.bad").write_text("older")
+    adapter = ScriptedAdapter()
+    adapter.batches = [[], [_obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"})]]
+    collector, out = _rostered(tmp_path, adapter, [T0])
     collector.tick()
     assert _snapshot_agents(out) == []
+    lines = capsys.readouterr().err.splitlines()
+    assert len(lines) == 1 and str(tmp_path / "roster.json") in lines[0] and "Expecting" in lines[0]
+    assert (tmp_path / "roster.json").read_text() == "{not json"
+    collector.tick()
+    assert (tmp_path / "roster.json.bad").read_text() == "{not json"
+    assert len(json.loads((tmp_path / "roster.json").read_text())) == 1
+
+
+def test_roster_that_is_not_a_list_is_kept_aside(tmp_path, capsys):
+    from agentville.collector.roster import Roster
+
+    (tmp_path / "roster.json").write_text("{}")
+    roster = Roster(str(tmp_path / "roster.json"))
+    assert roster.load() == []
+    assert "not a list" in capsys.readouterr().err
+    roster.save([])
+    assert (tmp_path / "roster.json.bad").read_text() == "{}"
+    assert (tmp_path / "roster.json").read_text() == "[]\n"
+
+
+def test_missing_roster_starts_empty_quietly(tmp_path, capsys):
+    from agentville.collector.roster import Roster
+
+    roster = Roster(str(tmp_path / "roster.json"))
+    assert roster.load() == []
+    roster.save([])
+    assert capsys.readouterr().err == "" and not (tmp_path / "roster.json.bad").exists()
 
 
 def test_resumed_session_returns_to_the_colleague_who_last_worked_on_it(tmp_path):

@@ -172,6 +172,11 @@ def task_started(turn):
                           "model_context_window": 1, "collaboration_mode_kind": "default", "turn_attribution": None})
 
 
+def task_error(kind):
+    """task_complete.error: an object naming the error kind, with message text."""
+    return {"codex_error_info": kind, "message": "<text>"}
+
+
 def task_complete(turn, error=None):
     return ("event_msg", {"type": "task_complete", "turn_id": turn, "root_turn_id": turn, "started_at": 0,
                           "completed_at": 1, "duration_ms": 1000, "time_to_first_token_ms": 100,
@@ -199,12 +204,19 @@ def window(used, minutes, resets_after):
     return {"used_percent": used, "window_minutes": minutes, "resets_at": int((BASE + resets_after).timestamp())}
 
 
-def token_count(used=10.0, weekly=None):
-    limits = {"limit_id": "<id>", "plan_type": "<plan>", "primary": window(used, 300, timedelta(hours=5))}
-    if weekly is not None:
-        limits["secondary"] = window(weekly, 10080, timedelta(days=7))
-    limits["credits"] = {"balance": "<balance>", "has_credits": True}
-    return ("event_msg", {"type": "token_count", "info": {}, "rate_limits": limits})
+def token_count(used=10.0, weekly=None, limits=True):
+    rate_limits = {
+        "credits": {"balance": "<balance>", "has_credits": True},
+        "individual_limit": None,
+        "limit_id": "<id>",
+        "limit_name": "<name>",
+        "plan_type": "<plan>",
+        "primary": window(used, 300, timedelta(hours=5)),
+        "secondary": window(weekly, 10080, timedelta(days=7)) if weekly is not None else None,
+        "rate_limit_reached_type": None,
+        "spend_control_reached": None,
+    }
+    return ("event_msg", {"type": "token_count", "info": {}, "rate_limits": rate_limits if limits else None})
 
 
 TA = "019a0000-0000-7000-8000-00000000000a"
@@ -265,7 +277,7 @@ def s04(root):
 
 
 def s12(root):
-    s = Scenario(root, "S12", "Usage limit reached; a new turn after reset resumes work")
+    s = Scenario(root, "S12", "Usage limit by full window or turn error; a new turn resumes work; overload is no error")
     s.load(t(0), thread(TA, IDLE)); s.check(state="idle", reset_at=None)
     s.status(t(1), TA, ACTIVE)
     s.rollout(t(1), TA, [task_started("turn-1"), call("call_1"), output("call_1"), token_count(90.0, 50.0)])
@@ -277,6 +289,25 @@ def s12(root):
     s.rollout(t(600), TA, [task_started("turn-2"), token_count(1.0, 1.0), task_complete("turn-2")])
     s.status(t(601), TA, IDLE)
     s.check(state="idle", states_since_start=["unknown", "idle", "working", "limited", "working", "completed", "idle"])
+    # The turn ends with a usage-limit error after the window filled: limited, not an error.
+    s.status(t(700), TA, ACTIVE)
+    s.rollout(t(700), TA, [task_started("turn-3"), call("call_3"), output("call_3"), token_count(100.0, 60.0)])
+    s.check(state="limited", reset_at="2026-01-01T05:00:00.000Z")
+    s.rollout(t(701), TA, [task_complete("turn-3", error=task_error("usage_limit_exceeded"))])
+    s.status(t(701), TA, IDLE); s.check(state="limited", reset_at="2026-01-01T05:00:00.000Z")
+    # A usage-limit error with no full window seen takes the reset of the most used window.
+    s.status(t(800), TA, ACTIVE)
+    s.rollout(t(800), TA, [task_started("turn-4"), token_count(40.0, 98.0), token_count(limits=False)])
+    s.check(state="working", reset_at=None)
+    s.rollout(t(801), TA, [task_complete("turn-4", error=task_error("usage_limit_exceeded"))])
+    s.status(t(801), TA, IDLE); s.check(state="limited", reset_at="2026-01-08T00:00:00.000Z")
+    # An overloaded server ends the turn without an error.
+    s.status(t(900), TA, ACTIVE)
+    s.rollout(t(900), TA, [task_started("turn-5"), token_count(1.0, 1.0)]); s.check(state="working")
+    s.rollout(t(901), TA, [task_complete("turn-5", error=task_error("server_overloaded"))])
+    s.status(t(901), TA, IDLE)
+    s.check(state="idle", states_since_start=["unknown", "idle", "working", "limited", "working", "completed", "idle",
+                                              "working", "limited", "working", "limited", "working", "completed", "idle"])
     s.save()
 
 
@@ -416,7 +447,7 @@ def s13(root):
     s.status(t(1), TA, ACTIVE)
     s.rollout(t(1), TA, [turn_context("turn-1"), task_started("turn-1"), call("call_1"), output("call_1")])
     s.check(state="working")
-    s.rollout(t(2), TA, [task_complete("turn-1", error="<text>")]); s.check(state="error", tool=None)
+    s.rollout(t(2), TA, [task_complete("turn-1", error=task_error("<error>"))]); s.check(state="error", tool=None)
     s.status(t(2), TA, IDLE); s.check(state="error")
     s.status(t(30), TA, ACTIVE); s.check(state="working")
     s.rollout(t(30), TA, [task_started("turn-2"), task_complete("turn-2")])

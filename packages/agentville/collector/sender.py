@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import urllib.error
@@ -65,5 +66,9 @@ class HttpSender:
                 pass
             return Delivery(False, error=f"HTTP {exc.code} {detail}".strip())
         except (urllib.error.URLError, OSError, ValueError) as exc:
+            # OSError covers ssl.SSLError and connection resets.
             return Delivery(False, error=str(exc))
+        except http.client.HTTPException as exc:
+            # A response cut short or malformed, e.g. IncompleteRead or BadStatusLine.
+            return Delivery(False, error=f"{type(exc).__name__}: {exc}")
         return Delivery(True, need_snapshot=bool(isinstance(result, dict) and result.get("need_snapshot")))
