@@ -20,7 +20,7 @@ host:
   location: ""
 hq:
   url: http://127.0.0.1:8470
-  # token: <branch token>       # required when HQ is on another host
+  token: <branch token>         # added by hand; required when HQ is on another host
 thresholds: {phone: 300, doze: 1800, lounge: 3600, leave: 604800}
 providers:
   claude:
@@ -37,7 +37,7 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ```
 
 - `time` defaults to the host's local time zone at first start. A value that is not a valid IANA zone is shown as a label; the Web UI then uses browser time for the clock and window light.
-- One provider home is one account. `~/.claude` is always listed; the other homes (`~/.claude-*`, `~/.codex`, `~/.codex-*`) are those found at first start. Each provider's homes are numbered `<provider>-account-1`, `-2`, ...; rename or add them here.
+- One provider home is one account. `~/.claude` is always listed; the other homes (`~/.claude-*`, `~/.codex`, `~/.codex-*`) are those found at first start. Each provider's homes are numbered `<provider>-account-1`, `-2`, ...; rename or add them here. A provider with no home found is written as `codex: []`; to add one, replace `[]` with a list as in the example.
 - The generated file writes provider homes as absolute paths with the home directory expanded (e.g. `/home/<user>/.codex`). A `~` is accepted when editing, as in the example above.
 - Condition rules are evaluated in order and the first match wins; unmatched combinations are `normal`. The `extra-coffee` rule needs a fast-mode signal, which no Adapter reports yet.
 - Thresholds are seconds of idleness for phone, dozing, and lounge, and of absence for leave.

@@ -64,8 +64,8 @@ Select a colleague in the office or in the list on the right. The detail shows s
 
 | View | Content |
 |---|---|
-| Dashboard | Counts across all Branches: on duty, waiting, errors, and a table of colleagues. |
-| Colleagues | Every colleague with Branch, room, presence, activity, tool, condition, recent tools, and time in state. |
+| Dashboard | Counts across all Branches: on duty, waiting, errors, Branches, and a table of colleagues. |
+| Colleagues | Every colleague with Branch, room, presence, activity, tool, condition, recent tools, and time in state. Idle colleagues show where they are: Phone (휴대폰) or Fika (휴게실). |
 | Projects | One card per repository with colleagues on duty and Branches. |
 | Timeline | Changes observed while the page is open. |
 | Branches | Each Branch, whether it is reporting, and its last report time. |
@@ -90,4 +90,5 @@ The search field filters colleagues and projects; the state chips above the offi
 | Show colleague names | Keeps name labels visible in the office. |
 | Reduce motion | Stops animations. |
 | Window light | Branch time, or a fixed time of day. |
-| Browser notifications | Notifies when a colleague starts waiting or has an error, and when a Branch stops or resumes reporting. Needs HTTPS or localhost and the browser's permission; off by default. |
+| Browser notifications | Notifies when a colleague starts waiting or has an error, and when a Branch stops or resumes reporting. Only while the page is open in a browser tab. Needs HTTPS or localhost and the browser's permission; off by default. |
+| Demo data | Shown in demo mode (`/?demo=1`): fictional colleagues, HQ data unchanged. "Open live data" returns to HQ. |

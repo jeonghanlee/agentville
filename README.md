@@ -28,7 +28,7 @@ agentville-hq &               # http://127.0.0.1:8470
 agentville-collector
 ```
 
-Open `http://127.0.0.1:8470/`. `http://127.0.0.1:8470/?demo=1` shows fictional colleagues. For services, other hosts, and TLS, follow the Installation chapter.
+Open `http://127.0.0.1:8470/`. `http://127.0.0.1:8470/?demo=1` shows fictional colleagues. The quick start runs in this terminal; stop it (Ctrl-C, then `kill %1`) before following the Installation chapter for services, other hosts, and TLS.
 
 ## Documentation
 

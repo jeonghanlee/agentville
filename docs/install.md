@@ -95,7 +95,9 @@ systemctl --user daemon-reload
 systemctl --user enable --now agentville-hq agentville-collector
 ```
 
-HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener, and HQ stops with `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`), choose another port, for example 8471, before enabling the services:
+HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener, and HQ stops with `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`), choose another port, for example 8471, before enabling the services. If the listener is an HQ you started yourself (for example from the README quick start), stop it instead of changing the port.
+
+To change the port:
 
 - in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`;
 - in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
@@ -103,7 +105,7 @@ HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470
 
 HQ keeps its database in `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`; the directory is created with mode 0700). To place it elsewhere, add `--db <path>` to `ExecStart`. Received messages are kept for 30 days; `--retention-days <n>` changes that. The current state of each Branch is kept regardless.
 
-User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user; this is optional and is the only step that needs root:
+User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user (optional; the services themselves never need root):
 
 ```bash
 sudo loginctl enable-linger <user>
@@ -189,9 +191,16 @@ systemctl --user daemon-reload
 systemctl --user restart agentville-hq
 ```
 
-Unit files expand `%h` to the home directory; they do not expand `~`.
+Unit files expand `%h` to the home directory; they do not expand `~`. Without systemd, run the `ExecStart` command in the foreground with `~` in place of `%h`; where this guide says `systemctl --user restart ...`, stop the program (Ctrl-C) and start it again.
 
-**(a) HQ serves HTTPS directly.** HQ needs a PEM certificate and key for `hq.example.org`, readable by the login user (key mode 0600). The Collector verifies the certificate against the host's system trust store, so each Branch must trust its issuer. The paths below are examples.
+**(a) HQ serves HTTPS directly.** HQ needs a PEM certificate and key for `hq.example.org`, readable by the login user (key mode 0600). The Collector verifies the certificate against the host's system trust store, so each Branch, and the HQ host for its own Collector, must trust its issuer. Until it does, the Collector logs `delivery failed: ... CERTIFICATE_VERIFY_FAILED`. For a self-signed or internal CA certificate:
+
+| System | Command |
+|---|---|
+| Debian, Ubuntu | `sudo cp cert.pem /usr/local/share/ca-certificates/agentville-hq.crt && sudo update-ca-certificates` |
+| Rocky Linux | `sudo cp cert.pem /etc/pki/ca-trust/source/anchors/agentville-hq.pem && sudo update-ca-trust` |
+
+The paths below are examples.
 
 ```ini
 ExecStart=%h/.local/bin/agentville-hq --host 0.0.0.0 --port 8470 --allow-remote \
@@ -266,7 +275,7 @@ Then `systemctl --user restart agentville-collector`. The startup line reads `ag
 
 ### 6.6 Open the office
 
-The viewer token is in `~/.config/agentville/viewer.token` on the HQ host. Open `https://hq.example.org/#token=<viewer token>` (form (a): `https://hq.example.org:8470/#token=<viewer token>`). The page moves the token to session storage and removes it from the address bar.
+The viewer token is in `~/.config/agentville/viewer.token` on the HQ host. Open `https://hq.example.org/#token=<viewer token>` (form (a): `https://hq.example.org:8470/#token=<viewer token>`) in a new tab; if the page is already open, add the fragment and reload. The page moves the token to session storage and removes it from the address bar. A wrong or old token shows the same "Viewer token required" as a missing one; reopen with the current value of `viewer.token`.
 
 In form (b), a browser on the HQ host can also open `http://127.0.0.1:8470/#token=<viewer token>`.
 
@@ -325,6 +334,6 @@ Data left in place, to be removed separately if no longer needed:
 
 | Path | Content |
 |---|---|
-| `~/.config/agentville/` | Collector configuration; on HQ, token files |
+| `~/.config/agentville/` | Collector configuration; on HQ, token files and, in form (a) with the example paths, the TLS certificate and private key |
 | `~/.local/state/agentville/` | Collector `seq` and `roster.json` |
 | `~/.local/share/agentville/hq.sqlite3` | HQ database (HQ host) |
