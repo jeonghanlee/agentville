@@ -1,5 +1,7 @@
 # AgentVille 가상 오피스 UI — 디자인 위임 브리프
 
+Initial design brief. The implemented interface is specified in docs/architecture.md Section 6.
+
 ## 1. 이전 담당(Claude)의 한계
 
 | 항목 | 한계 |
@@ -18,7 +20,7 @@
 
 ## 3. 화면 구성
 
-- 왼쪽 메뉴: 가상 오피스, 대시보드, 사원, 프로젝트, 타임라인, 지점, 설정
+- 왼쪽 메뉴: 가상 오피스, 대시보드, 동료, 프로젝트, 타임라인, 지점, 설정
 - 상단: 검색, 상태별 인원 필터(전체 · 작업 · 생각 · 대기 · 유휴 · 오류), 지점 선택
 - 중앙: 선택한 지점(Branch)의 사무실 층 전경
 - 오른쪽: 출근한 사원 목록, 최근 이벤트

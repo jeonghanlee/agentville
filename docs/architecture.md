@@ -25,13 +25,13 @@ Each Host defines only itself in a user-level configuration file outside the rep
 | `id` | Unique, immutable identifier. |
 | `alias` | Display name. Mutable. |
 | `country` | Real or fictional. |
-| `time` | Real time zone (e.g. `Asia/Seoul`) or fictional label. |
+| `time` | IANA time zone (e.g. `Asia/Seoul`) or fictional label. Defaults to the host's local zone at first start. |
 | `location` | Real or fictional. |
-| `hq.url` | HQ endpoint. The only remote information a Host holds. |
+| `hq.url`, `hq.token` | HQ endpoint and, when HQ requires one, the Branch token. The only remote information a Host holds. |
 
 - All internal references use `id`. `alias` is display only.
 - Event timestamps (`event_at`, `observed_at`) are always UTC.
-- A real time zone in `time` drives local day/night rendering. A fictional value is rendered as a label only.
+- A valid IANA zone in `time` drives the Branch clock, date, window light, and reset times in the Web UI. Any other value is shown as a label only, and the Web UI falls back to browser time for day/night and the clock (Section 6.2).
 
 ### 1.3 Project
 
@@ -43,11 +43,11 @@ Each Host defines only itself in a user-level configuration file outside the rep
 
 | Case | Rule |
 |---|---|
-| Repository with a Git remote | Identified automatically by the normalized remote URL (scheme, user, and `.git` suffix removed). |
-| Repository without a remote | Local Project of that Branch, identified by `(host, path)`. |
-| Fork or mirror | Grouped manually in Branch configuration. |
+| Repository with a Git remote | Identified automatically by the normalized `origin` remote URL (scheme, user, port, and `.git` suffix removed; host lowercased). |
+| Repository without a remote | Local Project of that Branch, identified by a hash of `(host, path)`. |
+| Fork or mirror | Grouped manually in Branch configuration. Not implemented (Section 9). |
 
-- `alias` for a Project is set in Branch configuration. Default is the repository name.
+- The Project `alias` is the base name of the repository directory. Setting it in Branch configuration is not implemented (Section 9).
 
 ### 1.3.1 Room
 
@@ -65,14 +65,15 @@ An `Agent` is identified by:
 ```
 
 - `seat` is a number distinguishing concurrent agents of the same provider in the same Project on the same Host.
-- One shift of an Employee is defined per provider by its Adapter (see 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server.
-- Account and model are Employee attributes. Changes are recorded as history.
+- One shift of an Employee is defined per provider by its Adapter (Section 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server.
+- Account and model are Employee attributes; the latest values are kept. Recording their changes as history is not implemented (Section 9).
+- `alias` (Employee display name) is part of the payload and is currently always null (Section 9).
 
 #### Seat assignment
 
 When a new agent process is observed, the Employee is selected in this order:
 
-1. The Employee who last worked on the resumed session (including resume under a different account).
+1. The Employee who last worked on the resumed session (including resume under a different account). A session id is kept only in the history of the Employee who last worked on it; each Employee keeps its last 20.
 2. The Employee matching the previous runtime location (e.g. tmux pane).
 3. The Employee with the lowest free seat number.
 
@@ -93,28 +94,25 @@ A candidate already on shift is skipped and the next rule applies.
 
 - A subagent is an `AgentInstance` with `parent_instance_id`.
 - In-process subagent: identified by `(parent_instance_id, provider_subagent_id)`.
-- Child-process agent (e.g. another agent CLI launched from the parent's shell): identified by process; parent resolved from the process tree.
+- Child-process agent (e.g. another agent CLI launched from the parent's shell): identified by process; parent resolved from the process tree. Not implemented (Section 9).
 - A Contractor's lifetime does not exceed its parent's.
 
 ### 1.6 Condition
 
 - Derived from model and runtime settings (e.g. effort level, fast mode).
-- The mapping table is a configuration file with defaults, editable per Branch.
+- The mapping is the `conditions` list of the Branch configuration (Section 3.5); rules match `provider`, optionally `model` (shell-style pattern), `effort`, and `fast_mode`.
 - Unmapped combinations use the `normal` condition.
+- Default rules, in order:
 
-```yaml
+````yaml
 conditions:
-  - provider: claude
-    model: "claude-opus-*"
-    effort: high
-    condition: study-mode
-  - provider: claude
-    fast_mode: true
-    condition: extra-coffee
-  - provider: codex
-    effort: low
-    condition: light
-```
+  - {provider: claude, fast_mode: true, condition: extra-coffee}
+  - {provider: "*", effort: high, condition: study-mode}
+  - {provider: "*", effort: xhigh, condition: study-mode}
+  - {provider: "*", effort: low, condition: light}
+````
+
+- Adapters report `effort` only. No Adapter reports `fast_mode`, so the `extra-coffee` rule does not match observed data yet (Section 9).
 
 ### 1.7 Handover Between Providers
 
@@ -127,8 +125,8 @@ conditions:
 |---|---|
 | Host heartbeat lost | Branch unreachable. Employee states are retained and marked unverifiable. |
 | Host heartbeat restored | Branch reachable. Observation resumes. |
-| Owner closes a Branch or Project at HQ | HQ record is closed. No command is sent to any Branch. |
-| Agent observed in a closed Branch or Project | Automatically reopened. HQ raises a notification. |
+| Owner closes a Branch or Project at HQ | HQ record is closed. No command is sent to any Branch. Not implemented (Section 9). |
+| Agent observed in a closed Branch or Project | Automatically reopened. HQ raises a notification. Not implemented (Section 9). |
 
 ## 2. State Model
 
@@ -149,7 +147,7 @@ conditions:
 | `working` | Tool execution started, not finished. Tool failures (tests, compile errors) remain `working`. | Desk | Hands moving, head turning |
 | `thinking` | Explicit model-generation signal. Not inferred when the provider emits none. | Desk | Thought bubble; posture chosen randomly per occurrence (chin on hand or leaning back) |
 | `waiting` | Explicit user-input or approval request. | Desk | Waving hand. No time-based transition. Browser notification from the Web UI (Section 6.4). |
-| `idle` | Alive, no active turn. | See 2.3 | See 2.3 |
+| `idle` | Alive, no active turn. | Section 2.3 | Section 2.3 |
 | `completed` | Provider turn-completed event. | Desk | Momentary checkmark, then `idle` |
 | `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | Browser notification from the Web UI (Section 6.4) |
 | `limited` | Provider usage-limit event. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No browser notification. |
@@ -179,8 +177,9 @@ conditions:
 
 ### 2.5 Workload
 
-- The number of monitors on an Employee's desk scales with tool execution count in a recent time window.
-- Window size and count-to-monitor mapping are defaults, configurable per Branch.
+- Workload is the number of tool executions started in the last 5 minutes (fixed window) of the current shift, sent as `workload` in `activity`.
+- The Web UI shows it as "N recent tools".
+- A monitor count on the desk that scales with workload, and a per-Branch window and mapping, are not implemented (Section 9).
 
 ## 3. Collector
 
@@ -315,7 +314,7 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Live sessions | `~/.gemini/antigravity-cli/presence/<conversation-uuid>.lock` held by a live `agy` process |
 | Detail | `brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl` (`type`, `source`, `status`: `DONE`, `ERROR`, `RUNNING`) |
 
-Antigravity waiting and usage-limit signals are not yet identified.
+No Antigravity Adapter is implemented; the sources above are recorded for one (Section 9). Antigravity waiting and usage-limit signals are not yet identified.
 
 ### 3.5 Configuration
 
@@ -340,15 +339,17 @@ providers:
 conditions:
   - {provider: claude, fast_mode: true, condition: extra-coffee}
   - {provider: "*", effort: high, condition: study-mode}
+  - {provider: "*", effort: xhigh, condition: study-mode}
   - {provider: "*", effort: low, condition: light}
 collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ````
 
+- `time` is the host's local zone at first start (`TZ`, `/etc/timezone`, or the `/etc/localtime` link; `UTC` when none is found).
 - One provider home is one account. At first start, `~/.<provider>` and existing `~/.<provider>-*` directories are listed in that order as `<provider>-account-1`, `<provider>-account-2`, …; `~/.claude` is always listed. Account names and homes are local settings.
 - A single mapping (`claude: {home: ~/.claude}`) is read as a one-account list.
 - Values are validated at start: `heartbeat_interval` ≥ 1, thresholds ≥ 0 with `phone` ≤ `doze` ≤ `lounge`. A file holding `hq.token` must not be accessible by group or others.
 - A loopback HQ is contacted without environment proxies.
-- Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns.
+- Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns. The defaults are listed in Section 1.6. A configuration without a `conditions` key uses them; an empty list maps everything to `normal`.
 
 ### 3.6 Run Loop
 
@@ -362,6 +363,8 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 ## 4. HQ
 
 - Process: `agentville-hq` (FastAPI, uvicorn), bound to `127.0.0.1:8470` by default.
+- `--tls-cert` and `--tls-key` (PEM files, used together) make HQ serve HTTPS directly; without them HQ serves plain HTTP.
+- At start HQ prints `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
 - Storage: SQLite (WAL) at `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`).
 
 | Table | Content |
@@ -378,9 +381,11 @@ Messages of one batch are applied in `seq` order:
 
 | Case | Result |
 |---|---|
-| `(branch_id, seq)` already stored with the same `sent_at` | Duplicate; ignored |
-| `snapshot` | Replaces all current state of the Branch. A snapshot whose `seq` is not above the last applied `seq` (Branch lost its sequence state) also discards stored messages from that `seq` on and restarts the numbering. |
+| Non-snapshot message whose `(branch_id, seq)` is already stored | Duplicate; ignored, regardless of `sent_at` |
+| `snapshot` with `seq` not above the last applied, and a stored message with the same `seq` and the same `sent_at` | Duplicate; ignored |
 | `snapshot` with `seq` not above the last applied and `sent_at` earlier than the latest applied `sent_at` | Stale, not applied; response asks for a snapshot |
+| Other `snapshot` with `seq` not above the last applied (Branch lost its sequence state) | Stored messages from that `seq` on are discarded; the snapshot is stored and applied and restarts the numbering |
+| `snapshot` | Replaces all current state of the Branch |
 | `seq` lower than the last applied | Stale; stored, not applied |
 | `seq` not equal to last + 1, or no state for the Branch | Applied; response asks for a snapshot |
 | `agent` with no instance | Employee updated; its activity removed |
@@ -405,9 +410,11 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 ### 4.3 Authorization
 
-- A Branch connecting from loopback needs no token, unless `--no-trust-loopback` is set (required behind a local reverse proxy).
+- A Branch connecting from loopback needs no token, unless `--no-trust-loopback` is set (required behind a local reverse proxy) or its `branch_id` is listed in the token file; a listed Branch must send its token from loopback too.
 - Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token, mode 0600, each token a string of at least 16 characters). The Branch sets the same value as `hq.token` in its configuration.
 - A caller that is neither trusted loopback nor holding any configured token is rejected before the body is read.
+- Ingest rejections: 401 `token required` when a caller that needs a token sends no `Authorization` header; 401 `invalid token` when the token does not match, or when a Branch listed in the token file sends none from trusted loopback. Read endpoints answer 401 `viewer token required`.
+- The token file and the viewer token file are read at start only; HQ is restarted after editing them.
 - Binding to a non-loopback address requires `--allow-remote` and `--viewer-token-file`; read endpoints then require the viewer token, and loopback Branches need tokens too.
 - Messages are schema-validated after authorization, including `date-time` formats. Non-finite numbers (`NaN`, `Infinity`) and excessive nesting are rejected. Request bodies are limited to 4 MiB, counted while reading.
 - Ingest accepts only `Content-Type: application/json` and rejects requests carrying an `Origin` header, so a web page cannot submit messages through the trusted loopback path.
@@ -423,14 +430,15 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - The Collector sends each tick's messages as one batch by HTTP(S) POST to `hq.url`. Remote Branches connect outbound only; HQ never connects to a Branch.
 - On delivery failure the batch is dropped and the next successful delivery starts with a snapshot. Retries back off from 1 s to 60 s.
 - When HQ reports `need_snapshot`, the next tick sends a snapshot.
-- `agentville-collector --output <path|->` writes JSONL instead of sending, for diagnostics.
+- `agentville-collector --output <path|->` writes JSONL instead of sending, for diagnostics. It reads the `seq` and `roster.json` state files but never writes them.
+- At start the Collector prints `agentville-collector: Branch <alias> (<host.id>) reporting to <hq.url or output>` to standard error. An unusable `hq.url` (unsupported scheme, or a token over plain HTTP to a non-loopback host) stops it with a message.
 
 ## 6. Web UI
 
 - Navigation: Virtual office, Dashboard, Colleagues, Projects, Timeline, Branches, and display settings.
 - Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
 - Interface terms. The domain model keeps its names; only the visible labels differ. Employee is shown as "Colleague" (동료) everywhere in visible text, including headings, navigation, search, table headers, empty states, and accessible names; internal names and payload fields (`agent`, `agent_id`) are unchanged. Other labels: Branch (지점), HQ (본사), Room (방; each Project room carries a small "repository" / "저장소" sublabel, since one repository is one room; the Common Office carries none), Common Office (공용 사무실), Lounge (Fika) (휴게실 (Fika)), Infirmary (양호실), Contractor (외주), Seat (자리).
-- Presence labels: On duty (출근), Off duty (퇴근), On leave (휴가). Activity labels: Working (작업 중), Thinking (생각 중), Waiting (대기), Idle (유휴), Closed (닫힘) for `completed`, Error (오류), Limited (한도), Not measured (재지 못함) for `unknown`. Connection labels: Unverified (확인 안 됨), Unreachable (연락 끊김). A closed Branch or Project, where shown, is labeled Closed (폐쇄), distinct from the `completed` activity label. Idle details: At desk (자리에서), Phone (휴대폰), Dozing (조는 중), Fika (휴게실). Conditions: Normal (보통), study-mode (집중), extra-coffee (커피 추가), Light (가볍게); the legacy value `lazy` is shown as Light and keeps the same pose.
+- Presence labels: On duty (출근), Off duty (퇴근), On leave (휴가). Activity labels: Working (작업 중), Thinking (생각 중), Waiting (대기), Idle (유휴), Closed (닫힘) for `completed`, Error (오류), Limited (한도), Not measured (재지 못함) for `unknown`. Connection labels: Unverified (확인 안 됨), Unreachable (연락 끊김). The label Closed (폐쇄) is reserved for a closed Branch or Project (Section 1.8; not implemented), distinct from the `completed` activity label. Idle details: At desk (자리에서), Phone (휴대폰), Dozing (조는 중), Fika (휴게실). Conditions: Normal (보통), study-mode (집중), extra-coffee (커피 추가), Light (가볍게); the legacy value `lazy` is shown as Light and keeps the same pose.
 - Copy is plain and factual: interface text states what is shown or what to do, without slogans, decorative captions, or exclamations. Labels use noun phrases; Korean sentences use 합니다체.
 - Language: English and Korean. Every visible string, including accessible names, titles, and alternative text, comes from one dictionary in `i18n.js` through a `t(key, params)` helper. The display settings offer English / 한국어. The default follows the browser language (Korean when it starts with `ko`, otherwise English); the choice is kept in local storage when available. Switching re-renders the page in place and sets `<html lang>`. Dates and times use the matching locale (`en-US` or `ko-KR`) with the Branch time-zone rules below. Branch-provided text (Branch, Project, and Employee aliases, locations, tool names) is never translated.
 - Employee detail: current activity, condition, tool name, workload, Project, Branch alias, usage-limit reset time when known, and the Employee's Contractors with provider badge, activity, and tool name.
@@ -506,7 +514,20 @@ agentville/
 
 ## 9. Open Items
 
-- Default values: workload window, monitor mapping, process scan interval, heartbeat interval.
+### 9.1 Planned, not implemented
+
+- Fork or mirror grouping, and Project `alias`, in Branch configuration (Section 1.3).
+- History of account and model changes per Employee (Section 1.4). The `account.changed` observation is defined but not emitted.
+- Employee `alias`: sent as null (Section 1.4).
+- Closing a Branch or Project at HQ, automatic reopening, and its notification (Section 1.8).
+- Monitor count by workload, and a per-Branch workload window and mapping (Section 2.5). The window is fixed at 5 minutes.
+- Child-process Contractors (Section 1.5, Section 3.2).
+- Antigravity Adapter (Section 3.4).
+
+### 9.2 Open questions
+
+- `fast_mode` signal: no Adapter reports it yet, so the default `extra-coffee` rule does not match observed data (Section 1.6).
+- Default values: process scan interval, heartbeat interval.
 - Claude Code: meaning of `state: blocked` and `status: shell`.
 - Codex: live observation of `waitingOnApproval`, `waitingOnUserInput`, and `systemError`.
 - Antigravity waiting and usage-limit signals.
