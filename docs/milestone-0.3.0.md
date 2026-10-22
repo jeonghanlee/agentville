@@ -7,7 +7,7 @@ Canonical branch or ref: `master`
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: Push the current master verification checkpoints, then push only refs/tags/0.3.0. The annotated tag object is 9548c089f57b801d2bcf2596d599cc7c26910505 and its retained candidate is 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. Observe the existing release workflow, verify the published objects and installation path, and close this line before docs/milestone-0.4.0.md.
+Next session entry point: Master push is verified at origin/master ce94b4d87dcf5b8b55f533da16af3abe064ee412. Publish only refs/tags/0.3.0, whose annotated object is 9548c089f57b801d2bcf2596d599cc7c26910505 and candidate is 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. Observe release.yml, verify published objects and installation, close the release record, then start docs/milestone-0.4.0.md M1.
 
 ## Scope
 
@@ -349,7 +349,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | 3 | Push candidate branch and inspect test workflow | Owner delegated one candidate-branch push on 2026-10-22; executed | Exact candidate passes supported Python CI | Observed 2026-10-22T23:39:57.659785+00:00: fetched origin/feature/0.3.0 equals 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf; committed package, test, version, and milestone paths match. [Run 39873163675](https://github.com/jeonghanlee/agentville/actions/runs/39873163675) succeeded for pytest (3.12), pytest (3.13), and install. |
 | 4 | Fast-forward master with the retained candidate and verification-only checkpoint | Owner delegated the previewed Release sequence on 2026-10-22 | No history rewrite or unresolved merge | Observed 2026-10-22T23:48:40.533492+00:00: git merge --ff-only a561b5ed5542219af5e430f64bd8d3fe97e86ce3 moved local master from 39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b to that exact commit; no merge commit or source changes. |
 | 5 | Create annotated refs/tags/0.3.0 at the resolved candidate | Owner delegated the previewed Release sequence on 2026-10-22 | Immutable annotated tag | Observed 2026-10-22T23:50:03.284585+00:00: annotated tag object 9548c089f57b801d2bcf2596d599cc7c26910505 peels to retained candidate 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf; title AgentVille 0.3.0. Not yet pushed. |
-| 6 | Push master and the one tag; tag push triggers release.yml | Separately applicable Push and Tag push authority, or user execution | Remote objects match local accepted objects; Release is created once | Pending |
+| 6 | Push master and the one tag; tag push triggers release.yml | Owner separately delegated master Push and single-tag Push on 2026-10-22 | Remote objects match local accepted objects; Release is created once | Master Push observed 2026-10-22T23:51:39.070757+00:00: fetched origin/master equals ce94b4d87dcf5b8b55f533da16af3abe064ee412 and contains candidate 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. Single-tag Push and published Release observation remain pending. |
 | 7 | Record released checks, M1-M4 closure, and next-line entry point | Commit scope or user execution | Closure evidence is committed after publication | Pending |
 
 ##### Release Verification Plan
