@@ -7,7 +7,7 @@ Canonical branch or ref: `feature/0.3.0`
 Git upstream: origin/feature/0.3.0
 Remote tracker: none
 
-Next session entry point: Complete the separately authorized release-plan and pre-change evidence commit, then make the version-only 0.3.0 commit. Re-run the recorded candidate checks before master integration and annotated-tag publication. The owner requested release and master integration on 2026-10-22; the owner selected fast-forward master integration, and the exact Git execution scopes remain awaiting confirmation. Continue with docs/milestone-0.4.0.md after released-object verification and closure.
+Next session entry point: Finish the candidate branch push and inspect Python 3.12/3.13 and installer CI for its exact commit. Then record that observation before separately authorized fast-forward master integration and annotated 0.3.0 tag publication. Retain the checked readiness commit as the tag target even when later verification checkpoints advance a branch. Continue with docs/milestone-0.4.0.md after released-object verification and closure.
 
 ## Scope
 
@@ -325,13 +325,13 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 
 | Source Check | Re-run Trigger | Shared Surface | Release Verification Label | Expected Result | Result Evidence |
 | --- | --- | --- | --- | --- | --- |
-| M1 / T1-T4, M2 / T2-T3, M3 / T1-T4 | Version change or any package, schema, UI, or dependency change | Combined installed package | Release Verification 4 | Candidate suite and environment checks pass | Pending |
+| M1 / T1-T4, M2 / T2-T3, M3 / T1-T4 | Version change or any package, schema, UI, or dependency change | Combined installed package | Release Verification 4 | Candidate suite and environment checks pass | Local suite and environment checks pass; Release Verification 4 retains exact candidate CI as Pending until observed |
 
 ##### Production Environment Tests
 
 | Release Verification Label | Timing | System | Version | Architecture | Deployment Path | Method | Expected Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Release Verification 5 | post-change | Clean isolated Linux environment | 0.3.0 candidate | Host-compatible | Dedicated temporary home | Run actual install.sh with explicit immutable candidate and --hq --no-start; inspect both CLI versions | Both commands run at 0.3.0 | Pending |
+| Release Verification 5 | post-change | Fresh isolated Linux container, user 1000 | 0.3.0 candidate | x86_64 | /home/dev/.local/opt/agentville in the fresh container | Actual install.sh --hq --no-start on immutable local candidate; installed CLI and real HQ delivery checks | Both commands run at 0.3.0 and reporting succeeds | /tmp/agentville-030-install-wngt1l64/receipt.json; Pass |
 | Release Verification 7 | post-release | Clean production-equivalent Linux host | Published 0.3.0 | Record actual architecture | Fresh dedicated home | Complete released-object storage preflight, install actual published tag through install.sh, and verify delivery to isolated HQ | Released installation and delivery succeed | Pending |
 
 ##### Version Changes
@@ -345,8 +345,8 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | Step | Action | Authorization | Expected Result | Evidence |
 | --- | --- | --- | --- | --- |
 | 1 | Commit reviewed implementation and CHANGELOG separately | Owner delegated the two commits and initial push on 2026-10-22 | Named commits preserve reviewed bytes | cc8168af4eae02ce05c921c9ccf191a9b0e62723 and 42236e561ed5614a6c6e9da7d8cee6cccad4a981; fetched origin/feature/0.3.0 matches HEAD; CI run 39864177993 succeeded |
-| 2 | Commit version-only 0.3.0 change and readiness evidence separately | Commit scope or user execution | Candidate checks identify immutable commit | Pending |
-| 3 | Push candidate branch and inspect test workflow | Push scope or user execution | Exact candidate passes supported Python CI | Pending |
+| 2 | Commit version-only 0.3.0 change and readiness evidence separately | Owner delegated version and verification-record commits on 2026-10-22 | Candidate checks identify immutable commit | Pre-change plan/evidence: 8a01d7bc5794e25504283694a20359b6026ab1fb. Version-only commit: b73739a4b3ce5d47177d788945769e3cad38d400. This readiness record is committed separately; its commit is retained as the candidate. |
+| 3 | Push candidate branch and inspect test workflow | Owner delegated one candidate-branch push on 2026-10-22 | Exact candidate passes supported Python CI | Pending execution and exact-commit CI observation |
 | 4 | Fast-forward master to the resolved candidate | Explicit authorization for previewed merge or user execution | No history rewrite or unresolved merge | Pending |
 | 5 | Create annotated refs/tags/0.3.0 at the resolved candidate | Release scope with exact preview or user execution | Immutable annotated tag | Pending |
 | 6 | Push master and the one tag; tag push triggers release.yml | Separately applicable Push and Tag push authority, or user execution | Remote objects match local accepted objects; Release is created once | Pending |
@@ -370,15 +370,15 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | Label | Observed At | Environment | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | Release Verification 1 | 2026-10-22 | Working tree and prepared release files | Pass | CHANGELOG covers the implemented M1-M3 behavior. The source still matches the 290-test and 18-assertion candidate checked before release preparation. The actual release.yml note-extraction step produced a byte-identical body to `work/release-notes-0.3.0.md`; retained output: `/tmp/agentville-release-notes-m14dkxhe/notes.md`. Explicit authored-path coverage, script syntax, ShellCheck, version-patch applicability, and diff checks passed. A static scan of the 38 proposed public files found no strong credential-pattern matches. This is pre-change evidence, not versioned-candidate or publication verification. |
-| Release Verification 2 | 2026-10-22 23:11:34 UTC | Git and TOML | Pass | HEAD and fetched origin/feature/0.3.0 both equal 42236e561ed5614a6c6e9da7d8cee6cccad4a981; the working tree was clean before this evidence update; pyproject.toml reports 0.2.0. The version change has not run. |
-| Release Verification 3 | Not run | Isolated package install | Pending | none |
-| Release Verification 4 | Not run | Local and GitHub Actions | Pending | Feature-tree checks passed; versioned candidate checks remain pending |
-| Release Verification 5 | Not run | Clean installation | Pending | none |
+| Release Verification 2 | 2026-10-22 23:11:34 UTC | Git and TOML | Pass | HEAD and fetched origin/feature/0.3.0 both equal 42236e561ed5614a6c6e9da7d8cee6cccad4a981; the working tree was clean before this evidence update; pyproject.toml reports 0.2.0. This is the retained pre-change observation; the version-only commit is recorded in Release Execution. |
+| Release Verification 3 | 2026-10-22T23:27:35.154471+00:00 | Fresh Python 3.13.5 virtual environment | Pass | /tmp/agentville-030-version-iZoOR6/package-receipt.json: both CLI entry points report 0.3.0; all 59 installed package files match the source later committed as b73739a4b3ce5d47177d788945769e3cad38d400. The recorded version-file SHA-256 matches that commit. |
+| Release Verification 4 | 2026-10-22T23:34:03.556152+00:00 | Python 3.13.5, real Linux processes, Chromium, Docker and SSH | Pending | Local checks pass: /tmp/agentville-030-version-iZoOR6/pytest.xml records 290 passed, zero errors, failures, or skips, including 1440px and 720px browser cases. /tmp/agentville-030-system-mgriqjab/results.json records 18 passing assertions through installed Collectors and real SSH/HQ; its 60 package/version files match the committed source. mdBook and the actual release workflow version and note-extraction steps pass; /tmp/agentville-030-version-iZoOR6/workflow-receipt.json retains the workflow result. Exact readiness-commit Python 3.12/3.13 and installer CI remains pending until the branch push. |
+| Release Verification 5 | 2026-10-22T23:35:28.597084+00:00 | Fresh Linux x86_64 container, user 1000, Python 3.13 | Pass | /tmp/agentville-030-install-wngt1l64/receipt.json and commands.jsonl: actual install.sh --hq --no-start --ref b73739a4b3ce5d47177d788945769e3cad38d400 cloned the local candidate Git repository into an absent installation path. Both installed CLIs report 0.3.0; 59 installed package files match; the actual Collector delivered 2 messages to an isolated installed HQ, its Branch is reachable, and the web endpoint returned 200. HQ and the verification container stopped; evidence is retained. |
 | Release Verification 6 | Not run | Git and GitHub | Pending | No 0.3.0 tag or Release exists |
 | Release Verification 7 | Not run | Released installation | Pending | none |
 | Release Verification 8 | Not run | Committed documents | Pending | none |
 
-Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. The owner accepted the release plan and selected fast-forward integration on 2026-10-22. Exact Git execution scopes remain pending.
+Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. The owner accepted the release plan and selected fast-forward integration on 2026-10-22. Version and verification-record commits plus one candidate-branch push were delegated on 2026-10-22. Master integration and tag publication still need their matching execution scopes.
 
 ##### Closure Evidence
 
@@ -392,7 +392,7 @@ Status: Open
 
 ##### Summary
 
-The owner delegated the prepared implementation and CHANGELOG commits and one initial branch push on 2026-10-22. Later version, master, tag, and publication operations remain separately governed. M4 cannot complete release execution under the current partial authorization.
+The owner delegated the implementation and CHANGELOG commits and initial branch push, then the pre-change evidence commit and push, then version and verification-record commits and one candidate-branch push on 2026-10-22. Master integration, master push, annotated-tag creation, and tag publication remain separately governed. M4 cannot complete release execution under the current partial authorization.
 
 ##### Completion Criteria
 
@@ -402,7 +402,7 @@ The owner delegated the prepared implementation and CHANGELOG commits and one in
 
 | Observed At | Result | Evidence |
 | --- | --- | --- |
-| 2026-10-22 | Open | Commit/add and one initial branch Push were delegated for the prepared implementation and CHANGELOG. Later release actions remain outside that bounded execution. |
+| 2026-10-22 | Open | Commit/add and candidate-branch Push are delegated for version and verification records. The earlier implementation, CHANGELOG, and pre-change-evidence commits and pushes are complete. Master integration and annotated-tag publication still require their separately previewed scopes. |
 
 ##### Closure Evidence
 
