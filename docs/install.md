@@ -17,7 +17,7 @@ AgentVille runs as the login user, without root, as systemd user services.
 
 - Linux with a systemd user instance. Without systemd, start the two programs in the foreground or with any process supervisor, using the same arguments as the `ExecStart` lines of the unit files in `deploy/systemd/`.
 - Python 3.12 or later, `venv`, and `git`.
-- On Branches: Claude Code and/or Codex CLI. Codex live state requires its shared app-server daemon.
+- On Branches: Claude Code and/or Codex CLI. Codex runs that use its shared app-server daemon are observed live, including `waiting`. Other Codex runs (e.g. `codex exec`) are observed from their rollout files only, with low confidence and without `waiting` ([Architecture](architecture.md) Section 3.4).
 
 | Distribution | Packages |
 |---|---|
@@ -63,8 +63,8 @@ The commands in this guide call the programs by name, so `~/.local/bin` must be 
 Check:
 
 ```bash
-agentville-collector --help
-agentville-hq --help                                                    # HQ host
+agentville-collector --version                                          # agentville-collector 0.1.0
+agentville-hq --version                                                 # HQ host: agentville-hq 0.1.0
 ```
 
 ## 4. Start the services
@@ -95,7 +95,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now agentville-hq agentville-collector
 ```
 
-HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener), choose another port, for example 8471, before enabling the services:
+HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener, and HQ stops with `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`), choose another port, for example 8471, before enabling the services:
 
 - in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`;
 - in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
@@ -120,7 +120,7 @@ On the HQ host the Collector may start before HQ listens; its first delivery the
 
 ## 5. Verify
 
-Each program writes one line to standard error at start:
+Each program writes one line to standard error at start; HQ writes it once its port is bound and its TLS certificate, if any, is loaded:
 
 ```text
 agentville-hq: serving http://127.0.0.1:8470/ (database /home/<user>/.local/share/agentville/hq.sqlite3)
@@ -134,7 +134,7 @@ journalctl --user -u agentville-collector -n 50
 journalctl --user -u agentville-hq -n 50                                # HQ host
 ```
 
-A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with a message containing `agentville-collector:` or `agentville-hq:`.
+A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with one line starting with `agentville-collector:` or `agentville-hq:` that names the file or option and the reason, for example `agentville-collector: invalid configuration: collector.poll_interval must be greater than 0` or `agentville-hq: cannot read /home/<user>/.config/agentville/tokens.yaml: No such file or directory`.
 
 On the HQ host:
 

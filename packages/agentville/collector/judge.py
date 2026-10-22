@@ -20,6 +20,7 @@ WORKLOAD_WINDOW = timedelta(minutes=5)
 LEAVE_AFTER = timedelta(days=7)
 MAX_SESSIONS = 20
 
+_CONFIDENCE = ("low", "medium", "high")
 # Contractor status reported by Adapters, mapped to activity states.
 _SUBAGENT_STATES = {"active": "working", "waiting": "waiting", "idle": "idle", "error": "error"}
 
@@ -48,9 +49,12 @@ class Instance:
     state_since: datetime | None = None
     source: Source = Source.PROCESS
     confidence: str = "low"
+    # Upper bound of confidence the shift's sources support (process.started ``max_confidence``).
+    max_confidence: str = "high"
     tool: str | None = None
     reset_at: datetime | None = None
     tool_times: deque[datetime] = field(default_factory=deque)
+    reported_workload: int | None = None
     contractors: dict[str, Contractor] = field(default_factory=dict)
 
 
@@ -187,6 +191,8 @@ class Judge:
             agent.account_alias = data["account_alias"]
         agent.presence_since = obs.event_at
         agent.instance = Instance(self._new_id(), obs.shift, obs.event_at, runtime, state_since=obs.event_at)
+        if data.get("max_confidence") in _CONFIDENCE:
+            agent.instance.max_confidence = data["max_confidence"]
         self._by_shift[obs.shift] = agent
         self._emit_agent(agent, obs.event_at)
 
@@ -255,7 +261,7 @@ class Judge:
         if state != "limited":
             inst.reset_at = None
         inst.source = obs.source
-        inst.confidence = confidence
+        inst.confidence = min(confidence, inst.max_confidence, key=_CONFIDENCE.index)
         self._emit_activity(agent, obs.event_at)
 
     def _emit_agent(self, agent: Agent, at: datetime) -> None:
@@ -305,6 +311,19 @@ class Judge:
         for agent in self.agents:
             if agent.reported_presence is not None and agent.presence(now, self._leave_after) != agent.reported_presence:
                 self._emit_agent(agent, max(now, agent.presence_since + self._leave_after))
+
+    def refresh_workload(self, now: datetime) -> None:
+        """Emit activity for on-duty Employees whose workload changed only by the passing of time."""
+        for agent in self.agents:
+            inst = agent.instance
+            if inst is not None and inst.reported_workload is not None and self._workload(inst, now) != inst.reported_workload:
+                self._emit_activity(agent, now)
+
+    @staticmethod
+    def _workload(inst: Instance, now: datetime) -> int:
+        while inst.tool_times and now - inst.tool_times[0] > WORKLOAD_WINDOW:
+            inst.tool_times.popleft()
+        return len(inst.tool_times)
 
     def _emit_activity(self, agent: Agent, at: datetime) -> None:
         self._emit("activity", at, self.activity_payload(agent, at))
@@ -357,8 +376,7 @@ class Judge:
     def activity_payload(self, agent: Agent, now: datetime) -> dict[str, Any]:
         inst = agent.instance
         assert inst is not None
-        while inst.tool_times and now - inst.tool_times[0] > WORKLOAD_WINDOW:
-            inst.tool_times.popleft()
+        inst.reported_workload = self._workload(inst, now)
         return {
             "agent_id": agent.agent_id,
             "instance_id": inst.instance_id,
@@ -369,5 +387,5 @@ class Judge:
             "confidence": inst.confidence,
             "tool": inst.tool,
             "reset_at": iso(inst.reset_at) if inst.reset_at and inst.state == "limited" else None,
-            "workload": len(inst.tool_times),
+            "workload": inst.reported_workload,
         }

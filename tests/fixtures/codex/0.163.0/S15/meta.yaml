@@ -1,0 +1,16 @@
+provider: codex
+version: 0.163.0
+scenario: S15
+title: A run outside the daemon is observed from its rollout until the daemon loads its thread
+expect:
+- {agent_count: 0, after: 1}
+- {presence: on_duty, seat: 1, state: working, tool: exec_command, session_id: 019a0000-0000-7000-8000-00000000000c, account_alias: codex-account-1,
+  model: model-b, ref: a, after: 2}
+- {state: idle, workload: 1, after: 3}
+- {agent_count: 1, presence: on_duty, state: idle, same_as: a, after: 4}
+- agent_count: 1
+  state: idle
+  workload: 1
+  same_as: a
+  states_since_start: [unknown, working, completed, idle, unknown, idle, working, completed, idle]
+  after: 7

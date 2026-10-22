@@ -1,11 +1,14 @@
 import json
+import os
 from datetime import UTC, datetime
 
+import pytest
+
 from agentville.collector.adapters.codex import CodexAdapter, is_employee_thread
-from agentville.collector.appserver import RpcError
+from agentville.collector.appserver import AppServerError, RpcError
 from agentville.collector.judge import Judge
 from agentville.collector.project import COMMON_OFFICE
-from agentville.common.observations import Kind
+from agentville.common.observations import Kind, Source
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -391,3 +394,134 @@ def test_server_overloaded_is_transient_and_other_errors_remain(tmp_path):
         Kind.AGENT_ERROR, Kind.TURN_COMPLETED]
     step(_record("task_started"))
     assert [k for k, _ in step(_task_complete("<text>"))] == [Kind.AGENT_ERROR, Kind.TURN_COMPLETED]
+
+
+def _no_daemon():
+    raise AppServerError("no daemon")
+
+
+def _rollout(home, thread_id, meta=None, *lines, age=60):
+    day = home / "sessions" / "2026" / "01" / "01"
+    day.mkdir(parents=True, exist_ok=True)
+    path = day / f"rollout-2026-01-01T00-00-00-{thread_id}.jsonl"
+    payload = {"id": thread_id, "timestamp": "2025-12-31T23:59:00Z", "cwd": "/w", "source": "exec",
+               "thread_source": "user", **(meta or {})}
+    record = {"timestamp": payload["timestamp"], "type": "session_meta", "payload": payload}
+    path.write_text(json.dumps(record) + "\n" + "".join(lines))
+    _touch(path, age)
+    return path
+
+
+def _touch(path, age):
+    os.utime(path, (NOW.timestamp() - age, NOW.timestamp() - age))
+
+
+def _append(path, *lines, age=0):
+    with open(path, "a") as fh:
+        fh.writelines(lines)
+    _touch(path, age)
+
+
+def _tool(name="exec_command", call_id="x"):
+    payload = {"type": "function_call", "name": name, "arguments": "<tool-input>", "call_id": call_id}
+    return json.dumps({"timestamp": "2026-01-01T00:00:01Z", "type": "response_item", "payload": payload}) + "\n"
+
+
+def test_rollout_without_daemon_is_a_low_confidence_shift(tmp_path):
+    path = _rollout(tmp_path, "r1", None, _record("task_started"))
+    _rollout(tmp_path, "r0", None, _record("task_started"), age=31 * 60)
+    adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW, account_alias="codex-account-1")
+    judge = Judge(_Resolver(), lambda kind, at, payload: None)
+    observations = adapter.poll()
+    assert [(o.kind, o.shift.native_id) for o in observations] == [
+        (Kind.PROCESS_STARTED, "rollout:r1"), (Kind.SESSION_STARTED, "rollout:r1")]
+    started = observations[0]
+    assert started.source is Source.SESSION_LOG
+    assert started.data == {"cwd": "/w", "session_id": "r1", "runtime": {"type": "rollout"},
+                            "account_alias": "codex-account-1", "max_confidence": "low"}
+    for obs in observations:
+        judge.apply(obs)
+    _append(path, _record("task_started"), _tool())
+    for obs in adapter.poll():
+        judge.apply(obs)
+    payload = judge.activity_payload(judge.agents[0], NOW)
+    assert (payload["state"], payload["tool"], payload["source"], payload["confidence"]) == (
+        "working", "exec_command", "session_log", "low")
+    _append(path, _task_complete({"codex_error_info": "usage_limit_exceeded", "message": "<text>"}))
+    for obs in adapter.poll():
+        judge.apply(obs)
+    assert judge.agents[0].instance.state == "limited"
+
+
+def test_rollout_created_after_attach_is_read_from_start(tmp_path):
+    adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW)
+    assert adapter.poll() == []
+    _rollout(tmp_path, "r1", {"timestamp": "2026-01-01T00:00:00Z"}, _record("task_started"), _tool(), age=0)
+    kinds = [o.kind for o in adapter.poll()]
+    assert kinds == [Kind.PROCESS_STARTED, Kind.SESSION_STARTED, Kind.TURN_STARTED, Kind.TOOL_STARTED]
+
+
+def test_rollout_shift_ends_after_thirty_minutes_without_writes(tmp_path):
+    path = _rollout(tmp_path, "r1")
+    adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW)
+    adapter.poll()
+    _touch(path, 29 * 60)
+    assert adapter.poll() == []
+    _touch(path, 31 * 60)
+    assert [(o.kind, o.shift.native_id) for o in adapter.poll()] == [(Kind.PROCESS_EXITED, "rollout:r1")]
+    assert adapter.poll() == []
+    _append(path, _record("task_started"))
+    assert [o.kind for o in adapter.poll()] == [Kind.PROCESS_STARTED, Kind.SESSION_STARTED, Kind.TURN_STARTED]
+
+
+def test_daemon_thread_takes_over_a_rollout_shift(tmp_path):
+    path = _rollout(tmp_path, "r1")
+    daemon = Scripted({"r1": {"id": "r1", "cwd": "/w", "path": str(path), "status": {"type": "idle"}}}, loaded=["r1"])
+    connect = [_no_daemon]
+    adapter = CodexAdapter(str(tmp_path), connect=lambda: connect[0](), clock=lambda: NOW)
+    messages = []
+    judge = Judge(_Resolver(), lambda kind, at, payload: messages.append((kind, payload)))
+
+    def step():
+        observations = adapter.poll()
+        for obs in observations:
+            judge.apply(obs)
+        return [(o.kind, o.shift.native_id) for o in observations]
+
+    step()
+    _append(path, _record("task_started"))
+    connect[0] = lambda: daemon
+    assert step()[:4] == [(Kind.TURN_STARTED, "rollout:r1"), (Kind.PROCESS_EXITED, "rollout:r1"),
+                          (Kind.PROCESS_STARTED, "r1"), (Kind.SESSION_STARTED, "r1")]
+    assert len(judge.agents) == 1 and judge.agents[0].instance.shift.native_id == "r1"
+    _append(path, _tool())
+    assert step() == [(Kind.TOOL_STARTED, "r1")]
+    daemon.pending = [{"method": "thread/closed", "params": {"threadId": "r1"}}]
+    assert step() == [(Kind.PROCESS_EXITED, "r1")]
+    assert step() == []
+
+
+@pytest.mark.parametrize("meta", [
+    {"source": {"subagent": {"thread_spawn": {"parent_thread_id": "p1"}}}},
+    {"source": {"subAgent": "review"}},
+    {"parent_thread_id": "p1"},
+    {"thread_source": "system"},
+])
+def test_subagent_and_system_rollouts_are_not_shifts(tmp_path, meta):
+    path = _rollout(tmp_path, "r1", meta, _record("task_started"))
+    adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW)
+    assert adapter.poll() == []
+    _append(path, _record("task_started"))
+    assert adapter.poll() == []
+
+
+def test_rollout_without_complete_session_meta_waits(tmp_path):
+    day = tmp_path / "sessions" / "2026" / "01" / "01"
+    day.mkdir(parents=True)
+    path = day / "rollout-2026-01-01T00-00-00-r1.jsonl"
+    path.write_text('{"type": "session_meta", "payload": {"id": "r1"')
+    _touch(path, 0)
+    adapter = CodexAdapter(str(tmp_path), connect=_no_daemon, clock=lambda: NOW)
+    assert adapter.poll() == []
+    _append(path, ', "cwd": "/w"}}\n')
+    assert [o.kind for o in adapter.poll()] == [Kind.PROCESS_STARTED, Kind.SESSION_STARTED]

@@ -474,6 +474,20 @@ def s14(root):
     s.save()
 
 
+def s15(root):
+    s = Scenario(root, "S15", "A run outside the daemon is observed from its rollout until the daemon loads its thread")
+    s.rollout(t(0), TC, []); s.check(agent_count=0)
+    s.rollout(t(1), TC, [session_meta(TC), turn_context("turn-1"), task_started("turn-1"), call("call_1")])
+    s.check(presence="on_duty", seat=1, state="working", tool="exec_command", session_id=TC,
+            account_alias="codex-account-1", model="model-b", ref="a")
+    s.rollout(t(4), TC, [output("call_1"), task_complete("turn-1")]); s.check(state="idle", workload=1)
+    s.started(t(10), thread(TC, IDLE)); s.check(agent_count=1, presence="on_duty", state="idle", same_as="a")
+    turn(s, 11, TC, "turn-2", calls=("call_2",))
+    s.check(agent_count=1, state="idle", workload=1, same_as="a",
+            states_since_start=["unknown", "working", "completed", "idle", "unknown", "idle", "working", "completed", "idle"])
+    s.save()
+
+
 if __name__ == "__main__":
-    for build in (s01, s02, s03, s04, s06, s08, s09, s10, s11, s12, s13, s14):
+    for build in (s01, s02, s03, s04, s06, s08, s09, s10, s11, s12, s13, s14, s15):
         build(sys.argv[1])

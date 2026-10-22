@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import os
+import socket
+import sqlite3
+import ssl
 import stat
 import sys
 from datetime import timedelta
@@ -12,6 +15,7 @@ from datetime import timedelta
 import uvicorn
 import yaml
 
+from agentville import version
 from agentville.hq.app import LOCAL_HOSTS, create_app
 from agentville.hq.store import Store
 
@@ -25,17 +29,26 @@ def data_dir() -> str:
 
 
 def _read_private(path: str) -> str:
-    if stat.S_IMODE(os.stat(path).st_mode) & 0o077:
-        raise SystemExit(f"agentville-hq: {path} must not be accessible by group or others (chmod 600)")
-    with open(path, encoding="utf-8") as fh:
-        return fh.read()
+    try:
+        if stat.S_IMODE(os.stat(path).st_mode) & 0o077:
+            raise SystemExit(f"agentville-hq: {path} must not be accessible by group or others (chmod 600)")
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)
+        raise SystemExit(f"agentville-hq: cannot read {path}: {reason}") from None
 
 
 def load_tokens(path: str | None) -> dict[str, str]:
     """YAML mapping of branch_id to bearer token, from a file private to the owner."""
     if not path:
         return {}
-    document = yaml.safe_load(_read_private(path)) or {}
+    try:
+        document = yaml.safe_load(_read_private(path)) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        raise SystemExit(f"agentville-hq: {path}: YAML syntax error{where}") from None
     if not isinstance(document, dict):
         raise SystemExit(f"agentville-hq: {path} must be a mapping of branch_id to token")
     tokens = {}
@@ -55,8 +68,31 @@ def is_loopback(host: str) -> bool:
         return False
 
 
+def check_tls(cert: str, key: str) -> None:
+    try:
+        ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER).load_cert_chain(cert, key)
+    except (OSError, ssl.SSLError) as exc:
+        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)
+        raise SystemExit(f"agentville-hq: cannot load TLS certificate {cert} and key {key}: {reason}") from None
+
+
+def listen(host: str, port: int) -> socket.socket:
+    """A listening socket for uvicorn, so a failure is reported before the server starts."""
+    sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        sock.listen(2048)
+    except OSError as exc:
+        sock.close()
+        shown = f"[{host}]" if ":" in host else host
+        raise SystemExit(f"agentville-hq: cannot listen on {shown}:{port}: {exc.strerror or exc}") from None
+    return sock
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentville-hq", description="AgentVille HQ")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version()}")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8470)
     parser.add_argument("--db", help="SQLite path (default: $XDG_DATA_HOME/agentville/hq.sqlite3)")
@@ -79,14 +115,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("a non-loopback --host requires --allow-remote and --viewer-token-file")
     if args.server_name and not (args.no_trust_loopback and viewer_token):
         parser.error("--server-name requires --no-trust-loopback and --viewer-token-file")
+    tokens = load_tokens(args.tokens)
+    if args.tls_cert:
+        check_tls(args.tls_cert, args.tls_key)
 
     db = args.db or os.path.join(data_dir(), "hq.sqlite3")
     directory = os.path.dirname(db) or "."
-    os.makedirs(directory, mode=0o700, exist_ok=True)
-    store = Store(db)
+    try:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        store = Store(db)
+    except (OSError, sqlite3.Error) as exc:
+        raise SystemExit(f"agentville-hq: cannot open database {db}: {getattr(exc, 'strerror', None) or exc}") from None
     app = create_app(
         store,
-        load_tokens(args.tokens),
+        tokens,
         retention=timedelta(days=args.retention_days),
         trust_loopback=not (remote or args.no_trust_loopback),
         viewer_token=viewer_token,
@@ -94,11 +136,13 @@ def main(argv: list[str] | None = None) -> int:
         hosts=None if remote else LOCAL_HOSTS | {args.host},
         server_names=frozenset(args.server_name),
     )
+    sock = listen(args.host, args.port)
     scheme = "https" if args.tls_cert else "http"
     host = f"[{args.host}]" if ":" in args.host else args.host
-    print(f"agentville-hq: serving {scheme}://{host}:{args.port}/ (database {db})", file=sys.stderr, flush=True)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning",
-                ssl_certfile=args.tls_cert, ssl_keyfile=args.tls_key)
+    print(f"agentville-hq: serving {scheme}://{host}:{sock.getsockname()[1]}/ (database {db})", file=sys.stderr, flush=True)
+    config = uvicorn.Config(app, log_level="warning", ssl_certfile=args.tls_cert, ssl_keyfile=args.tls_key)
+    with sock:
+        uvicorn.Server(config).run(sockets=[sock])
     return 0
 
 

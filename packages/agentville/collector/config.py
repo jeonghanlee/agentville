@@ -118,6 +118,8 @@ def _discover_homes(home: str, provider: str, keep_primary: bool = False) -> lis
 def _homes(entries: Any, provider: str) -> list[ProviderHome]:
     # A single mapping is the earlier one-home form.
     listed = [entries] if isinstance(entries, dict) else entries or []
+    if not isinstance(listed, list):
+        raise ValueError(f"providers.{provider} must be a list of homes")
     valid = [e for e in listed if isinstance(e, dict) and e.get("home")]
     return [
         ProviderHome(os.path.expanduser(e["home"]), str(e.get("account_alias") or account_alias(provider, i)))
@@ -159,41 +161,72 @@ def load_or_create(path: str | None = None, home: str | None = None) -> BranchCo
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 yaml.safe_dump(document, fh, sort_keys=False)
     with open(path, encoding="utf-8") as fh:
-        document = yaml.safe_load(fh) or {}
+        try:
+            document = yaml.safe_load(fh) or {}
+        except yaml.YAMLError as exc:
+            mark = getattr(exc, "problem_mark", None)
+            where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+            raise ValueError(f"{path}: YAML syntax error{where}") from None
         private = not stat.S_IMODE(os.fstat(fh.fileno()).st_mode) & 0o077
-    if (document.get("hq") or {}).get("token") and not private:
+    if not isinstance(document, dict):
+        raise ValueError(f"{path}: the top level must be a mapping")
+    if isinstance(document.get("hq"), dict) and document["hq"].get("token") and not private:
         raise SystemExit(f"agentville-collector: {path} holds hq.token and must not be accessible by group or others (chmod 600)")
     return parse(document)
 
 
+def _section(document: dict[str, Any], name: str) -> dict[str, Any]:
+    value = document.get(name) or {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be a mapping")
+    return value
+
+
+def _number(section: str, key: str, value: Any, kind: type[int] | type[float]) -> Any:
+    if isinstance(value, bool):
+        value = None
+    try:
+        return kind(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{section}.{key} must be {'an integer' if kind is int else 'a number'}") from None
+
+
 def parse(document: dict[str, Any]) -> BranchConfig:
-    host = document.get("host") or {}
+    host = _section(document, "host")
     host_id = host.get("id")
     if not isinstance(host_id, str) or not host_id:
         raise ValueError("host.id is required")
-    providers = document.get("providers") or {}
-    collector = document.get("collector") or {}
+    providers = _section(document, "providers")
+    collector = _section(document, "collector")
+    hq = _section(document, "hq")
     thresholds = dict(DEFAULT_THRESHOLDS)
-    thresholds.update({k: int(v) for k, v in (document.get("thresholds") or {}).items() if k in DEFAULT_THRESHOLDS})
+    thresholds.update({k: _number("thresholds", k, v, int) for k, v in _section(document, "thresholds").items()
+                       if k in DEFAULT_THRESHOLDS})
     if any(v < 0 for v in thresholds.values()):
         raise ValueError("thresholds must not be negative")
     if not thresholds["phone"] <= thresholds["doze"] <= thresholds["lounge"]:
         raise ValueError("thresholds must satisfy phone <= doze <= lounge")
-    heartbeat_interval = int(collector.get("heartbeat_interval", 30))
+    heartbeat_interval = _number("collector", "heartbeat_interval", collector.get("heartbeat_interval", 30), int)
     if heartbeat_interval < 1:
         raise ValueError("collector.heartbeat_interval must be at least 1")
+    poll_interval = _number("collector", "poll_interval", collector.get("poll_interval", 1.0), float)
+    if not poll_interval > 0:
+        raise ValueError("collector.poll_interval must be greater than 0")
+    conditions = (document["conditions"] or []) if "conditions" in document else list(DEFAULT_CONDITIONS)
+    if not isinstance(conditions, list) or not all(isinstance(rule, dict) for rule in conditions):
+        raise ValueError("conditions must be a list of mappings")
     return BranchConfig(
         host_id=host_id,
         alias=str(host.get("alias") or host_id),
         country=str(host.get("country") or ""),
         time=str(host.get("time") or "UTC"),
         location=str(host.get("location") or ""),
-        hq_url=str((document.get("hq") or {}).get("url") or "http://127.0.0.1:8470"),
-        hq_token=(document.get("hq") or {}).get("token") or None,
+        hq_url=str(hq.get("url") or "http://127.0.0.1:8470"),
+        hq_token=hq.get("token") or None,
         thresholds=thresholds,
         claude_homes=_homes(providers.get("claude"), "claude"),
         codex_homes=_homes(providers.get("codex"), "codex"),
-        conditions=list(document["conditions"] or []) if "conditions" in document else list(DEFAULT_CONDITIONS),
-        poll_interval=float(collector.get("poll_interval", 1.0)),
+        conditions=list(conditions),
+        poll_interval=poll_interval,
         heartbeat_interval=heartbeat_interval,
     )

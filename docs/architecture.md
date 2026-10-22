@@ -65,7 +65,7 @@ An `Agent` is identified by:
 ```
 
 - `seat` is a number distinguishing concurrent agents of the same provider in the same Project on the same Host.
-- One shift of an Employee is defined per provider by its Adapter (Section 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server.
+- One shift of an Employee is defined per provider by its Adapter (Section 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server, or, for a run outside the app-server daemon, the period its rollout file is written (Section 3.4).
 - Account and model are Employee attributes; the latest values are kept. Recording their changes as history is not implemented (Section 9).
 - `alias` (Employee display name) is part of the payload and is currently always null (Section 9).
 
@@ -178,6 +178,7 @@ conditions:
 ### 2.5 Workload
 
 - Workload is the number of tool executions started in the last 5 minutes (fixed window) of the current shift, sent as `workload` in `activity`.
+- Workload is recomputed on every Collector tick; a change caused only by time (an execution leaving the window) is sent as a new `activity`, so an Employee without new tools falls to 0 after 5 minutes.
 - The Web UI shows it as "N recent tools".
 - A monitor count on the desk that scales with workload, and a per-Branch window and mapping, are not implemented (Section 9).
 
@@ -211,7 +212,7 @@ An Adapter emits only the observations its provider exposes.
 
 | Observation | Content | Used for |
 |---|---|---|
-| `process.started` | pid, start time, working directory, parent pid, runtime location | On duty, Project, seat assignment |
+| `process.started` | pid, start time, working directory, parent pid, runtime location, highest confidence its sources support | On duty, Project, seat assignment |
 | `process.exited` | pid | Off duty |
 | `session.started` | session id | Seat assignment |
 | `session.status` | normalized live status: `active`, `idle`, `waiting`, `unknown` | Activity state |
@@ -236,7 +237,7 @@ Every observation carries observed time, event time, source (`session_file`, `se
 ### 3.3 Reading
 
 - Logs are read incrementally from the last position (inode, offset) on every tick.
-- A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start; a resumed one (Claude: first record older than attach; Codex: thread `createdAt` older than attach; either: already followed earlier in the run) is read from its end.
+- A transcript with no stored position is read from its end when attached; history before attach is not replayed. A transcript created after attach is read from its start; a resumed one (Claude: first record older than attach; Codex: thread `createdAt`, or for a rollout-only shift the `session_meta` `timestamp`, older than attach; either: already followed earlier in the run) is read from its end.
 - Attaching in the middle of a line resumes at the next line. A line that is not valid UTF-8 JSON is skipped.
 - An unreadable `roster.json` is reported once on standard error with its path and reason (Section 3.6).
 - A transcript or rollout that cannot be read is reported and skipped for that poll without affecting other shifts. A JSON-RPC error on one Codex `thread/read` skips that thread for the poll; transport errors reconnect.
@@ -281,8 +282,9 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 
 | Purpose | Source |
 |---|---|
-| Live threads, shift | App-server daemon per Codex home (`<launcher> app-server daemon version` → `socketPath`); JSON-RPC over WebSocket on the control socket: `thread/loaded/list`, `thread/read`, `thread/list` |
-| Shift identity | Thread `id` while its status is not `notLoaded` |
+| Live threads, shift | App-server daemon per Codex home. The Collector connects to `<codex-home>/app-server-control/app-server-control.sock` (the `socketPath` that `<launcher> app-server daemon version` reports) and speaks JSON-RPC over WebSocket: the `initialize` request and `initialized` notification, then `thread/loaded/list` and `thread/read`. |
+| Runs outside the daemon | Rollout files under `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl` written within the last 30 minutes, whose thread the daemon does not know |
+| Shift identity | Thread `id` while its status is not `notLoaded`; for a run outside the daemon, `rollout:<thread-id>` while its rollout is written within 30 minutes |
 | State changes | Notification `thread/status/changed` (`threadId`, `status`). Delivered to a passive client that only lists and reads; no subscription required. Turn and item notifications are not delivered to such a client. |
 | Thread status | `notLoaded`, `idle`, `systemError`, `active` with `activeFlags`: `waitingOnApproval`, `waitingOnUserInput` |
 | Turn | `turn/started`, `turn/completed` |
@@ -293,12 +295,12 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 | Reasoning | Retrospective only: rollout `response_item` `type: reasoning`; `event_msg` `item_completed` with `item.type: Reasoning` |
 | Model, effort | rollout `thread_settings_applied`, `turn_context` |
 | Resume | Same session id; appends to the same rollout file. |
-| Fork, Contractor | Thread `forkedFromId`, `parentThreadId`; `state_5.sqlite` `thread_spawn_edges` |
-| Project | Thread `cwd`, `gitInfo` |
+| Fork, Contractor | Thread `forkedFromId`, `parentThreadId`; `state_5.sqlite` `thread_spawn_edges`; rollout `session_meta` `source` (subagent) and `parent_thread_id` |
+| Project | Thread `cwd`, `gitInfo`; rollout `session_meta` `cwd` |
 | Account | Codex home (one daemon per home) |
 
 - No pid is exposed by Codex logs, sqlite state, or app-server responses.
-- The Collector acts as a read-only app-server client. Only `thread/loaded/list` and `thread/read` are called; no method that starts, resumes, sends to, or interrupts a thread.
+- The Collector acts as a read-only app-server client. After the `initialize` / `initialized` handshake (client name `agentville`, its version, `experimentalApi: false`), only `thread/loaded/list` and `thread/read` are called; no method that starts, resumes, sends to, or interrupts a thread.
 - Only loaded threads are read. Reading a `notLoaded` thread is avoided until its side effects are verified.
 - `thread/loaded/list` and `thread/read` seed state on connect and after reconnect; afterwards state follows `thread/status/changed`. `optOutNotificationMethods` is never set for it.
 - Turn and tool detail come from the thread's rollout file, not from app-server notifications. Reasoning is recorded only after it completes and a passive client receives no item notifications, so `thinking` is not produced.
@@ -309,7 +311,13 @@ Verified on Claude Code 2.1.303 and Codex CLI 0.163.0 (app-server 0.162.1 / 0.16
 - Rollout path: `Thread.path`; when null, `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl`.
 - Responses carry no `jsonrpc` field; the client does not require it. Server-to-client requests (approvals) are never answered.
 - On loss of the app-server connection, every Codex shift and Contractor is reported `unknown` until the next seed.
-- Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only; waiting state is unavailable for them.
+- Codex runs that do not use the shared daemon (e.g. IDE extension, `codex exec`) are observed from rollout files only, as rollout-only shifts:
+  - Each poll lists `<codex-home>/sessions/*/*/*/rollout-*-<thread-id>.jsonl` and takes the files modified within the last 30 minutes whose thread is not known from the app-server (loaded, ignored, a Contractor, or a shift). A thread whose daemon shift or Contractor ended is taken only after its rollout is written again.
+  - The rollout's `session_meta` record (within its first 5 lines) gives `cwd`. A rollout whose `session_meta` is not yet complete is retried on the next poll; one without it is skipped. Subagent rollouts (`source` naming a subagent, or `parent_thread_id` set) and `thread_source: system` are skipped, as for app-server threads.
+  - The shift is `rollout:<thread-id>` with runtime `{"type": "rollout"}`, the account alias of the Codex home, source `session_log`, and confidence `low` for every state.
+  - Reading follows Section 3.3: a rollout found at attach is read from its end; one created after attach is read from its start; one that an earlier rollout-only shift of this run followed continues from its last position, and one followed only by a daemon shift is read from its end.
+  - State comes from the rollout records as for daemon threads: `task_started`, tool calls and outputs, `task_complete` with the error and limit rules below, `token_count` limits, model and effort. No live status exists, so `waiting` is not produced and a shift found at attach is `unknown` until its next turn or tool record.
+  - The shift ends (`process.exited`) when the rollout has not been written for 30 minutes or is gone. When the daemon later reports the same thread, the rollout-only shift ends and the daemon shift starts in the same poll, continuing the rollout from the same position; seat rule 1 returns it to the same Employee.
 
 #### Antigravity CLI
 
@@ -351,7 +359,9 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 - `time` is the host's local zone at first start (`TZ`, `/etc/timezone`, or the `/etc/localtime` link; `UTC` when none is found).
 - One provider home is one account. At first start, `~/.<provider>` and existing `~/.<provider>-*` directories are listed in that order as `<provider>-account-1`, `<provider>-account-2`, …; `~/.claude` is always listed. Account names and homes are local settings.
 - A single mapping (`claude: {home: ~/.claude}`) is read as a one-account list.
-- Values are validated at start: `heartbeat_interval` ≥ 1, thresholds ≥ 0 with `phone` ≤ `doze` ≤ `lounge`. A file holding `hq.token` must not be accessible by group or others.
+- The generated file lists provider homes as absolute paths with the home directory expanded; `~` is accepted when editing.
+- Values are validated at start: `host`, `hq`, `thresholds`, `providers`, and `collector` are mappings, each `providers` entry a list (or the single-mapping form), `conditions` a list of mappings; thresholds are integers >= 0 with `phone` <= `doze` <= `lounge`; `poll_interval` > 0; `heartbeat_interval` >= 1. A file holding `hq.token` must not be accessible by group or others.
+- An invalid file, including a YAML syntax error or a top level that is not a mapping, stops the Collector with one line `agentville-collector: invalid configuration: <reason>`; one that cannot be read or created with `agentville-collector: configuration <path>: <reason>`.
 - A loopback HQ is contacted without environment proxies.
 - Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns. The defaults are listed in Section 1.6. A configuration without a `conditions` key uses them; an empty list maps everything to `normal`.
 
@@ -362,14 +372,16 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 - `seq` is reserved in blocks of 1000 in `$XDG_STATE_HOME/agentville/seq` (default `~/.local/state/agentville/seq`), written with fsync before use; a restart resumes after the reserved bound.
 - A failing Adapter is logged to stderr and skipped for that tick; other Adapters continue.
 - At start, an unreadable `roster.json` (invalid JSON, not a list, or a read error) is logged as one line to stderr naming the file and the reason, and the roster starts empty. Before the next roster is written, the unreadable file is moved to `roster.json.bad`, replacing an earlier one. A missing roster starts empty silently.
-- Time-based presence changes (off duty to on leave) are emitted when the threshold passes, without a new event.
+- Time-based presence changes (off duty to on leave) are emitted when the threshold passes, without a new event. Likewise, a workload change caused only by time is emitted as `activity` (Section 2.5).
 - Services: `deploy/systemd/agentville-collector.service` and `deploy/systemd/agentville-hq.service` (systemd user units).
 
 ## 4. HQ
 
 - Process: `agentville-hq` (FastAPI, uvicorn), bound to `127.0.0.1:8470` by default.
 - `--tls-cert` and `--tls-key` (PEM files, used together) make HQ serve HTTPS directly; without them HQ serves plain HTTP.
-- At start HQ prints `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
+- At start HQ checks its token files and TLS certificate and key (loaded into a TLS context), opens the database, and binds and listens on the port itself (`SO_REUSEADDR`, IPv6 when the host contains `:`), handing the socket to uvicorn. Only then does it print `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
+- A missing or unreadable token file, a malformed token file, an unusable certificate or key, a database that cannot be opened, or a port that cannot be bound stops HQ with one line starting with `agentville-hq:`, e.g. `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`.
+- `agentville-hq --version` and `agentville-collector --version` print the installed package version, which HQ also reports as its API version in `/openapi.json`.
 - Storage: SQLite (WAL) at `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`).
 
 | Table | Content |
@@ -408,7 +420,7 @@ A Branch is reported unreachable when no message arrived within three heartbeat 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Liveness |
-| `POST` | `/api/v1/ingest/messages` | Branch ingest, body `{"messages": [...]}`, one Branch per batch, at most 1000 messages |
+| `POST` | `/api/v1/ingest/messages` | Branch ingest, body `{"messages": [...]}`, one Branch per batch, at most 1000 messages (more: 413) |
 | `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors |
 | `GET` | `/api/v1/branches` | Branches |
 | `GET` | `/api/v1/agents` | Agents |

@@ -3,18 +3,23 @@
 Live state comes from the app-server daemon of one Codex home (one shift per
 loaded thread); turn and tool detail come from the thread's rollout file.
 Loaded subagent threads are Contractors of the shift of their parent thread.
+A recently written rollout of a thread the daemon does not know (e.g. ``codex
+exec``) is a rollout-only shift, observed from that file alone.
 """
 
 from __future__ import annotations
 
 import glob
+import json
 import os
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from agentville import version
 from agentville.collector.appserver import AppServerClient, AppServerError, RpcConnection, RpcError
 from agentville.collector.jsonl import JsonlTail
 from agentville.common.observations import Kind, Observation, RawLocation, SessionStatus, ShiftKey, Source
@@ -25,6 +30,11 @@ _TOOL_CALLS = {"function_call", "custom_tool_call", "local_shell_call"}
 _TOOL_OUTPUTS = {"function_call_output", "custom_tool_call_output", "local_shell_call_output"}
 # task_complete.error kinds after which the turn just ends.
 _TRANSIENT_ERRORS = {"server_overloaded"}
+# A rollout-only shift lasts while its rollout was written within this window.
+ROLLOUT_WINDOW = timedelta(minutes=30)
+_ROLLOUT_NAME = re.compile(r"rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl")
+# session_meta is the first record; a rollout without it in this many lines has none.
+_META_LINES = 5
 
 
 def socket_path(home: str) -> str:
@@ -39,6 +49,37 @@ def is_subagent_thread(thread: dict[str, Any]) -> bool:
 def is_employee_thread(thread: dict[str, Any]) -> bool:
     """Subagent threads (Contractors) and internal system threads are not Employees."""
     return not is_subagent_thread(thread) and thread.get("threadSource") != "system"
+
+
+def is_employee_rollout(meta: dict[str, Any]) -> bool:
+    """The rollout ``session_meta`` counterpart of ``is_employee_thread``."""
+    source = meta.get("source")
+    subagent = isinstance(source, dict) and any(str(k).lower() == "subagent" for k in source)
+    return not subagent and not meta.get("parent_thread_id") and meta.get("thread_source") != "system"
+
+
+def read_session_meta(path: str) -> dict[str, Any] | None:
+    """The rollout's ``session_meta`` payload; ``{}`` when it has none, None while its first lines are incomplete."""
+    with open(path, "rb") as fh:
+        for _ in range(_META_LINES):
+            line = fh.readline()
+            if not line.endswith(b"\n"):
+                return None
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(record, dict) and record.get("type") == "session_meta":
+                payload = record.get("payload")
+                return payload if isinstance(payload, dict) else {}
+    return {}
+
+
+def _mtime(path: str) -> float | None:
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return None
 
 
 def contractor_status(status: dict[str, Any]) -> str | None:
@@ -72,6 +113,7 @@ class _Shift:
     limit_reset: datetime | None = None
     # Reset of the most used window in the latest token_count, for a limit reported only as an error.
     last_reset: datetime | None = None
+    source: Source = Source.APP_SERVER
 
 
 @dataclass
@@ -103,9 +145,16 @@ class CodexAdapter:
         self._ignored: set[str] = set()
         self._attached_at: datetime | None = None
         self._followed: set[str] = set()
+        # Rollout-only shifts by thread id, and the tails they followed, by path.
+        self._rollouts: dict[str, _Shift] = {}
+        self._rollout_tails: dict[str, JsonlTail] = {}
+        self._scanned_at: datetime | None = None
+        self._not_employees: set[str] = set()
+        # Rollout mtime when a daemon shift ended; a later write is a run outside the daemon.
+        self._daemon_ended: dict[str, float] = {}
 
     def _default_connect(self) -> RpcConnection:
-        client = AppServerClient(socket_path(self.home))
+        client = AppServerClient(socket_path(self.home), client_version=version())
         client.connect()
         return client
 
@@ -124,11 +173,13 @@ class CodexAdapter:
                     self._notification(message, now, out)
         except AppServerError:
             self._disconnect(now, out)
+        self._scan_rollouts(now, out)
         self._read_rollouts(now, out)
+        self._expire_rollouts(now, out)
         return out
 
     def _read_rollouts(self, now: datetime, out: list[Observation]) -> None:
-        for shift in list(self._shifts.values()):
+        for shift in [*self._shifts.values(), *self._rollouts.values()]:
             self._read_rollout(shift, now, out)
         for contractor in list(self._contractors.values()):
             self._read_contractor_rollout(contractor, now, out)
@@ -258,6 +309,7 @@ class CodexAdapter:
 
     def _end_contractor(self, contractor: _Contractor, now: datetime, out: list[Observation]) -> None:
         self._contractors.pop(contractor.thread_id, None)
+        self._ended_by_daemon(contractor.thread_id, contractor.tail)
         if contractor.parent.thread_id in self._shifts:
             out.append(self._obs(Kind.SUBAGENT_ENDED, contractor.parent, now, now, {"subagent_id": contractor.thread_id}))
 
@@ -279,7 +331,11 @@ class CodexAdapter:
 
     def _start(self, thread: dict[str, Any], now: datetime, out: list[Observation]) -> _Shift:
         thread_id = thread["id"]
-        shift = _Shift(ShiftKey(PROVIDER, thread_id), thread_id, self._tail(thread))
+        rollout = self._rollouts.get(thread_id)
+        if rollout is not None:
+            # The daemon takes over; its shift continues the rollout from where the rollout-only shift stopped.
+            self._end(rollout, now, out)
+        shift = _Shift(ShiftKey(PROVIDER, thread_id), thread_id, rollout.tail if rollout else self._tail(thread))
         self._shifts[thread_id] = shift
         out.append(
             self._obs(
@@ -302,11 +358,62 @@ class CodexAdapter:
             out.append(self._obs(Kind.MODEL_CHANGED, shift, now, now, self._model_data(model)))
         return shift
 
+    def _scan_rollouts(self, now: datetime, out: list[Observation]) -> None:
+        """Start a rollout-only shift for each recent rollout of a thread the daemon does not know."""
+        known = self._shifts.keys() | self._contractors.keys() | self._ignored | self._rollouts.keys() | self._not_employees
+        pattern = os.path.join(glob.escape(self.home), "sessions", "*", "*", "*", "rollout-*.jsonl")
+        for path in glob.glob(pattern):
+            match = _ROLLOUT_NAME.fullmatch(os.path.basename(path))
+            if match is None or match.group(1) in known:
+                continue
+            thread_id = match.group(1)
+            mtime = _mtime(path)
+            if mtime is None or now.timestamp() - mtime > ROLLOUT_WINDOW.total_seconds():
+                continue
+            if thread_id in self._daemon_ended and mtime <= self._daemon_ended[thread_id]:
+                continue
+            try:
+                meta = read_session_meta(path)
+            except OSError:
+                continue
+            if meta and is_employee_rollout(meta):
+                self._start_rollout(thread_id, path, meta, now, out)
+            elif meta is not None:
+                self._not_employees.add(thread_id)
+        if self._scanned_at is None:
+            self._scanned_at = now
+
+    def _start_rollout(self, thread_id: str, path: str, meta: dict[str, Any], now: datetime, out: list[Observation]) -> None:
+        tail = self._rollout_tails.get(path)
+        if tail is None:
+            tail = self._rollout_tails[path] = JsonlTail(path)
+            created = _from_iso(meta.get("timestamp"))
+            # The same rules as for daemon threads: history before attach, or of a resumed rollout, is not replayed.
+            if self._scanned_at is None or path in self._followed or created is None or created < self._scanned_at:
+                tail.seek_end()
+            self._followed.add(path)
+        shift = _Shift(ShiftKey(PROVIDER, f"rollout:{thread_id}"), thread_id, tail, source=Source.SESSION_LOG)
+        self._rollouts[thread_id] = shift
+        data = {"cwd": str(meta.get("cwd") or ""), "session_id": thread_id, "runtime": {"type": "rollout"},
+                "account_alias": self.account_alias, "max_confidence": "low"}
+        out.append(self._obs(Kind.PROCESS_STARTED, shift, now, now, data))
+        out.append(self._obs(Kind.SESSION_STARTED, shift, now, now, {"session_id": thread_id}))
+
+    def _expire_rollouts(self, now: datetime, out: list[Observation]) -> None:
+        for shift in list(self._rollouts.values()):
+            mtime = _mtime(shift.tail.path) if shift.tail else None
+            if mtime is None or now.timestamp() - mtime > ROLLOUT_WINDOW.total_seconds():
+                self._end(shift, now, out)
+
     def _rollout_path(self, thread: dict[str, Any]) -> str | None:
         path = thread.get("path")
         if isinstance(path, str) and path:
             return path
-        matches = glob.glob(os.path.join(glob.escape(self.home), "sessions", "*", "*", "*", f"rollout-*-{thread['id']}.jsonl"))
+        return self._find_rollout(thread["id"])
+
+    def _find_rollout(self, thread_id: str) -> str | None:
+        name = f"rollout-*-{glob.escape(thread_id)}.jsonl"
+        matches = glob.glob(os.path.join(glob.escape(self.home), "sessions", "*", "*", "*", name))
         return matches[0] if matches else None
 
     def _status(self, shift: _Shift, status: dict[str, Any], now: datetime, out: list[Observation]) -> None:
@@ -484,12 +591,20 @@ class CodexAdapter:
 
     def _end(self, shift: _Shift, now: datetime, out: list[Observation]) -> None:
         self._read_rollout(shift, now, out)
-        self._shifts.pop(shift.thread_id, None)
+        if self._rollouts.get(shift.thread_id) is shift:
+            del self._rollouts[shift.thread_id]
+        else:
+            self._shifts.pop(shift.thread_id, None)
+            self._ended_by_daemon(shift.thread_id, shift.tail)
         # The Judge ends the shift's Contractors with it.
         for thread_id in [i for i, c in self._contractors.items() if c.parent is shift]:
-            del self._contractors[thread_id]
+            self._ended_by_daemon(thread_id, self._contractors.pop(thread_id).tail)
         out.append(self._obs(Kind.PROCESS_EXITED, shift, now, now, {"thread_id": shift.thread_id}))
+
+    def _ended_by_daemon(self, thread_id: str, tail: JsonlTail | None) -> None:
+        path = tail.path if tail else self._find_rollout(thread_id)
+        self._daemon_ended[thread_id] = (_mtime(path) if path else None) or 0.0
 
     @staticmethod
     def _obs(kind: Kind, shift: _Shift, at: datetime, now: datetime, data: dict[str, Any]) -> Observation:
-        return Observation(kind, shift.key, at, now, Source.APP_SERVER, data)
+        return Observation(kind, shift.key, at, now, shift.source, data)

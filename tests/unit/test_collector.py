@@ -146,6 +146,33 @@ def test_off_duty_becomes_on_leave_without_new_events(tmp_path):
     assert all(m["kind"] == "heartbeat" for m in out[count:])
 
 
+def test_workload_decays_without_new_tools(tmp_path):
+    now = [T0]
+    adapter = ScriptedAdapter()
+    adapter.batches = [[
+        _obs(Kind.PROCESS_STARTED, T0, cwd="/r", session_id="s1", runtime={"type": "shell"}),
+        _obs(Kind.TOOL_STARTED, T0, tool_id="a", tool="Bash"),
+        _obs(Kind.TOOL_FINISHED, T0, tool_id="a", tool="Bash", success=True),
+        _obs(Kind.TURN_COMPLETED, T0),
+    ]]
+    collector, out = _collector(tmp_path, adapter, lambda: now[0])
+    collector.tick()
+    assert out[0]["payload"]["activities"][0]["workload"] == 1
+
+    def workloads():
+        return [m["payload"]["workload"] for m in out if m["kind"] == "activity"]
+
+    now[0] = T0 + timedelta(minutes=4)
+    collector.tick()
+    assert workloads() == []
+    now[0] = T0 + timedelta(minutes=5, seconds=1)
+    collector.tick()
+    assert workloads() == [0]
+    now[0] = T0 + timedelta(minutes=6)
+    collector.tick()
+    assert workloads() == [0]
+
+
 class FlakyHq:
     def __init__(self):
         self.up = True
