@@ -6,6 +6,33 @@ This document lists the user-visible changes of each AgentVille release.
 
 **Out of scope:** internal refactoring and test-only changes.
 
+## 0.3.0 - Observation Release - 2026-10-22
+
+**Observation Release**
+
+### Collector
+
+- Child agent CLIs are Contractors of the nearest observed parent, including descendants launched through a shell. If the parent is discovered later, the former independent colleague goes off duty while retaining its ID and history; current activity continues as a Contractor.
+- Codex process matching falls back to an unambiguous process-start match when file descriptors cannot be read. Completed rollout files do not create on-duty colleagues after a Collector restart until they are written again.
+- Antigravity CLI (`agy`) presence and observable activity are supported through held presence locks and transcripts. Enable `providers.antigravity` in existing configurations; new configurations discover Gemini homes only when they contain `antigravity-cli`.
+- Antigravity reports working, completion, idle, error, and unknown activity. Completed tools clear correctly, and replayed transcript records do not increase workload or restore old activity after rotation or truncation.
+
+### HQ
+
+- Conflicting message content with the same Branch ID and sequence number produces a shared-identity warning. Identical retries remain duplicates without a warning.
+
+### Web UI
+
+- Antigravity colleagues and Contractors show the `AG` provider label.
+- Branches with the same alias include their full IDs in colleague details, selectors, and work-log headings.
+
+### Documentation and deployment
+
+- Remote Collector procedures cover SSH tunnels, Docker host and bridge networking, persistent config and state, volume ownership, and manual restart.
+- Configuration documents distinguish Antigravity homes from Gemini CLI homes and describe the supported activity signals.
+
+**Full Changelog**: https://github.com/jeonghanlee/agentville/compare/0.2.0...0.3.0
+
 ## 0.2.0 - 2026-10-22
 
 ### Collector
