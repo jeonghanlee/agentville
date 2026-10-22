@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/insta
 
 It writes the Collector configuration before the first service start, copies a unit file only when none is installed, and then enables and restarts the services and checks that they are running. Without a systemd user instance it prints the foreground commands instead. It stops without changes when `~/.local/src/agentville` has local changes. Continue with Section 5.
 
-A Branch reporting to an HQ on another host needs a token for its `host.id` (Section 6.1), which the first run writes. Run the script once, create the token on HQ (Section 6.2), then run it again with `--hq-url` and `--token-file`.
+A Branch reporting to an HQ on another host needs a token for its `host.id` (Section 6.1), which the first run writes. Run the script once, create the token on HQ (Section 6.2), then run it again with `--hq-url` set to the HQ HTTPS address (Sections 6.3 and 6.5) and `--token-file` naming a file that holds only this Branch's token value, not the `<host.id>: <token>` line.
 
 The manual steps:
 

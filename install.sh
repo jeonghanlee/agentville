@@ -56,7 +56,7 @@ fetch_source() {
     local ref="$1"
     if [[ -d "$SRC_DIR/.git" ]]; then
         if [[ -n "$(git -C "$SRC_DIR" status --porcelain --untracked-files=no)" ]]; then
-            die "$SRC_DIR has local changes; commit, stash, or discard them first"
+            die "$SRC_DIR has local changes; stash or discard them first (the source is replaced on every run)"
         fi
         info "Updating $SRC_DIR"
         git -C "$SRC_DIR" fetch --quiet --tags --force origin
@@ -66,7 +66,7 @@ fetch_source() {
         git clone --quiet "$REPO_URL" "$SRC_DIR"
     fi
     if [[ -z "$ref" ]]; then
-        ref="$(git -C "$SRC_DIR" tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+        ref="$(git -C "$SRC_DIR" tag --list --sort=-v:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
         [[ -n "$ref" ]] || ref="origin/HEAD"
     fi
     # A branch name resolves to the fetched remote branch; local branches are never updated.
