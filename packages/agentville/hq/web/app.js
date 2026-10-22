@@ -10,7 +10,7 @@ import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 import { createLounge } from "./lounge.js";
 import { createWalkers } from "./walk.js";
-import { APPROACH, NODES, route, distance } from "./floor.js";
+import { APPROACH, NODES, route, distance, clear, blockedBy } from "./floor.js";
 import { walkerDepth } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
@@ -43,9 +43,10 @@ const SCREENS = {
   studio1: ["1147,287 1190,302 1190,333 1147,317", "1270,337 1313,352 1313,385 1270,370"],
   common: ["202,493 247,511 247,546 202,528", "328,541 378,558 378,592 328,574"],
 };
+// Standing spots on open floor, clear of furniture for a walker's feet (floor.js).
 const WAITING_SPOTS = {
-  fika: [[34,79],[40,84],[46,89],[52,94],[65,82],[60,89]],
-  infirmary: [[78,81],[84,78],[73,84],[78,87]],
+  fika: [[38,78.5],[42.5,82.5],[46.5,86.5],[52,89.5],[66.4,80.6],[57.5,88.7]],
+  infirmary: [[78,81],[84,78],[73.5,83.2],[80.5,83.5]],
 };
 const EMPTY = { branches: [], agents: [], activities: [], contractors: [] };
 const MAX_EVENTS = 60;
@@ -336,7 +337,10 @@ function moveWalker(key, target) {
   if (!walkers || !last || last.scope !== branchId || !motionAllowed()) { walkers?.stop(key); return null; }
   if (distance(current ? current.goal : last.foot, target.foot) < .05) return current;
   const start = current ? [current.x, current.y] : last.foot;
-  const leave = !current && last.approach ? [last.approach] : [];
+  // A walker leaves a seat through its free side; one turned around on the step into or out of a seat first
+  // reaches the free end of that step, since the step itself touches the seat.
+  const leave = current ? (clear(...current.stretch) ? [] : [current.stretch.find((point) => !blockedBy(point)) || current.stretch[0]])
+    : last.approach ? [last.approach] : [];
   const path = [start, ...route(leave[0] || start, target.approach || target.foot).slice(leave.length ? 0 : 1),
     ...(target.approach ? [target.foot] : [])].filter((point, i, all) => i === 0 || distance(point, all[i-1]) > .01);
   if (path.length < 2) return null;

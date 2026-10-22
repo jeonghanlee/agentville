@@ -22,6 +22,10 @@ const SURFACES = [
     "676,734 689,716 719,708 759,713 793,731 805,748 800,765 777,779 742,782 703,769 681,753",
     "680,756 692,761 686,790 676,787", "789,768 799,766 802,791 793,792",
   ] },
+  // The ottoman stands on the rug in front of the coffee table; walkers pass between the two.
+  { name: "ottoman", depth: 85, footprint: "ottoman", shapes: [
+    "750,820 754,810 762,804 776,800 798,800 812,804 820,810 825,820 825,858 820,866 810,873 792,876 774,876 762,871 754,864 750,858",
+  ] },
   { name: "lounge-chair", depth: 84, footprint: "lounge-chair", shapes: ["848,809 872,816 884,828 884,848 912,857 920,849 924,827 939,797 952,788 950,821 935,858 917,873 884,861 854,843"] },
   { name: "bed-blanket", depth: 76, footprint: "bed", shapes: ["1274,669 1339,640 1426,683 1426,733 1353,767 1269,716"] },
 ];
@@ -36,16 +40,30 @@ function bounds(polygon, x) {
   return ys.length ? [Math.min(...ys), Math.max(...ys)] : null;
 }
 
+// Percent extents of each piece's pixels and of its footprint, to tell which pieces a walker's sprite can cover.
+const EXTENTS = SURFACES.map(({ footprint, shapes }) => {
+  const pixels = shapes.flatMap((points) => points.trim().split(/\s+/).map((point) => point.split(",").map(Number)));
+  const xs = FOOTPRINTS[footprint].map(([x]) => x);
+  return { left: Math.min(...pixels.map(([x]) => x)) / 15.36, right: Math.max(...pixels.map(([x]) => x)) / 15.36,
+    top: Math.min(...pixels.map(([,y]) => y)) / 10.24, bottom: Math.max(...pixels.map(([,y]) => y)) / 10.24,
+    from: Math.min(...xs), to: Math.max(...xs) };
+});
+// A walking sprite is SEATED_WIDTH (5%) wide and about 10% of the artwork tall above its feet.
+const SPRITE = [2.5, 10.1];
+
 // Stacking order of a walker whose feet are at (x, y) percent: in front of pieces whose footprint lies
-// behind the feet, behind pieces whose footprint lies in front of them.
+// behind the feet, behind pieces whose footprint lies in front of them. Beside a piece whose pixels the sprite
+// overlaps, the nearest end of its footprint decides.
 export function walkerDepth(x, y) {
   let lower = -Infinity, upper = Infinity;
-  for (const { depth, footprint } of SURFACES) {
-    const span = footprint && bounds(FOOTPRINTS[footprint], x);
-    if (!span) continue;
+  SURFACES.forEach(({ depth, footprint }, index) => {
+    const extent = EXTENTS[index];
+    const near = x + SPRITE[0] > extent.left && x - SPRITE[0] < extent.right && y > extent.top && y - SPRITE[1] < extent.bottom;
+    const span = bounds(FOOTPRINTS[footprint], x) || (near ? bounds(FOOTPRINTS[footprint], Math.min(Math.max(x, extent.from), extent.to)) : null);
+    if (!span) return;
     if (y >= span[1] || (y > span[0] && y > (span[0]+span[1]) / 2)) lower = Math.max(lower, depth+1);
     else upper = Math.min(upper, depth-1);
-  }
+  });
   const base = Math.floor(y) + 1;
   return lower > upper ? lower : Math.min(Math.max(base, lower), upper);
 }

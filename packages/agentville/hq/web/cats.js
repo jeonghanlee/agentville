@@ -4,7 +4,7 @@ import { NODES, neighbourIds, distance } from "./floor.js";
 import { walkerDepth } from "./furniture.js";
 
 // Cats roam the corridor and lounge part of the shared floor graph (floor.js), so they also keep off furniture.
-const ROAM = new Set(["s0c", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10", "f2", "k3", "i1", "i2"]);
+const ROAM = new Set(["s0c", "c1", "c2", "c2b", "c3", "c4", "l1", "c5", "l2", "c6", "c7", "c7b", "c8a", "c8", "c9", "c10", "f5", "f6", "k3", "i1", "i2"]);
 const CATS = [
   { coat: "ginger", name: "Cheese", starts: ["c2", "c3", "c4"] },
   { coat: "tuxedo", name: "Pepper", starts: ["c8", "c9", "c10"] },

@@ -91,7 +91,8 @@ export function createWalkers(root, { motionAllowed, changed }) {
       const walk = walks.get(key);
       if (!walk) return null;
       const [x, y] = position(walk);
-      return { x, y, goal: walk.goal, facing: facing(walk), view: view(walk), carrying: walk.carrying, depth: walkerDepth(x, y) };
+      const stretch = [walk.path[walk.index], walk.path[walk.index + 1] || walk.path[walk.index]];
+      return { x, y, goal: walk.goal, stretch, facing: facing(walk), view: view(walk), carrying: walk.carrying, depth: walkerDepth(x, y) };
     },
     stop(key) { walks.delete(key); },
     active() { return walks.size > 0; },
