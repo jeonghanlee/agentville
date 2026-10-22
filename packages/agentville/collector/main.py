@@ -216,7 +216,12 @@ def main(argv: list[str] | None = None) -> int:
         stream = open(args.output, "a", encoding="utf-8")
         deliver = jsonl_deliver(stream)
     else:
-        deliver = HttpSender(config.hq_url, config.hq_token)
+        try:
+            deliver = HttpSender(config.hq_url, config.hq_token)
+        except ValueError as exc:
+            raise SystemExit(f"agentville-collector: hq.url {config.hq_url}: {exc}") from None
+    target = args.output or config.hq_url
+    print(f"agentville-collector: Branch {config.alias} ({config.host_id}) reporting to {target}", file=sys.stderr, flush=True)
     collector: Collector | None = None
     try:
         collector = Collector(

@@ -1,6 +1,6 @@
 [Unit]
 Description=AgentVille Branch Collector
-After=default.target agentville-hq.service
+After=agentville-hq.service
 
 [Service]
 Type=simple

@@ -1,6 +1,5 @@
 [Unit]
 Description=AgentVille HQ
-After=default.target
 
 [Service]
 Type=simple

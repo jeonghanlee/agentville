@@ -66,8 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-trust-loopback", action="store_true", help="require tokens from loopback Branches too (reverse proxy)")
     parser.add_argument("--server-name", action="append", default=[],
                         help="public name of a reverse proxy, accepted as Host and page Origin; repeatable")
+    parser.add_argument("--tls-cert", help="PEM certificate file; serve HTTPS (with --tls-key)")
+    parser.add_argument("--tls-key", help="PEM private key file for --tls-cert")
     parser.add_argument("--retention-days", type=int, default=30)
     args = parser.parse_args(argv)
+    if bool(args.tls_cert) != bool(args.tls_key):
+        parser.error("--tls-cert and --tls-key are used together")
 
     remote = not is_loopback(args.host)
     viewer_token = (_read_private(args.viewer_token_file).strip() or None) if args.viewer_token_file else None
@@ -90,7 +94,11 @@ def main(argv: list[str] | None = None) -> int:
         hosts=None if remote else LOCAL_HOSTS | {args.host},
         server_names=frozenset(args.server_name),
     )
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    scheme = "https" if args.tls_cert else "http"
+    host = f"[{args.host}]" if ":" in args.host else args.host
+    print(f"agentville-hq: serving {scheme}://{host}:{args.port}/ (database {db})", file=sys.stderr, flush=True)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning",
+                ssl_certfile=args.tls_cert, ssl_keyfile=args.tls_key)
     return 0
 
 

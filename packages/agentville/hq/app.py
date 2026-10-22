@@ -204,7 +204,7 @@ def create_app(
         # Authorization needs the batch's branch_id; reject callers holding no known token before reading it.
         client = request.client.host if request.client else ""
         if not (trust_loopback and client in loopback) and not any(_bearer_matches(request, t) for t in tokens.values()):
-            raise HTTPException(status_code=401, detail="token required")
+            raise HTTPException(status_code=401, detail="invalid token" if "authorization" in request.headers else "token required")
         length = request.headers.get("content-length")
         if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
             raise HTTPException(status_code=413, detail="body too large")

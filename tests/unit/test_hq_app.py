@@ -218,3 +218,18 @@ def test_server_name_requires_token_protection(tmp_path):
 
     with pytest.raises(SystemExit):
         main(["--server-name", "hq.example", "--db", str(tmp_path / "hq.sqlite3")])
+
+
+def test_tls_options_are_used_together(tmp_path):
+    from agentville.hq.main import main
+
+    with pytest.raises(SystemExit):
+        main(["--tls-cert", str(tmp_path / "cert.pem"), "--db", str(tmp_path / "hq.sqlite3")])
+
+
+def test_wrong_branch_token_is_reported_as_invalid(tmp_path):
+    client = _client(tmp_path, tokens={"b1": "s" * 16}, loopback=frozenset())
+    body = {"messages": [_snapshot()]}
+    assert client.post("/api/v1/ingest/messages", json=body).json()["detail"] == "token required"
+    wrong = client.post("/api/v1/ingest/messages", json=body, headers={"Authorization": "Bearer " + "x" * 16})
+    assert wrong.json()["detail"] == "invalid token"
