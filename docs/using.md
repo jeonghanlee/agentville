@@ -65,7 +65,7 @@ Select a colleague in the office or in the list on the right. The detail shows s
 | View | Content |
 |---|---|
 | Dashboard | Counts across all Branches: on duty, waiting, errors, Branches, and a table of colleagues. |
-| Colleagues | Every colleague with Branch, room, presence, activity, tool, condition, workload, and time in state. Idle colleagues show the stage of the Idle state: Idle, Phone (휴대폰), Dozing (조는 중), or Fika (휴게실). |
+| Colleagues | Every colleague with Branch, room, presence, activity, tool, condition, workload, and time in state. Idle colleagues show the stage of the Idle state: Idle (유휴), Phone (휴대폰), Dozing (조는 중), or Fika (휴게실). |
 | Projects | One card per repository with colleagues on duty and Branches. |
 | Timeline | Changes observed while the page is open. |
 | Branches | Each Branch, whether it is reporting, and its last report time. |
