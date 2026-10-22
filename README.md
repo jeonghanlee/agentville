@@ -43,6 +43,8 @@ User manual: [jeonghanlee.github.io/agentville](https://jeonghanlee.github.io/ag
 
 Specifications: [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Test Fixtures](docs/fixtures.md).
 
+Release history: [CHANGELOG](CHANGELOG.md).
+
 ## Development
 
 ```bash
