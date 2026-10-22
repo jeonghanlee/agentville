@@ -14,6 +14,11 @@ import { APPROACH, NODES, route, distance, clear, blockedBy } from "./floor.js";
 import { walkerDepth } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
+import { el, button } from "./dom.js";
+import { dayOf, dayStart, dayEnd, shiftDay, duration } from "./days.js";
+import { createHistory } from "./history.js";
+import { createReplay, SPEEDS } from "./replay.js";
+import { worklogTable } from "./worklog.js";
 
 const DEMO = new URLSearchParams(location.search).get("demo") === "1";
 const TOKEN = takeToken();
@@ -24,7 +29,7 @@ const PRESENCE = ["on_duty", "off_duty", "on_leave"];
 const CONDITIONS = ["normal", "extra-coffee", "study-mode", "light", "lazy"];
 // Labels, titles, and descriptions come from the dictionary as nav.<id>, view.<id>.title, and view.<id>.description.
 const VIEWS = [["office", "house"], ["dashboard", "grid"], ["employees", "people"], ["projects", "folder"],
-  ["timeline", "clock"], ["branches", "branches"], ["settings", "settings"]];
+  ["timeline", "clock"], ["worklog", "book"], ["branches", "branches"], ["settings", "settings"]];
 const ROOM_LAYOUT = {
   studio0: { color: "#adba88", seats: [[26.5,36.5,"back",38],[36,42,"back",44],[32.4,26.2,"front",25],[42.5,32.2,"front",30]], overflow: [44,47] },
   studio1: { color: "#b8a4c8", seats: [[75.2,37.8,"back",41],[83.8,43.4,"back",47]], overflow: [76,50] },
@@ -50,6 +55,8 @@ const WAITING_SPOTS = {
 };
 const EMPTY = { branches: [], agents: [], activities: [], contractors: [] };
 const MAX_EVENTS = 60;
+// Timeline list length, refresh interval of the shown day's changes, and of today's work log for waiting times.
+const MAX_DAY_CHANGES = 400, DAY_REFRESH = 15000, TODAY_REFRESH = 60000;
 const COMPLETED_MS = 4000, MAX_CONTRACTORS = 2;
 const MIN_ZOOM = 100, MAX_ZOOM = 175, ZOOM_STEP = 25;
 const $ = (id) => document.getElementById(id);
@@ -78,24 +85,16 @@ let notifications = null;
 // The first state of each socket is a baseline: it records states without notifying.
 let resync = true;
 let connection = ["connection.connecting", ""];
-
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key === "class") node.className = value;
-    else if (key === "style") {
-      for (const [name, style] of Object.entries(value)) {
-        if (name.startsWith("--")) node.style.setProperty(name, style); else node.style[name] = style;
-      }
-    }
-    else node.setAttribute(key, value);
-  }
-  for (const child of children.flat()) {
-    if (child === null || child === undefined || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
-  return node;
-}
+// The latest state from HQ; `current` is what the page shows, which is a past state while replaying.
+let live = EMPTY;
+let history = null, replay = null;
+// Timeline: the shown day and its recorded changes. Work log: the chosen day and Branch ("" for all) and its rows.
+let timelineDay = "", dayChanges = null, dayChangesKey = "", dayChangesAt = 0;
+let worklogDay = "", worklogBranch = "", worklogData = null, worklogKey = "", worklogFailed = false;
+// Today's work log in browser time, for waiting times on the Dashboard and in Colleague details.
+let today = { key: "", data: null, at: 0 };
+// Controls that keep their element across renders, so a drag or an open date picker survives a refresh.
+let kept = {};
 // The viewer token leaves the address bar so it is not shared, bookmarked, or kept in history.
 function takeToken() {
   const hash = new URLSearchParams(location.hash.slice(1));
@@ -110,11 +109,8 @@ function takeToken() {
   return token;
 }
 function projectRoom(id) { return "project:" + id; }
-function button(label, cls, fn, attrs = {}) {
-  const node = el("button", { type: "button", class: cls, ...attrs }, label);
-  node.addEventListener("click", fn);
-  return node;
-}
+// The time the page shows: the replay time while replaying.
+function nowMs() { return replay?.active ? replay.at : Date.now(); }
 function text(id, value) { $(id).textContent = value; }
 function known(state) { return STATES.includes(state); }
 function color(state) { return "var(--" + (known(state) ? state : "idle") + ")"; }
@@ -135,7 +131,7 @@ function badge(provider) {
   return el("span", { class: "provider" + (provider === "codex" ? " codex" : "") }, providerInitials(provider));
 }
 function age(iso, compact = true) {
-  const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  const seconds = Math.max(0, (nowMs() - Date.parse(iso)) / 1000);
   if (!Number.isFinite(seconds)) return "-";
   if (seconds < 60) return t(compact ? "age.now" : "age.justNow");
   if (seconds < 3600) return t(compact ? "age.m" : "age.minutes", { n: Math.floor(seconds / 60) });
@@ -151,7 +147,7 @@ function clockTime(iso) {
   const at = new Date(iso || NaN);
   if (!Number.isFinite(at.getTime())) return "";
   const zone = displayZone(), options = zone ? { timeZone: zone } : {};
-  const sameDay = at.toLocaleDateString("en-US", options) === new Date().toLocaleDateString("en-US", options);
+  const sameDay = at.toLocaleDateString("en-US", options) === new Date(nowMs()).toLocaleDateString("en-US", options);
   return (sameDay ? "" : at.toLocaleDateString(locale(), { weekday: "short", ...options }) + " ")
     + at.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit", ...options });
 }
@@ -187,28 +183,29 @@ function noteCompletions(all) {
 }
 function showsDone(row) { return (completions.get(row.key)?.until || 0) > Date.now(); }
 function idleDetail(activity, branch) {
-  const seconds = Math.max(0, (Date.now() - Date.parse(activity?.state_since)) / 1000);
+  const seconds = Math.max(0, (nowMs() - Date.parse(activity?.state_since)) / 1000);
   const thresholds = { phone: 300, doze: 1800, lounge: 3600, ...branch?.branch?.thresholds };
   if (seconds >= thresholds.lounge) return "fika";
   if (seconds >= thresholds.doze) return "dozing";
   if (seconds >= thresholds.phone) return "phone";
   return "at desk";
 }
-function rows() {
-  const branches = new Map(current.branches.map((b) => [b.branch_id, b]));
-  const activities = new Map(current.activities.map((a) => [keyOf(a.branch_id, a.agent_id), a]));
-  return current.agents.map((agent) => {
+function colleagueName(agent) { return agent.alias || providerName(agent.provider) + " " + agent.seat; }
+function rows(data = current) {
+  const branches = new Map(data.branches.map((b) => [b.branch_id, b]));
+  const activities = new Map(data.activities.map((a) => [keyOf(a.branch_id, a.agent_id), a]));
+  return data.agents.map((agent) => {
     const branch = branches.get(agent.branch_id);
     const activity = activities.get(keyOf(agent.branch_id, agent.agent_id));
     const duty = agent.presence === "on_duty";
-    const verified = (DEMO || connected) && Boolean(branch?.reachable);
+    const verified = hqConnected() && Boolean(branch?.reachable);
     const state = duty ? (activity && known(activity.state) ? activity.state : "unknown") : "idle";
     const detail = state === "idle" && duty ? idleDetail(activity, branch) : "";
-    const contractors = current.contractors.filter((c) =>
+    const contractors = data.contractors.filter((c) =>
       c.branch_id === agent.branch_id && c.parent_instance_id === agent.instance?.instance_id && c.status !== "ended");
     return {
       key: keyOf(agent.branch_id, agent.agent_id), agent, branch, activity, state, detail, duty, verified, contractors,
-      name: agent.alias || providerName(agent.provider) + " " + agent.seat,
+      name: colleagueName(agent),
       branchName: branchName(branch),
       project: agent.project_alias || t("project.unnamed"),
       since: duty && activity ? activity.state_since : agent.presence_since,
@@ -243,7 +240,8 @@ function context(all) {
 }
 // Unverified has two causes: the page has no HQ connection, or HQ is connected but has no fresh Branch report.
 // Both keep the last observed state; only the wording differs.
-function hqConnected() { return DEMO || connected; }
+// A replayed state is a recorded one; only its own reachability marks it unverified.
+function hqConnected() { return DEMO || connected || Boolean(replay?.active); }
 function branchWording(branch) {
   return branch?.reachable && hqConnected() ? "reporting" : hqConnected() ? "awaiting" : "hqLost";
 }
@@ -554,6 +552,12 @@ function renderTeam(ctx) {
     [t("detail.tool"), row.state === "working" ? row.activity?.tool || "-" : "-"],
     [t("detail.workload"), row.verified ? workloadText(row) : "-"]];
   if (resetLabel(row)) stats.push([t("detail.limit"), resetLabel(row)]);
+  // Waiting time of the browser day; not shown for a replayed time.
+  if (!replay?.active && today.data) {
+    const log = today.data.rows.find((r) => r.branch_id === row.agent.branch_id && r.agent_id === row.agent.agent_id);
+    stats.push([t("detail.waitedToday"), log ? t(log.waits === 1 ? "detail.waitedOne" : "detail.waitedMany",
+      { duration: duration(log.seconds.waiting) || "-", n: log.waits }) : "-"]);
+  }
   const occupants = seatOccupancy.get(keyOf(branchId,"facility:" + roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
   if (waiting) stats.push([t("detail.place"), t(roomOf(row) === "infirmary" ? "queue.bed" : "queue.seat")]);
@@ -582,9 +586,28 @@ function eventNode(event) {
     el("div", {}, el("p", {}, el("strong", {}, event.name), " " + eventLabel(event)),
       el("small", {}, event.project + " / " + age(event.at, false))));
 }
+// While replaying, recent activity is the recorded changes of the shown day up to the replay time.
 function visibleEvents() {
   const q = $("search").value.trim().toLowerCase();
-  return events.filter((e) => !q || [e.name,e.project,eventLabel(e)].join(" ").toLowerCase().includes(q));
+  const list = replay?.active ? dayEvents().filter((e) => Date.parse(e.at) <= replay.at) : events;
+  return list.filter((e) => !q || [e.name,e.project,eventLabel(e)].join(" ").toLowerCase().includes(q));
+}
+// Recorded changes as timeline events, newest first.
+function dayEvents() {
+  if (!dayChanges) return [];
+  const agents = new Map(dayChanges.agents.map((a) => [keyOf(a.branch_id, a.agent_id), a]));
+  const branches = new Map(dayChanges.branches.map((b) => [b.branch_id, b]));
+  return dayChanges.changes.map((change) => {
+    const branch = branchName(branches.get(change.branch_id) || current.branches.find((b) => b.branch_id === change.branch_id));
+    if (change.kind === "reachability") {
+      return { name: branch, project: "", state: change.reachable ? "idle" : "unknown", kind: change.reachable ? "reachable" : "unreachable", at: change.at };
+    }
+    const agent = agents.get(keyOf(change.branch_id, change.agent_id));
+    const state = change.kind === "activity" ? (known(change.state) ? change.state : "unknown") : "idle";
+    const kind = change.kind === "activity" ? state : PRESENCE.includes(change.presence) ? change.presence : "unknown";
+    return { name: agent ? colleagueName(agent) : change.agent_id, project: (agent?.project_alias || t("project.unnamed")) + " / " + branch,
+      state, kind, at: change.at };
+  }).reverse();
 }
 function recordEvents(all) {
   for (const row of all) {
@@ -614,6 +637,21 @@ function employeeTable(all) {
       el("thead", {}, el("tr", {}, heading.map((h) => el("th", { scope: "col" }, t(h))))),
       el("tbody", {}, body.length ? body : el("tr", {}, el("td", { colspan: 8 }, t("team.noMatch")))))));
 }
+function waitMetrics(all) {
+  const waiting = all.filter((r) => r.duty && r.state === "waiting").map((r) => [r, (nowMs() - Date.parse(r.activity?.state_since)) / 1000])
+    .filter(([, seconds]) => Number.isFinite(seconds)).sort((a,b) => b[1] - a[1]);
+  const longest = waiting[0];
+  const out = [el("div", { class: "metric" }, el("span", {}, t("metric.longestWait")),
+    el("strong", {}, longest ? duration(Math.max(longest[1], 60)) : "-"), el("small", {}, longest ? longest[0].name : t("metric.noWait")))];
+  // The day's total waiting time comes from the work log of the browser day; a replayed time has none.
+  if (!replay?.active) {
+    const rows = today.data?.rows || [];
+    const seconds = rows.reduce((sum, r) => sum + r.seconds.waiting, 0), count = rows.reduce((sum, r) => sum + r.waits, 0);
+    out.unshift(el("div", { class: "metric" }, el("span", {}, t("metric.waitedToday")), el("strong", {}, today.data ? duration(seconds) : "-"),
+      el("small", {}, t(count === 1 ? "metric.waitsOne" : "metric.waitsMany", { n: count }))));
+  }
+  return out;
+}
 function renderData(all) {
   const root = $("data-view");
   if (view === "employees") root.replaceChildren(employeeTable(all));
@@ -624,10 +662,10 @@ function renderData(all) {
       const unverified = list.some((r) => r.duty && !r.verified);
       return el("div", { class: "metric" + (unverified ? " unverified" : "") }, el("span", {}, title), el("strong", {}, list.length),
         unverified ? el("small", {}, t("state.unverified")) : null);
-    })), employeeTable(all));
+    }), waitMetrics(all)), employeeTable(all));
   }
-  if (view === "timeline") root.replaceChildren(el("div", { class: "data-card" }, el("h2", {}, t("timeline.title")),
-    el("div", { class: "timeline-list" }, visibleEvents().length ? visibleEvents().map(eventNode) : el("p", { class: "empty-list" }, t("activity.none")))));
+  if (view === "timeline") renderTimeline(root);
+  if (view === "worklog") renderWorklog(root);
   if (view === "projects") {
     const projects = [...new Map(all.filter(queryMatches).map((r) => [r.agent.project_id, r.project])).entries()];
     root.replaceChildren(el("div", { class: "data-grid" }, projects.length ? projects.map(([id,name]) => {
@@ -657,7 +695,7 @@ function renderData(all) {
   }
 }
 function updateClock() {
-  const now = new Date(), zone = displayZone(), options = zone ? { timeZone: zone } : {};
+  const now = new Date(nowMs()), zone = displayZone(), options = zone ? { timeZone: zone } : {};
   const branch = current.branches.find((b) => b.branch_id === branchId);
   text("today", now.toLocaleDateString(locale(), { weekday: "short", month: "short", day: "numeric", ...options }).toUpperCase());
   text("local-time", now.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit", ...options }));
@@ -706,8 +744,215 @@ function render() {
       el("time", { datetime: b.last_seen_at },
         t({ reporting: "branch.lastReport", awaiting: "branch.awaitingAge", hqLost: "branch.hqLostAge" }[branchWording(b)], { age: age(b.last_seen_at) })))));
   if (view !== "office") renderData(all);
+  updateReplay();
   updateClock();
   restoreFocus(focused);
+}
+// Replay (Section 6.5 of the architecture). The banner and the Timeline card share the controls.
+function showReplay() {
+  current = replay.active && replay.state ? replay.state : live;
+  render();
+}
+function backToLive() { replay.stop(); }
+function zoneTime(ms, withDate) {
+  const zone = displayZone();
+  return new Date(ms).toLocaleString(locale(), { ...(withDate ? { month: "short", day: "numeric" } : {}),
+    hour: "numeric", minute: "2-digit", second: "2-digit", ...(zone ? { timeZone: zone } : {}) });
+}
+function dayLabel(day, zone) {
+  return new Date(dayStart(day, zone) + 43200000).toLocaleDateString(locale(),
+    { weekday: "short", month: "short", day: "numeric", ...(zone ? { timeZone: zone } : {}) });
+}
+function changeTimes() { return (dayChanges?.changes || []).map((c) => Date.parse(c.at)); }
+function startReplay(ms, exact = false) { replay.pause(); replay.seek(ms, exact); }
+function replayButtons() {
+  const previous = button(icon("back"), "icon-button", () => replay.jump(changeTimes(), -1), { "aria-label": t("replay.previous"), title: t("replay.previous") });
+  const play = button("", "icon-button replay-play", () => {
+    if (!replay.active) replay.seek(sliderBounds()[0]);
+    replay.toggle();
+  });
+  const next = button(icon("forward"), "icon-button", () => replay.jump(changeTimes(), 1), { "aria-label": t("replay.next"), title: t("replay.next") });
+  const speeds = el("span", { class: "replay-speeds", role: "group", "aria-label": t("replay.speed") },
+    SPEEDS.map((n) => button(n + "x", "replay-speed", () => replay.setSpeed(n), { "data-speed": String(n) })));
+  return el("span", { class: "replay-buttons" }, previous, play, next, speeds);
+}
+function buildBanner() {
+  $("replay-banner").replaceChildren(el("span", { class: "replay-label" }, icon("clock"), el("strong", { id: "replay-label" })),
+    replayButtons(), button(t("replay.live"), "secondary-button replay-live", backToLive));
+}
+// The slider covers the shown day within the kept history and up to now.
+function sliderBounds() {
+  const zone = displayZone(), range = replay.range;
+  const start = Math.max(dayStart(timelineDay || dayOf(nowMs(), zone), zone), range.from ?? -Infinity);
+  return [start, Math.max(start, Math.min(dayEnd(timelineDay || dayOf(nowMs(), zone), zone), replay.now()))];
+}
+function updateReplay() {
+  const active = Boolean(replay?.active);
+  document.body.classList.toggle("replaying", active);
+  $("replay-banner").hidden = !active;
+  if (active) {
+    text("replay-label", t("replay.banner", { time: zoneTime(replay.at, true) }) + (replay.failed ? " / " + t("replay.failed") : ""));
+    // Playing across midnight moves the Timeline to the next day.
+    const day = dayOf(replay.at, displayZone());
+    if (timelineDay && day !== timelineDay) { timelineDay = day; loadDayChanges(); }
+  }
+  const times = changeTimes();
+  document.querySelectorAll(".replay-buttons").forEach((group) => {
+    const [previous, play, next] = group.children;
+    play.replaceChildren(icon(replay?.playing ? "pause" : "play"));
+    play.setAttribute("aria-label", t(replay?.playing ? "replay.pause" : "replay.play"));
+    play.title = t(replay?.playing ? "replay.pause" : "replay.play");
+    play.disabled = !replay?.range.from;
+    previous.disabled = !active || !times.some((ms) => ms < replay.at - 500);
+    next.disabled = !active || !times.some((ms) => ms > replay.at + 500);
+    group.querySelectorAll(".replay-speed").forEach((node) => node.setAttribute("aria-pressed", String(Number(node.dataset.speed) === replay?.speed)));
+  });
+  if (kept.slider) {
+    const [min, max] = sliderBounds();
+    kept.slider.min = String(min); kept.slider.max = String(max);
+    if (!kept.dragging) kept.slider.value = String(active ? Math.min(Math.max(replay.at, min), max) : max);
+    kept.slider.disabled = !replay.range.from;
+    kept.time.textContent = active ? zoneTime(replay.at, false) : t("replay.liveNow");
+    kept.day.value = timelineDay;
+    const zone = displayZone();
+    if (replay.range.from) { kept.day.min = dayOf(replay.range.from, zone); kept.day.max = dayOf(replay.now(), zone); }
+  }
+  updateClock();
+}
+function replayCard() {
+  if (kept.replay) return kept.replay;
+  kept.day = el("input", { type: "date", class: "day-input", "aria-label": t("replay.day") });
+  kept.day.addEventListener("change", () => {
+    if (!kept.day.value) return;
+    timelineDay = kept.day.value;
+    loadDayChanges();
+    if (replay.active) startReplay(sliderBounds()[0]);
+    render();
+  });
+  kept.slider = el("input", { type: "range", class: "replay-slider", step: "1000", "aria-label": t("replay.time") });
+  kept.slider.addEventListener("pointerdown", () => { kept.dragging = true; });
+  kept.slider.addEventListener("pointerup", () => { kept.dragging = false; });
+  kept.slider.addEventListener("input", () => startReplay(Number(kept.slider.value)));
+  kept.time = el("output", { class: "replay-time" });
+  kept.replay = el("section", { class: "data-card replay-card" },
+    el("div", { class: "replay-heading" }, el("h2", {}, t("replay.title")), el("p", {}, t("replay.help"))),
+    el("div", { class: "replay-row" }, el("label", { class: "day-field" }, el("span", {}, t("replay.day")), kept.day),
+      replayButtons(), kept.time),
+    kept.slider);
+  return kept.replay;
+}
+function changeNode(event) {
+  const symbol = { reachable: "branches", unreachable: "branches" }[event.kind]
+    || { working: "spark", thinking: "spark", waiting: "hand", idle: "coffee", error: "heart", completed: "check", unknown: "branches", limited: "clock" }[event.state] || "clock";
+  const at = Date.parse(event.at);
+  const later = replay.active && at > replay.at;
+  return button([el("span", { class: "event-icon" }, icon(symbol)),
+    el("span", { class: "event-text" }, el("time", { datetime: event.at }, zoneTime(at, false)),
+      el("span", {}, el("strong", {}, event.name), " " + eventLabel(event)), event.project ? el("small", {}, event.project) : null)],
+  "event change-event" + (later ? " later" : ""), () => startReplay(at, true), { "aria-label": t("replay.at", { time: zoneTime(at, false) }) + ", " + event.name + " " + eventLabel(event) });
+}
+function loadDayChanges() {
+  const zone = displayZone();
+  if (!timelineDay) timelineDay = dayOf(nowMs(), zone);
+  const key = JSON.stringify([timelineDay, zone, replay.range.from]);
+  const isToday = timelineDay === dayOf(replay.now(), zone);
+  if (key === dayChangesKey && !(isToday && Date.now() - dayChangesAt > DAY_REFRESH)) return;
+  if (!replay.range.from) return;
+  dayChangesKey = key; dayChangesAt = Date.now();
+  const [start, end] = [dayStart(timelineDay, zone), dayEnd(timelineDay, zone)];
+  if (end <= replay.range.from) { dayChanges = { changes: [], agents: [], branches: [], truncated: false }; return; }
+  history.changes(Math.max(start, replay.range.from), Math.min(end, replay.now()), "")
+    .then((result) => { if (dayChangesKey === key) { dayChanges = result; render(); } })
+    .catch(() => { if (dayChangesKey === key) { dayChangesKey = ""; dayChanges = null; } });
+}
+function renderTimeline(root) {
+  loadDayChanges();
+  const q = $("search").value.trim().toLowerCase();
+  const list = dayEvents().filter((e) => !q || [e.name, e.project, eventLabel(e)].join(" ").toLowerCase().includes(q));
+  const card = el("section", { class: "data-card" }, el("h2", {}, t("timeline.dayTitle", { day: dayLabel(timelineDay, displayZone()) })),
+    !replay.range.from ? el("p", { class: "empty-list" }, t("replay.unavailable"))
+      : el("div", { class: "timeline-list day-changes" }, list.length ? list.slice(0, MAX_DAY_CHANGES).map(changeNode)
+        : el("p", { class: "empty-list" }, dayChanges ? t("timeline.none") : t("worklog.loading"))),
+    list.length > MAX_DAY_CHANGES || dayChanges?.truncated ? el("p", { class: "detail-note" }, t("timeline.truncated", { n: Math.min(list.length, MAX_DAY_CHANGES) })) : null);
+  // The list scrolls on its own; a refresh keeps its position.
+  const scrolled = root.querySelector(".day-changes")?.scrollTop || 0;
+  root.replaceChildren(replayCard(), card);
+  const box = root.querySelector(".day-changes");
+  if (box) box.scrollTop = scrolled;
+  // A new replay time brings its latest change into view.
+  if (box && replay.active && kept.scrolledFor !== replay.at) {
+    kept.scrolledFor = replay.at;
+    const reached = box.querySelector(".change-event:not(.later)");
+    if (reached) box.scrollTop = reached.offsetTop;
+  }
+}
+// Work log: one day in the chosen Branch's time zone, or browser time for all Branches.
+function worklogZone() { return worklogBranch ? branchZone(live.branches.find((b) => b.branch_id === worklogBranch)?.branch?.time) : ""; }
+function loadWorklog() {
+  const zone = worklogZone();
+  if (!worklogDay) worklogDay = dayOf(Date.now(), zone);
+  const key = JSON.stringify([worklogDay, worklogBranch, zone]);
+  const isToday = worklogDay === dayOf(Date.now(), zone);
+  if (key === worklogKey && !(isToday && Date.now() - (worklogData?.loadedAt || 0) > TODAY_REFRESH)) return;
+  worklogKey = key; worklogFailed = false;
+  if (worklogData?.key !== key) worklogData = null;
+  history.worklog(dayStart(worklogDay, zone), dayEnd(worklogDay, zone), worklogBranch)
+    .then((result) => { if (worklogKey === key) { worklogData = { ...result, key, loadedAt: Date.now() }; render(); } })
+    .catch(() => { if (worklogKey === key) { worklogFailed = true; worklogKey = ""; render(); } });
+}
+function worklogControls() {
+  if (kept.worklog) return kept.worklog;
+  kept.worklogBranch = el("select", { class: "worklog-branch-select", "aria-label": t("worklog.branch") });
+  kept.worklogBranch.addEventListener("change", () => { worklogBranch = kept.worklogBranch.value; render(); });
+  kept.worklogDay = el("input", { type: "date", class: "day-input", "aria-label": t("worklog.day") });
+  kept.worklogDay.addEventListener("change", () => { if (kept.worklogDay.value) { worklogDay = kept.worklogDay.value; render(); } });
+  const step = (days) => () => { worklogDay = shiftDay(worklogDay, days); render(); };
+  kept.worklogZone = el("small", { class: "worklog-zone" });
+  kept.worklog = el("div", { class: "worklog-controls" },
+    el("label", { class: "day-field" }, el("span", {}, t("worklog.branch")), kept.worklogBranch),
+    el("span", { class: "day-field" }, el("span", {}, t("worklog.day")),
+      el("span", { class: "day-stepper" }, button(icon("left"), "icon-button", step(-1), { "aria-label": t("worklog.previousDay"), title: t("worklog.previousDay") }),
+        kept.worklogDay, button(icon("right"), "icon-button", step(1), { "aria-label": t("worklog.nextDay"), title: t("worklog.nextDay") }))),
+    kept.worklogZone);
+  return kept.worklog;
+}
+function renderWorklog(root) {
+  const controls = worklogControls();
+  if (worklogBranch && !live.branches.some((b) => b.branch_id === worklogBranch)) worklogBranch = "";
+  kept.worklogBranch.replaceChildren(el("option", { value: "" }, t("worklog.allBranches")),
+    ...live.branches.map((b) => el("option", { value: b.branch_id }, branchName(b))));
+  kept.worklogBranch.value = worklogBranch;
+  loadWorklog();
+  const zone = worklogZone();
+  kept.worklogDay.value = worklogDay;
+  kept.worklogDay.max = dayOf(Date.now(), zone);
+  kept.worklogZone.textContent = zone ? t("worklog.zoneBranch", { zone: zone.replaceAll("_", " ") }) : t("worklog.zoneBrowser");
+  const q = $("search").value.trim().toLowerCase();
+  const branches = new Map([...live.branches, ...(worklogData?.branches || [])].map((b) => [b.branch_id, b]));
+  const rows = (worklogData?.rows || []).filter((r) => !q || [colleagueName(r), r.project_alias, branchName(branches.get(r.branch_id))]
+    .join(" ").toLowerCase().includes(q));
+  const start = replay.range.from;
+  const outside = start && dayEnd(worklogDay, zone) <= start;
+  const partial = start && !outside && dayStart(worklogDay, zone) < start;
+  const body = worklogFailed ? el("p", { class: "empty-list" }, t("worklog.failed"))
+    : !worklogData ? el("p", { class: "empty-list" }, t("worklog.loading"))
+    : outside || !start ? el("p", { class: "empty-list" }, t("worklog.outside"))
+    : rows.length ? worklogTable(rows, { colleague: colleagueName, branch: (id) => branchName(branches.get(id)),
+      project: (r) => r.project_alias || t("project.unnamed"), badge, repository: repositoryTag })
+    : el("p", { class: "empty-list" }, t("worklog.none"));
+  root.replaceChildren(el("section", { class: "data-card worklog-card" }, el("h2", {}, t("worklog.title")), controls,
+    partial ? el("p", { class: "detail-note" }, t("worklog.partial", { time: new Date(start).toLocaleString(locale(),
+      { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...(zone ? { timeZone: zone } : {}) }) })) : null, body));
+}
+// Today's work log in browser time, for waiting times.
+function refreshToday() {
+  if (!history || !replay?.range.from) return;
+  const day = dayOf(Date.now(), "");
+  if (today.key === day && Date.now() - today.at < TODAY_REFRESH - 1000) return;
+  today = { ...today, key: day, at: Date.now() };
+  history.worklog(dayStart(day, ""), Date.now(), "").then((data) => {
+    if (today.key === day) { today = { key: day, data, at: Date.now() }; if (view === "dashboard" || view === "office") render(); }
+  }).catch(() => { today = { key: "", data: today.data, at: 0 }; });
 }
 function setView(next) {
   if (next === "settings") { $("settings-dialog").showModal(); return; }
@@ -721,6 +966,7 @@ function setView(next) {
   text("page-eyebrow", t(view === "office" ? "view.office.eyebrow" : "view.other.eyebrow"));
   $("office-view").hidden = view !== "office"; $("activity-card").hidden = view !== "office";
   $("data-view").hidden = view === "office";
+  if (view === "dashboard") refreshToday();
   render();
 }
 function setConnection(key, cls) {
@@ -729,17 +975,18 @@ function setConnection(key, cls) {
   $("connection").replaceChildren(el("i", { class: "status-dot" }), t(key));
 }
 // Notification subjects carry only names, aliases, and provider initials.
-function notificationSubjects(all) {
+function notificationSubjects(all, data) {
   return [...all.map((row) => ({ id: "colleague:" + row.key, kind: "colleague", state: row.state, since: row.activity?.state_since || "",
       name: row.name, provider: providerInitials(row.agent.provider), project: row.project, branch: row.branchName,
       target: { kind: "colleague", key: row.key, branchId: row.agent.branch_id } })),
-    ...current.branches.map((b) => ({ id: "branch:" + b.branch_id, kind: "branch", reachable: Boolean(b.reachable),
+    ...data.branches.map((b) => ({ id: "branch:" + b.branch_id, kind: "branch", reachable: Boolean(b.reachable),
       branch: branchName(b), target: { kind: "branch", branchId: b.branch_id } }))];
 }
 // A notification click shows the colleague in their Branch office, or the Branches view for a Branch.
 function openNotified(target) {
   if ($("settings-dialog").open) $("settings-dialog").close();
   $("search").value = ""; stateFilter = "all"; roomFilter = "";
+  if (replay?.active) replay.stop();
   if (target.kind === "branch") { setView("branches"); return; }
   if (current.branches.some((b) => b.branch_id === target.branchId)) { branchId = target.branchId; floor = 0; }
   selectEmployee(target.key);
@@ -747,10 +994,14 @@ function openNotified(target) {
 }
 function acceptState(state) {
   if (!state || !["branches","agents","activities","contractors"].every((key) => Array.isArray(state[key]))) return false;
-  current = state; connected = true;
-  const all = rows();
-  recordEvents(all); noteCompletions(all);
-  if (!DEMO) { notifications?.observe(notificationSubjects(all), resync); resync = false; }
+  live = state; connected = true;
+  const all = rows(live);
+  recordEvents(all);
+  // While replaying, live states are recorded as a baseline: notifications are suppressed and the page is not repainted.
+  if (!DEMO) { notifications?.observe(notificationSubjects(all, live), resync || Boolean(replay?.active)); resync = false; }
+  if (replay?.active) return true;
+  current = live;
+  noteCompletions(all);
   render(); return true;
 }
 function connect(delay = 1000) {
@@ -804,6 +1055,8 @@ function changeZoom(value) {
 // Static strings, navigation, and mode text are rebuilt in place when the language changes.
 function applyLanguage() {
   translateDocument();
+  kept = {};
+  buildBanner();
   $("setting-language").value = currentLanguage();
   $("navigation").replaceChildren(...VIEWS.map(([id,symbol]) =>
     button([icon(symbol), el("span", {}, t("nav." + id))], "nav-button", () => setView(id),
@@ -827,6 +1080,7 @@ $("search").addEventListener("input", render);
 $("branch-select").addEventListener("change", (event) => { branchId = event.target.value; floor = 0; roomFilter = ""; stateFilter = "all"; render(); });
 $("all-employees").addEventListener("click", () => setView("employees"));
 $("all-activity").addEventListener("click", () => setView("timeline"));
+document.addEventListener("keydown", (event) => { if (event.key === "Escape" && replay?.active && !$("settings-dialog").open) backToLive(); });
 $("settings-button").addEventListener("click", () => setView("settings"));
 $("mode-toggle").addEventListener("click", () => setView("settings"));
 $("settings-mode-toggle").addEventListener("click", changeMode);
@@ -849,8 +1103,11 @@ lounge = createLounge($("characters"), { motionAllowed });
 walkers = createWalkers($("characters"), { motionAllowed, changed: render });
 coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
+const demoNow = Date.now();
+history = createHistory({ demo: DEMO, token: TOKEN, now: demoNow });
+replay = createReplay({ history, shown: showReplay, moved: updateReplay });
 if (DEMO) {
-  acceptState(demoState());
+  acceptState(demoState(demoNow));
   connection = ["connection.demo", "demo"];
   $("demo-note").hidden = false;
 }
@@ -861,6 +1118,9 @@ decor = mountDecor($("world"));
 furniture = mountFurniture($("world"));
 furniture.update();
 if (!DEMO) connect();
+replay.refreshRange().then(() => { refreshToday(); render(); });
+setInterval(() => replay.refreshRange(), TODAY_REFRESH);
+setInterval(refreshToday, TODAY_REFRESH);
 setInterval(render, 30000);
 setInterval(updateClock, 1000);
 setInterval(() => { updateWorkGestures($("characters")); furniture.update(); }, WORK_MOTION_INTERVAL);

@@ -66,13 +66,40 @@ A colleague is named by provider and seat, for example "Codex 2"; seat numbers a
 
 | View | Content |
 |---|---|
-| Dashboard | Counts across all Branches: on duty, waiting, errors, Branches, and a table of colleagues. |
+| Dashboard | Counts across all Branches: on duty, waiting, errors, Branches; "Waited today", the total waiting time of all colleagues since midnight (browser time) with the number of waits; "Longest current wait", the colleague waiting longest right now; and a table of colleagues. |
 | Colleagues | Every colleague with Branch, room, presence, activity, tool, condition, workload, and time in state. Idle colleagues show the stage of the Idle state: Idle (유휴), Phone (휴대폰), Dozing (조는 중), or Fika (휴게실). |
 | Projects | One card per repository with colleagues on duty and Branches. |
-| Timeline | Changes observed while the page is open. |
+| Timeline | Recorded changes of one day and the replay control (below). |
+| Work log | Time each colleague spent in each state on one day (below). |
 | Branches | Each Branch, whether it is reporting, and its last report time. |
 
-The search field filters colleagues and projects; the state chips above the office filter by activity.
+The search field filters colleagues and projects; the state chips above the office filter by activity. The Colleague detail also shows "Waited today": the waiting time since midnight (browser time) and how many times the colleague started waiting.
+
+## Timeline and replay
+
+The Timeline lists what HQ recorded on one day, newest first: colleagues starting and stopping work, waiting, errors, limits, going on or off duty, and Branches stopping or resuming reports. Times follow the time zone of the Branch shown in the office.
+
+Replay (되감기) shows the office as it was at an earlier time:
+
+- Pick a day, then move the time slider, select an entry in the list, or press play. Speeds are 1x, 10x (a minute in 6 seconds), and 60x (a minute per second). The step buttons jump to the previous or next recorded change.
+- While replaying, a banner with the replay time appears on every page. The office, lists, details, clock, and window light show that time, so the Virtual office can be watched while it plays. The banner holds the same controls.
+- "Back to live" (or Escape) returns to the current state. Live data keeps arriving during replay; browser notifications are not sent while replaying.
+- HQ keeps 30 days of history by default (Installation Section 4). An HQ upgraded from 0.1.0 has history from the upgrade on.
+
+## Work log
+
+The Work log (근무 일지) shows, for one day, how long each colleague was on duty and in each state, grouped by Branch and Project with subtotals. Durations are hours and minutes (`h:mm`).
+
+| Column | Meaning |
+|---|---|
+| On duty | Time on duty while the Branch was reporting. |
+| Working, Waiting, Idle, Error, ... | Time in each state; together they equal On duty. Rare states appear only when used. |
+| Unobserved | Time on duty during which the Branch did not report; not counted in the other columns. |
+| Waits | How many times the colleague started waiting. |
+| Longest wait | The longest single wait. |
+| Errors, Limits | How many times the colleague entered Error or Limited. |
+
+Choose a Branch to see its colleagues with days in that Branch's time zone; "All branches" uses browser time. The arrows move one day back or forward.
 
 ## When data is not fresh
 

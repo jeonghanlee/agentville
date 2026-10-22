@@ -56,8 +56,8 @@ def test_entries_into_waiting_and_error_are_announced_with_browser_texts():
     n, sent = notifier()
     n.observe(state(colleague("a", "working"), colleague("b", "working", alias="Reviewer", seat=2)), HEARD, at(0))
     n.observe(state(colleague("a", "waiting", 1), colleague("b", "error", 1, alias="Reviewer", seat=2)), HEARD, at(1))
-    assert sent == [Message("Claude 1 is waiting", "CL · alpha · Home", "agentville,waiting", "default"),
-                    Message("Reviewer has an error", "CL · alpha · Home", "agentville,error", "high")]
+    assert sent == [Message("Claude 1 is waiting", "CL \u00b7 alpha \u00b7 Home", "agentville,waiting", "default"),
+                    Message("Reviewer has an error", "CL \u00b7 alpha \u00b7 Home", "agentville,error", "high")]
     # Limited, completed, and idle are never announced.
     n.observe(state(colleague("a", "limited", 2), colleague("b", "idle", 2, alias="Reviewer", seat=2)), HEARD, at(2))
     assert len(sent) == 2
@@ -78,8 +78,8 @@ def test_branch_reachability_is_announced_once_heard_since_start():
     n.observe(state(branches=(("b1", False),)), HEARD, at(100))
     n.observe(state(branches=(("b1", True),)), HEARD, at(200))
     assert [(m.title, m.priority, m.tags) for m in sent] == [
-        ("Home 연락 끊김", "high", "agentville,unreachable"),
-        ("Home 응답 재개", "default", "agentville,reachable")]
+        ("Home \uc5f0\ub77d \ub04a\uae40", "high", "agentville,unreachable"),
+        ("Home \uc751\ub2f5 \uc7ac\uac1c", "default", "agentville,reachable")]
 
 
 def test_a_subject_is_held_for_thirty_seconds_and_sent_only_if_still_true():
@@ -197,14 +197,14 @@ def topic():
 
 def test_post_sends_title_tags_priority_and_text_body(topic):
     post = http_post(NotifyConfig(topic, token="tk_secret"))
-    post(Message("Reviewer is waiting", "CL · alpha · Home", "agentville,waiting", "default"))
-    post(Message("Home 연락 끊김", "body\nline", "agentville,unreachable", "high"))
+    post(Message("Reviewer is waiting", "CL \u00b7 alpha \u00b7 Home", "agentville,waiting", "default"))
+    post(Message("Home \uc5f0\ub77d \ub04a\uae40", "body\nline", "agentville,unreachable", "high"))
     (path, headers, body), (_, korean, _) = _Topic.received
-    assert path == "/alerts" and body == "CL · alpha · Home"
+    assert path == "/alerts" and body == "CL \u00b7 alpha \u00b7 Home"
     assert (headers["Title"], headers["Tags"], headers["Priority"]) == ("Reviewer is waiting", "agentville,waiting", "default")
     assert headers["Authorization"] == "Bearer tk_secret"
     encoded = korean["Title"]
-    assert encoded.startswith("=?UTF-8?B?") and base64.b64decode(encoded[10:-2]).decode() == "Home 연락 끊김"
+    assert encoded.startswith("=?UTF-8?B?") and base64.b64decode(encoded[10:-2]).decode() == "Home \uc5f0\ub77d \ub04a\uae40"
 
 
 def test_outbox_logs_failures_at_most_once_per_minute(topic):

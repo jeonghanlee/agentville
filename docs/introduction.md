@@ -10,7 +10,7 @@ AgentVille observes only. It never starts, resumes, answers, or interrupts an ag
 |---|---|---|
 | Collector | Every host with agents (a Branch) | Watches local Claude Code and Codex sessions and reports their state. |
 | HQ | One host | Stores the state of all Branches and serves the office page. |
-| Browser | Anywhere | Shows the office, dashboard, colleagues, projects, timeline, and Branches. |
+| Browser | Anywhere | Shows the office, dashboard, colleagues, projects, timeline with replay, work log, and Branches. |
 
 | Chapter | Content |
 |---|---|

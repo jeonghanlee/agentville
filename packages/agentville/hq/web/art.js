@@ -24,6 +24,9 @@ const ICONS = {
   hand: '<path d="M8 13V5a2 2 0 0 1 4 0v6-8a2 2 0 0 1 4 0v9-6a2 2 0 0 1 4 0v9c0 5-3 7-7 7-3 0-5-2-7-5l-3-5a2 2 0 0 1 3-2z"/>',
   heart: '<path d="M12 21 3 12C-2 5 6-1 12 6c6-7 14-1 9 6z"/>',
   spark: '<path d="m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>',
+  book: '<path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zm16 0h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/>',
+  play: '<path d="M8 5v14l11-7z"/>', pause: '<path d="M8 5v14m8-14v14"/>',
+  back: '<path d="m18 6-8 6 8 6zM6 6v12"/>', forward: '<path d="m6 6 8 6-8 6zm12 0v12"/>',
 };
 const LOOKS = [
   { hair: "#654737", light: "#8a6044", shirt: "#b67c57", dark: "#8c5b40", skin: "#efc49a", bg: "#eee2d2", style: 0 },
