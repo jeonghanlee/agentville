@@ -1,0 +1,45 @@
+{
+  "method": "thread/started",
+  "params": {
+    "thread": {
+      "agentNickname": null,
+      "agentRole": null,
+      "canAcceptDirectInput": true,
+      "cliVersion": "0.163.0",
+      "createdAt": 1767225600,
+      "cwd": "/home/user/repo",
+      "daybreakEnabled": false,
+      "environments": [],
+      "ephemeral": false,
+      "extra": {},
+      "forkedFromId": null,
+      "gitInfo": {
+        "branch": "master",
+        "sha": "<sha>",
+        "originUrl": "https://github.com/example/repo"
+      },
+      "historyMode": "paginated",
+      "id": "019a0000-0000-7000-8000-0000000000ff",
+      "model": "model-b",
+      "modelProvider": "openai",
+      "name": null,
+      "originator": "codex-tui",
+      "parentThreadId": null,
+      "path": null,
+      "preview": "<text>",
+      "projectId": "<project-id>",
+      "reasoningEffort": "medium",
+      "recencyAt": 1767225600,
+      "section": null,
+      "sectionEnteredAt": null,
+      "sessionId": "019a0000-0000-7000-8000-0000000000ff",
+      "source": "vscode",
+      "status": {
+        "type": "idle"
+      },
+      "threadSource": "system",
+      "turns": [],
+      "updatedAt": 1767225600
+    }
+  }
+}

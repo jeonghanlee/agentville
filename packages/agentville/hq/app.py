@@ -1,0 +1,284 @@
+"""HQ HTTP API: Branch ingest and browser-facing state."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import hmac
+import json
+import logging
+import math
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from importlib import resources
+from typing import Any
+from urllib.parse import urlsplit
+
+import jsonschema
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
+
+from agentville.common.protocol import load_schema
+from agentville.hq.store import Store, now_utc
+
+log = logging.getLogger(__name__)
+
+LOOPBACK = frozenset({"127.0.0.1", "::1"})
+LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+MAX_BATCH = 1000
+MAX_BODY = 4 * 1024 * 1024
+LIVE_REFRESH = 10.0
+SEND_TIMEOUT = 5.0
+
+
+def _bearer_matches(request: Request, token: str) -> bool:
+    return hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}")
+
+
+def _hostname(netloc: str) -> str | None:
+    try:
+        return urlsplit("//" + netloc).hostname
+    except ValueError:
+        return None
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"non-finite number {name}")
+
+
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("non-finite number")
+    return value
+
+
+_FORMATS = jsonschema.FormatChecker(formats=())
+
+
+@_FORMATS.checks("date-time", raises=ValueError)
+def _date_time(value: object) -> bool:
+    return not isinstance(value, str) or datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is not None
+
+
+def _encode_state(state: dict[str, Any]) -> str:
+    return json.dumps({"type": "state", "state": state}, allow_nan=False, separators=(",", ":"))
+
+
+class _Viewer:
+    """One live socket with a single-slot mailbox holding the latest state."""
+
+    def __init__(self, socket: WebSocket) -> None:
+        self.socket = socket
+        self.latest: str | None = None
+        self.ready = asyncio.Event()
+
+    def offer(self, text: str) -> None:
+        self.latest = text
+        self.ready.set()
+
+
+def create_app(
+    store: Store,
+    tokens: dict[str, str] | None = None,
+    clock: Callable[[], datetime] = now_utc,
+    retention: timedelta = timedelta(days=30),
+    loopback: frozenset[str] = LOOPBACK,
+    trust_loopback: bool = True,
+    viewer_token: str | None = None,
+    live_refresh: float = LIVE_REFRESH,
+    hosts: frozenset[str] | None = LOCAL_HOSTS,
+    server_names: frozenset[str] = frozenset(),
+    send_timeout: float = SEND_TIMEOUT,
+) -> FastAPI:
+    """Build the HQ app.
+
+    ``tokens`` maps branch_id to its bearer token. With ``trust_loopback``, a Branch
+    connecting from loopback needs no token; disable it behind a local reverse proxy.
+    ``viewer_token``, when set, is required on every read endpoint.
+    ``hosts`` lists the accepted Host header names (DNS rebinding guard); None accepts any.
+    ``server_names`` are public names of a reverse proxy, accepted as Host and as page Origin.
+    """
+    tokens = tokens or {}
+    validator = jsonschema.Draft202012Validator(load_schema(), format_checker=_FORMATS)
+    last_prune: list[datetime] = []
+
+    viewers: set[_Viewer] = set()
+    changed = asyncio.Event()
+
+    async def broadcast() -> None:
+        if not viewers:
+            return
+        text = _encode_state(await run_in_threadpool(store.state, clock()))
+        for viewer in list(viewers):
+            viewer.offer(text)
+
+    async def broadcast_loop() -> None:
+        # Ingest only signals a change; bursts coalesce into one broadcast, and
+        # reachability and idle progression are refreshed periodically.
+        while True:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(changed.wait(), live_refresh)
+            changed.clear()
+            try:
+                await broadcast()
+            except Exception:  # noqa: BLE001 - the loop must outlive one failed refresh
+                log.exception("live broadcast failed")
+
+    async def deliver(viewer: _Viewer) -> None:
+        # Each viewer has its own sender, so a stalled one never delays the others.
+        while True:
+            await viewer.ready.wait()
+            viewer.ready.clear()
+            text, viewer.latest = viewer.latest, None
+            if text is not None:
+                await asyncio.wait_for(viewer.socket.send_text(text), send_timeout)
+
+    async def drain(socket: WebSocket) -> None:
+        while (await socket.receive())["type"] != "websocket.disconnect":
+            pass
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        task = asyncio.create_task(broadcast_loop())
+        yield
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        store.close()
+
+    app = FastAPI(title="AgentVille HQ", version="0.0.1", lifespan=lifespan)
+
+    def host_allowed(netloc: str) -> bool:
+        return hosts is None or _hostname(netloc) in hosts | server_names
+
+    def origin_allowed(origin: str, host: str) -> bool:
+        parts = urlsplit(origin)
+        return parts.netloc.lower() == host.lower() or parts.hostname in server_names
+
+    @app.middleware("http")
+    async def check_host(request: Request, call_next: Callable[[Request], Any]) -> Any:
+        if not host_allowed(request.headers.get("host", "")):
+            return PlainTextResponse("invalid host", status_code=400)
+        return await call_next(request)
+
+    def authorize_branch(request: Request, branch_id: str) -> None:
+        expected = tokens.get(branch_id)
+        if expected is not None:
+            if not _bearer_matches(request, expected):
+                raise HTTPException(status_code=401, detail="invalid token")
+            return
+        client = request.client.host if request.client else ""
+        if not (trust_loopback and client in loopback):
+            raise HTTPException(status_code=401, detail="token required")
+
+    def authorize_viewer(request: Request) -> None:
+        if viewer_token is not None and not _bearer_matches(request, viewer_token):
+            raise HTTPException(status_code=401, detail="viewer token required")
+
+    def ingest_batch(branch_id: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        for message in messages:
+            error = next(validator.iter_errors(message), None)
+            if error is not None:
+                raise HTTPException(status_code=422, detail=f"schema: {error.message}")
+        now = clock()
+        if not last_prune or now - last_prune[0] >= timedelta(hours=1):
+            store.prune(now - retention)
+            last_prune[:] = [now]
+        return store.ingest(branch_id, messages, now).as_dict()
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/api/v1/ingest/messages")
+    async def ingest(request: Request) -> dict[str, Any]:
+        # Collectors send no Origin; a browser always does on cross-site POST.
+        if "origin" in request.headers:
+            raise HTTPException(status_code=403, detail="browser requests are not accepted")
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+            raise HTTPException(status_code=415, detail="application/json required")
+        # Authorization needs the batch's branch_id; reject callers holding no known token before reading it.
+        client = request.client.host if request.client else ""
+        if not (trust_loopback and client in loopback) and not any(_bearer_matches(request, t) for t in tokens.values()):
+            raise HTTPException(status_code=401, detail="invalid token" if "authorization" in request.headers else "token required")
+        length = request.headers.get("content-length")
+        if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
+            raise HTTPException(status_code=413, detail="body too large")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > MAX_BODY:
+                raise HTTPException(status_code=413, detail="body too large")
+        try:
+            body = json.loads(raw, parse_constant=_reject_constant, parse_float=_finite_float)
+        except (ValueError, RecursionError) as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON") from exc
+        messages = body.get("messages") if isinstance(body, dict) else None
+        if not isinstance(messages, list) or not messages or len(messages) > MAX_BATCH:
+            raise HTTPException(status_code=400, detail="messages must be a non-empty list")
+        ids = [m.get("branch_id") if isinstance(m, dict) else None for m in messages]
+        if not all(isinstance(i, str) for i in ids) or len(set(ids)) != 1:
+            raise HTTPException(status_code=400, detail="one branch per batch")
+        branch_id = ids[0]
+        authorize_branch(request, branch_id)
+        result = await run_in_threadpool(ingest_batch, branch_id, messages)
+        changed.set()
+        return result
+
+    @app.websocket("/ws/v1/live")
+    async def live(socket: WebSocket) -> None:
+        host = socket.headers.get("host", "")
+        origin = socket.headers.get("origin")
+        # Browsers apply no CORS to WebSockets; accept only same-origin pages.
+        # Rejections are sent after accept() so the page receives the close code.
+        if not host_allowed(host) or (origin is not None and not origin_allowed(origin, host)):
+            reject = 4403
+        elif viewer_token is not None and not hmac.compare_digest(socket.query_params.get("token", ""), viewer_token):
+            reject = 4401
+        else:
+            reject = None
+        await socket.accept()
+        if reject is not None:
+            await socket.close(code=reject)
+            return
+        viewer = _Viewer(socket)
+        viewer.offer(_encode_state(await run_in_threadpool(store.state, clock())))
+        viewers.add(viewer)
+        sender = asyncio.create_task(deliver(viewer))
+        receiver = asyncio.create_task(drain(socket))
+        try:
+            await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            viewers.discard(viewer)
+            sender.cancel()
+            receiver.cancel()
+        if receiver.done() and not receiver.cancelled():
+            receiver.exception()
+        if sender.done() and not sender.cancelled() and sender.exception() is not None:
+            # A stalled or broken viewer; closing must not hang this handler either.
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(socket.close(), 1.0)
+
+    @app.get("/api/v1/state", dependencies=[Depends(authorize_viewer)])
+    def state() -> dict[str, Any]:
+        return store.state(clock())
+
+    @app.get("/api/v1/branches", dependencies=[Depends(authorize_viewer)])
+    def branches() -> list[dict[str, Any]]:
+        return store.state(clock())["branches"]
+
+    @app.get("/api/v1/agents", dependencies=[Depends(authorize_viewer)])
+    def agents() -> list[dict[str, Any]]:
+        return store.state(clock())["agents"]
+
+    @app.get("/api/v1/stats", dependencies=[Depends(authorize_viewer)])
+    def stats() -> dict[str, Any]:
+        return {"ingest": store.totals.as_dict()}
+
+    web = resources.files("agentville.hq").joinpath("web")
+    app.mount("/", StaticFiles(directory=str(web), html=True), name="web")
+    return app

@@ -1,0 +1,8 @@
+{"at": "2026-01-01T00:00:00.000Z", "op": "appserver_thread", "file": "appserver/001-thread.json"}
+{"at": "2026-01-01T00:00:01.000Z", "op": "appserver_notify", "file": "appserver/002-thread-status-changed.json"}
+{"at": "2026-01-01T00:00:01.000Z", "op": "log_append", "path": "sessions/2026/01/01/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "file": "logs/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "lines": [0, 3]}
+{"at": "2026-01-01T00:00:02.000Z", "op": "log_append", "path": "sessions/2026/01/01/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "file": "logs/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "lines": [3, 4]}
+{"at": "2026-01-01T00:00:03.000Z", "op": "log_append", "path": "sessions/2026/01/01/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "file": "logs/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "lines": [4, 6]}
+{"at": "2026-01-01T00:00:04.000Z", "op": "log_append", "path": "sessions/2026/01/01/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "file": "logs/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "lines": [6, 7]}
+{"at": "2026-01-01T00:00:05.000Z", "op": "log_append", "path": "sessions/2026/01/01/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "file": "logs/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-00000000000a.jsonl", "lines": [7, 8]}
+{"at": "2026-01-01T00:00:05.000Z", "op": "appserver_notify", "file": "appserver/003-thread-status-changed.json"}

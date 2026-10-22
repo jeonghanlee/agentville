@@ -1,0 +1,12 @@
+AgentVille
+Copyright 2026 Jeong Han Lee
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Artwork
+-------
+The images in packages/agentville/hq/web/*.png were generated with
+OpenAI image generation. Generation inputs are recorded in
+docs/design/*.prompt.txt. No third-party or brand assets are included.
+The artwork is distributed under the repository license (Apache-2.0).
+See docs/design/artwork.md.

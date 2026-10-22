@@ -1,0 +1,10 @@
+provider: claude
+version: 2.1.303
+scenario: S08
+title: Model and effort changes map to conditions by the default rules
+expect:
+- {model: null, effort: null, condition: normal, after: 1}
+- {model: model-a, effort: high, condition: study-mode, after: 5}
+- {model: model-c, effort: low, condition: light, after: 9}
+- {model: model-c, effort: medium, condition: normal, after: 13}
+- {model: model-a, effort: xhigh, condition: study-mode, after: 17}

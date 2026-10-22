@@ -1,0 +1,41 @@
+provider: claude
+version: 2.1.303
+scenario: S04
+title: Agent tool launches a subagent; parent exit ends an unfinished one
+expect:
+- state: idle
+  contractors: []
+  after: 1
+- state: working
+  tool: Agent
+  contractors:
+  - {state: working, tool: null}
+  after: 4
+- contractors:
+  - {state: working, tool: null}
+  after: 6
+- state: working
+  tool: Agent
+  contractors:
+  - {state: working, tool: Read}
+  after: 7
+- contractors:
+  - {state: working, tool: null}
+  after: 8
+- contractors:
+  - {state: idle, tool: null}
+  after: 9
+- state: working
+  tool: null
+  contractors: []
+  contractors_ended: 1
+  after: 10
+- {state: idle, after: 12}
+- contractors:
+  - {state: working, tool: null}
+  contractors_ended: 1
+  after: 15
+- presence: off_duty
+  contractors: []
+  contractors_ended: 2
+  after: 16

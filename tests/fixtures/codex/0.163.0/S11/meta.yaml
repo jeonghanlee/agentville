@@ -1,0 +1,12 @@
+provider: codex
+version: 0.163.0
+scenario: S11
+title: A thread outside any repository works in the Common Office
+expect:
+- {project: github.com/example/repo, seat: 1, ref: r, presence: on_duty, after: 1}
+- {project: common-office, seat: 1, ref: c, presence: on_duty, state: idle, agent_count: 2, after: 2}
+- {project: common-office, state: working, tool: exec_command, after: 5}
+- {project: github.com/example/repo, state: idle, after: 5}
+- {project: common-office, state: idle, same_as: c, after: 7}
+- {project: common-office, seat: 1, presence: off_duty, same_as: c, after: 8}
+- {project: github.com/example/repo, seat: 1, presence: on_duty, same_as: r, after: 8}

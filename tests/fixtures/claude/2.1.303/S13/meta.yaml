@@ -1,0 +1,19 @@
+provider: claude
+version: 2.1.303
+scenario: S13
+title: 'API error: error persists through turn end and idle until activity resumes'
+expect:
+- {state: idle, after: 1}
+- {state: working, after: 3}
+- {state: error, model: null, after: 4}
+- {state: error, after: 5}
+- {state: error, after: 6}
+- {state: working, after: 7}
+- {state: working, after: 8}
+- state: idle
+  model: model-a
+  states_since_start: [unknown, idle, working, error, working, completed, idle]
+  after: 10
+- {state: error, model: model-a, after: 13}
+- {state: error, after: 14}
+- {presence: off_duty, after: 15}

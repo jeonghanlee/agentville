@@ -1,0 +1,11 @@
+Asset: packages/agentville/hq/web/office.png
+Source: OpenAI built-in image generation tool
+Purpose: Original virtual office background; no third-party artwork or brand assets.
+
+Use case: stylized-concept
+Asset type: production game background for an interactive virtual office app.
+Create a beautiful richly detailed ORIGINAL ISOMETRIC PIXEL ART OFFICE DOLLHOUSE. No people: interactive characters will be overlaid by the app.
+A single cutaway office floor with a raised warm oak foundation, rear exterior walls and low interior dividers. Five connected rooms: large project studio at back-left with four wooden computer desks, sage chairs, bookshelves; smaller project studio at back-right with two desks and dusty lavender details; shared desk nook front-left; Fika lounge front-center with a terracotta sofa, cream rug, coffee table, espresso machine; small wellness room front-right with a mint cabinet and a single tidy bed. Door openings connect the rooms. Many thoughtful details: potted plants, monstera, mugs, lamps, headphones, books, miniature abstract wall art, tiny glowing screens with abstract pixels, tall windows with sunlight.
+Polished cozy indie game pixel art with deliberate square pixels, crisp 2:1 isometric geometry, detailed wood grain, precise stepped outlines and beautiful warm pixel shadows. Warm butter cream, sage, warm oak, terracotta and dusty lavender palette. Rich and inviting yet organized. Furniture at consistent scale and perspective.
+Landscape 3:2 composition. Entire floor visible and nearly filling the canvas with 5 percent transparent margin. Orthographic isometric view from above, two rear walls visible, front walls cut away. Clear floor spaces around desks for interactive characters.
+True transparent background; no people, no animals, no characters, no writing, no text, no labels, no typography, no logos, no UI, no watermark. High resolution detailed pixel art, not 3D render, not blurry.

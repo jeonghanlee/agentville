@@ -1,0 +1,13 @@
+[Unit]
+Description=AgentVille HQ
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/agentville-hq --host 127.0.0.1 --port 8470
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+SuccessExitStatus=143
+
+[Install]
+WantedBy=default.target

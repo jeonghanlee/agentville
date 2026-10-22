@@ -1,0 +1,19 @@
+provider: codex
+version: 0.163.0
+scenario: S06
+title: Resume returns to the thread's Employee; fork takes a free seat
+expect:
+- {seat: 1, ref: a, session_id: 019a0000-0000-7000-8000-00000000000a, after: 1}
+- {seat: 2, ref: b, session_id: 019a0000-0000-7000-8000-00000000000b, after: 2}
+- {seat: 2, state: idle, after: 10}
+- {seat: 1, presence: off_duty, same_as: a, after: 11}
+- {seat: 2, presence: off_duty, same_as: b, after: 12}
+- {seat: 2, presence: on_duty, same_as: b, session_id: 019a0000-0000-7000-8000-00000000000b, state: idle, after: 13}
+- {seat: 1, presence: off_duty, same_as: a, after: 13}
+- {seat: 2, state: working, tool: exec_command, workload: 1, after: 15}
+- {seat: 2, state: idle, after: 17}
+- {seat: 1, presence: on_duty, same_as: a, session_id: 019a0000-0000-7000-8000-00000000000f, state: idle, after: 18}
+- {seat: 1, state: working, tool: exec_command, after: 21}
+- {seat: 2, state: idle, after: 21}
+- {seat: 1, presence: off_duty, same_as: a, after: 22}
+- {seat: 1, presence: on_duty, same_as: a, session_id: 019a0000-0000-7000-8000-00000000000a, agent_count: 2, after: 23}

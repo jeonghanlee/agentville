@@ -1,0 +1,12 @@
+{
+  "method": "thread/status/changed",
+  "params": {
+    "threadId": "019a0000-0000-7000-8000-00000000000a",
+    "status": {
+      "type": "active",
+      "activeFlags": [
+        "waitingOnApproval"
+      ]
+    }
+  }
+}

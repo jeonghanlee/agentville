@@ -1,0 +1,13 @@
+[Unit]
+Description=AgentVille Branch Collector
+After=agentville-hq.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/agentville-collector
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

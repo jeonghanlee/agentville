@@ -1,0 +1,48 @@
+{
+  "method": "thread/started",
+  "params": {
+    "thread": {
+      "agentNickname": null,
+      "agentRole": null,
+      "canAcceptDirectInput": true,
+      "cliVersion": "0.163.0",
+      "createdAt": 1767225600,
+      "cwd": "/home/user/repo",
+      "daybreakEnabled": false,
+      "environments": [],
+      "ephemeral": false,
+      "extra": {},
+      "forkedFromId": null,
+      "gitInfo": {
+        "branch": "master",
+        "sha": "<sha>",
+        "originUrl": "https://github.com/example/repo"
+      },
+      "historyMode": "paginated",
+      "id": "019a0000-0000-7000-8000-0000000000ab",
+      "model": "model-b",
+      "modelProvider": "openai",
+      "name": null,
+      "originator": "codex-tui",
+      "parentThreadId": "019a0000-0000-7000-8000-00000000000a",
+      "path": "/home/user/.codex/sessions/2026/01/01/rollout-2026-01-01T00-00-00-019a0000-0000-7000-8000-0000000000ab.jsonl",
+      "preview": "<text>",
+      "projectId": "<project-id>",
+      "reasoningEffort": "medium",
+      "recencyAt": 1767225600,
+      "section": null,
+      "sectionEnteredAt": null,
+      "sessionId": "019a0000-0000-7000-8000-0000000000ab",
+      "source": {
+        "subAgent": "review"
+      },
+      "status": {
+        "type": "active",
+        "activeFlags": []
+      },
+      "threadSource": "user",
+      "turns": [],
+      "updatedAt": 1767225600
+    }
+  }
+}

@@ -1,0 +1,543 @@
+<title>AgentVille HQ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=DotGothic16&display=swap">
+<style>
+/* Layout: navy app rail + light workspace; one isometric Branch floor as the hero, people list and events at the side. */
+:root {
+  color-scheme: light;
+  --rail: #151b35;
+  --rail-2: #212a4d;
+  --rail-text: #d6dbf0;
+  --rail-muted: #8e96b8;
+  --ground: #eef1f7;
+  --card: #ffffff;
+  --line: #e2e6ef;
+  --text: #1c2135;
+  --muted: #586079;
+  --faint: #8a90a6;
+  --accent: #4f74f0;
+  --work: #23a866;
+  --think: #8a6cf0;
+  --wait: #e99a0c;
+  --idle: #9aa1b6;
+  --error: #e0474c;
+  --claude: #d9774f;
+  --codex: #2f9e8f;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --pixel: "DotGothic16", "IBM Plex Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--ground); }
+body { margin: 0; color: var(--text); font: 14px/1.5 var(--sans); }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100vh; }
+
+/* ---------- rail ---------- */
+.rail {
+  background: var(--rail); color: var(--rail-text); display: flex; flex-direction: column; gap: 22px;
+  padding-block: 18px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px;
+}
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; line-height: 1.2; }
+.logo small { display: block; font-weight: 500; font-size: 12px; color: var(--rail-muted); }
+.logo-mark { width: 38px; height: 38px; border-radius: 10px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav a {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px;
+  color: var(--rail-text); text-decoration: none; font-weight: 500;
+}
+.nav a svg { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.nav a:hover { background: var(--rail-2); }
+.nav a[aria-current="page"] { background: var(--accent); color: #fff; }
+.host-card { margin-top: auto; background: var(--rail-2); border-radius: 12px; padding: 14px; font-size: 12px; color: var(--rail-muted); display: flex; flex-direction: column; gap: 4px; }
+.host-card b { color: var(--rail-text); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.ok { width: 8px; height: 8px; border-radius: 50%; background: var(--work); flex: none; }
+
+/* ---------- workspace ---------- */
+.work { min-width: 0; display: flex; flex-direction: column; gap: 16px; padding-block: 16px 0; padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-left: 16px; }
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.search { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; }
+.search svg { width: 16px; height: 16px; stroke: var(--faint); fill: none; stroke-width: 2; flex: none; }
+.search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 14px var(--sans); color: var(--text); padding: 10px 0; }
+.search kbd { font: 11px var(--mono); color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+.counts { display: flex; flex-wrap: wrap; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.counts button {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; border-radius: 7px;
+  font: 500 13px var(--sans); color: var(--muted); padding: 6px 10px; cursor: pointer;
+}
+.counts button[aria-pressed="true"] { background: var(--ground); color: var(--text); }
+.counts b { font: 600 13px var(--mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.sd { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.branch-select { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font: 500 14px var(--sans); color: var(--text); cursor: pointer; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 10px; }
+.card-head h2 { margin: 0; font-size: 15px; font-weight: 700; text-wrap: balance; }
+.card-head .more { font-size: 12px; font-weight: 500; text-decoration: none; }
+
+/* ---------- scene ---------- */
+.scene-card { overflow: hidden; }
+.scene-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 14px 16px 6px; }
+.scene-head h1 { margin: 0; font-size: 17px; font-weight: 700; }
+.scene-head span { font-size: 13px; color: var(--muted); }
+.stage { position: relative; background: linear-gradient(#f6f8fc, #e9eef7); }
+.stage canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.bubbles { position: absolute; inset: 0; pointer-events: none; }
+.bubble {
+  position: absolute; transform: translate(-50%, -100%); pointer-events: auto;
+  margin-top: -6px; background: var(--card); border-radius: 7px; padding: 3px 7px; box-shadow: 0 2px 6px rgba(28, 33, 53, .16);
+  display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 10.5px; line-height: 1.2; cursor: pointer;
+}
+.bubble::after { content: ""; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; background: var(--card); transform: translateX(-50%) rotate(45deg); border-radius: 2px; }
+.bubble .who { display: flex; align-items: center; gap: 5px; font-weight: 600; color: var(--text); position: relative; z-index: 1; }
+.bubble .what { display: flex; align-items: center; gap: 5px; color: var(--muted); position: relative; z-index: 1; }
+.bubble .tag { font: 600 9px var(--sans); color: #fff; background: var(--accent); border-radius: 4px; padding: 0 4px; }
+.bubble.sel { outline: 2px solid var(--accent); z-index: 2; }
+.bubble:hover { z-index: 3; }
+.pv { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 4px; color: #fff; font: 700 8px var(--mono); flex: none; }
+.pv.claude { background: var(--claude); }
+.pv.codex { background: var(--codex); }
+.rooms-strip { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 14px; border-top: 1px solid var(--line); }
+.room-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 12px; color: var(--muted); }
+.room-chip i { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .08); }
+.room-chip b { color: var(--text); font-weight: 600; }
+@media (max-width: 720px) { .bubble .what { display: none; } .bubble { padding: 4px 7px; } }
+
+/* ---------- side ---------- */
+.side { display: flex; flex-direction: column; gap: 16px; }
+.people { list-style: none; margin: 0; padding: 0 8px 8px; }
+.people li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 8px; border-radius: 10px; }
+.people li + li { border-top: 1px solid var(--line); }
+.people li.sel { background: #f2f5fe; border-top-color: transparent; }
+.avatar { width: 34px; height: 34px; border-radius: 9px; background: var(--ground); display: grid; place-items: center; overflow: hidden; }
+.avatar canvas { width: 24px; height: 36px; image-rendering: pixelated; margin-top: 10px; }
+.p-name { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.p-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-sub { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font: 600 11px var(--sans); border-radius: 5px; padding: 1px 6px; }
+.p-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.p-right time { font: 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.p-right svg { width: 54px; height: 16px; display: block; }
+.events { list-style: none; margin: 0; padding: 0 16px 12px; }
+.events li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 0; font-size: 13px; }
+.events li + li { border-top: 1px solid var(--line); }
+.events .sd { transform: translateY(-1px); }
+.events span { color: var(--muted); }
+.events span b { color: var(--text); font-weight: 600; }
+.events time { font: 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* ---------- status bar ---------- */
+.statusbar {
+  position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center;
+  background: var(--card); border-top: 1px solid var(--line); margin-left: -16px; margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-size: 13px; color: var(--muted);
+}
+.statusbar b { color: var(--text); font-weight: 600; }
+.statusbar .mono { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; align-items: center; gap: 8px; }
+
+@media (max-width: 1180px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { flex-direction: row; flex-wrap: wrap; align-items: center; padding-right: max(16px, env(safe-area-inset-right, 0px)); gap: 12px; }
+  .nav { flex-direction: row; overflow-x: auto; flex: 1 1 100%; }
+  .nav a { white-space: nowrap; }
+  .host-card { display: none; }
+  .work { padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  .statusbar { margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .blink { animation: blink 1.2s steps(2, jump-none) infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+}
+</style>
+
+<div class="app">
+  <aside class="rail" aria-label="메뉴">
+    <div class="logo">
+      <span class="logo-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 11 11" style="shape-rendering:crispEdges">
+          <rect x="1" y="4" width="9" height="6" fill="#ffffff"/><rect x="2" y="2" width="7" height="2" fill="#ffd36b"/><rect x="4" y="0" width="3" height="2" fill="#ffd36b"/>
+          <rect x="2" y="5" width="2" height="2" fill="#4f74f0"/><rect x="7" y="5" width="2" height="2" fill="#4f74f0"/><rect x="5" y="7" width="1" height="3" fill="#4f74f0"/>
+        </svg>
+      </span>
+      <span>AgentVille<small>에이전트 가상 오피스</small></span>
+    </div>
+    <nav class="nav">
+      <a href="#" aria-current="page"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>가상 오피스</a>
+      <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>대시보드</a>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.6c2.5.2 4.3 1.9 5 4.9"/></svg>사원</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>프로젝트</a>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>타임라인</a>
+      <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>지점</a>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.4 19.6a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1.5a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 3 7.4a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V1.5a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>설정</a>
+    </nav>
+    <div class="host-card">
+      <b><span class="ok" aria-hidden="true"></span>Home · 본사</b>
+      <span>Debian 13 · Seoul</span>
+      <span>사원 9명 출근 · Contractor 1</span>
+      <span>1초 전 갱신</span>
+    </div>
+  </aside>
+
+  <div class="work">
+    <div class="topbar">
+      <label class="search" for="q">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="q" type="search" placeholder="사원, 프로젝트, 지점 검색">
+        <kbd>Ctrl K</kbd>
+      </label>
+      <div class="counts" role="group" aria-label="상태별 사원 수">
+        <button type="button" aria-pressed="true">전체 <b>10</b></button>
+        <button type="button" aria-pressed="false"><i class="sd" style="background:var(--work)"></i>작업 <b>3</b></button>
+        <button type="button" aria-pressed="false"><i class="sd" style="background:var(--think)"></i>생각 <b>1</b></button>
+        <button type="button" aria-pressed="false"><i class="sd" style="background:var(--wait)"></i>대기 <b>1</b></button>
+        <button type="button" aria-pressed="false"><i class="sd" style="background:var(--idle)"></i>유휴 <b>4</b></button>
+        <button type="button" aria-pressed="false"><i class="sd" style="background:var(--error)"></i>오류 <b>1</b></button>
+      </div>
+      <button class="branch-select" type="button"><span class="ok" aria-hidden="true"></span>Home · 본사
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="fill:none;stroke:currentColor;stroke-width:2.4"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+
+    <div class="grid">
+      <section class="card scene-card" aria-labelledby="scene-h">
+        <div class="scene-head">
+          <h1 id="scene-h">Home 지점 · 1층</h1>
+          <span>방 5개 · 출근 10명 · 14:20 낮</span>
+        </div>
+        <div class="stage" id="stage">
+          <canvas id="floor" width="400" height="252" role="img" aria-label="Home 지점 1층. agentville 방에 4명, EPICS-env 방에 2명, 공용 사무실에 1명, 휴게실에 2명, 양호실에 1명이 있습니다."></canvas>
+          <div class="bubbles" id="bubbles"></div>
+        </div>
+        <div class="rooms-strip" id="rooms"></div>
+      </section>
+
+      <div class="side">
+        <section class="card" aria-labelledby="people-h">
+          <div class="card-head"><h2 id="people-h">출근한 사원</h2><a class="more" href="#">모두 보기</a></div>
+          <ul class="people" id="people"></ul>
+        </section>
+        <section class="card" aria-labelledby="events-h">
+          <div class="card-head"><h2 id="events-h">최근 이벤트</h2><a class="more" href="#">타임라인</a></div>
+          <ol class="events">
+            <li><i class="sd" style="background:var(--think)"></i><span><b>Claude 2</b> 생각 시작 · agentville</span><time>1분 전</time></li>
+            <li><i class="sd" style="background:var(--wait)"></i><span><b>Codex 1</b> 승인 요청 · agentville</span><time>2분 전</time></li>
+            <li><i class="sd" style="background:#f2b705"></i><span><b>Claude 1</b> Contractor 고용</span><time>4분 전</time></li>
+            <li><i class="sd" style="background:var(--error)"></i><span><b>Claude</b> 양호실로 이동 · API 529</span><time>9분 전</time></li>
+            <li><i class="sd" style="background:var(--idle)"></i><span><b>Claude 2</b> 졸기 시작 · EPICS-env</span><time>11분 전</time></li>
+            <li><i class="sd" style="background:var(--work)"></i><span><b>Codex 1</b> 출근 · 공용 사무실</span><time>23분 전</time></li>
+          </ol>
+        </section>
+      </div>
+    </div>
+
+    <footer class="statusbar" aria-label="지점 상태">
+      <span class="seg"><span class="ok" aria-hidden="true"></span><b>Home</b> 본사 · 출근 9 <span class="mono">heartbeat 4s</span></span>
+      <span class="seg"><span class="ok" aria-hidden="true"></span><b>Office</b> · 출근 1 <span class="mono">heartbeat 11s</span></span>
+      <span class="seg"><span class="ok blink" style="background:var(--idle)" aria-hidden="true"></span><b>Minas Tirith</b> · 연락 끊김 <span class="mono">14m</span></span>
+    </footer>
+  </div>
+</div>
+
+<script>
+// Example data only. The floor is drawn on a 400x252 pixel canvas in 2:1 isometric projection.
+const LW = 400, LH = 252, OX = 160, OY = 64, WALL = 56, GW = 26, GH = 18;
+const iso = (gx, gy) => [OX + (gx - gy) * 8, OY + (gx + gy) * 4];
+const ctx = document.getElementById("floor").getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const STATE = { work: "#23a866", think: "#8a6cf0", wait: "#e99a0c", idle: "#9aa1b6", error: "#e0474c" };
+
+function poly(pts, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+  ctx.fill();
+}
+const up = ([x, y], h) => [x, y - h];
+
+function box(gx, gy, w, d, h, top, left, right) {
+  const p0 = iso(gx, gy), p1 = iso(gx + w, gy), p2 = iso(gx + w, gy + d), p3 = iso(gx, gy + d);
+  poly([p3, p2, up(p2, h), up(p3, h)], left);
+  poly([p1, p2, up(p2, h), up(p1, h)], right);
+  poly([up(p0, h), up(p1, h), up(p2, h), up(p3, h)], top);
+}
+
+// ---------- pixel sprites ----------
+const PERSON = [
+  "...HHHHHH...",
+  "..HHHHHHHH..",
+  ".HHHHHHHHHH.",
+  ".HHSSSSSSHH.",
+  ".HSSSSSSSSH.",
+  ".HSEWSSEWSH.",
+  ".HSEESSEESH.",
+  "..SBSSSSBS..",
+  "...SSMMSS...",
+  "....SSSS....",
+  "..CCCCCCCC..",
+  ".SCCCCCCCCS.",
+  ".SCCCCCCCCS.",
+  "..CCCCCCCC..",
+  "..PPPPPPPP..",
+  "..PPP..PPP..",
+  "..FFF..FFF..",
+];
+function person(opts) {
+  const rows = PERSON.map((r) => r.split(""));
+  if (opts.sleep) { rows[5] = ".HSSSSSSSSH.".split(""); rows[6] = ".HSEESSEESH.".split(""); }
+  if (opts.phones) { rows[2][0] = "K"; rows[3][0] = "K"; rows[4][0] = "K"; rows[2][11] = "K"; rows[3][11] = "K"; rows[4][11] = "K"; rows[1][1] = "K"; rows[1][10] = "K"; rows[0][2] = "K"; rows[0][9] = "K"; }
+  if (opts.hat) { rows[0] = "..YYYYYYYY..".split(""); rows[1] = ".YYYYYYYYYY.".split(""); rows[2] = "YYYYYYYYYYYY".split(""); }
+  if (opts.wave) { rows[3][11] = "S"; rows[4][11] = "S"; rows[5][11] = "S"; rows[6][11] = "S"; rows[7][11] = "S"; rows[8][10] = "S"; }
+  return { rows, pal: { H: opts.hair, S: "#f7d4b4", E: "#2a2240", W: "#ffffff", B: "#f4a1ae", M: "#c4566f", C: opts.shirt, P: "#3d4470", F: "#262a44", K: "#3a3f5e", Y: "#ffc93c" } };
+}
+function sprite(spr, ax, ay) {
+  const h = spr.rows.length, w = spr.rows[0].length;
+  const x0 = Math.round(ax - w / 2), y0 = Math.round(ay - h);
+  spr.rows.forEach((row, j) => row.forEach((ch, i) => {
+    if (ch !== "." && spr.pal[ch]) { ctx.fillStyle = spr.pal[ch]; ctx.fillRect(x0 + i, y0 + j, 1, 1); }
+  }));
+}
+const grid = (rows, pal) => ({ rows: rows.map((r) => r.split("")), pal });
+const LAPTOP = (light) => grid(["KKKKKKKKKK", "KLLLLLLLLK", "KLLLLLLLLK", "KLLLGGLLLK", "KLLLGGLLLK", "KLLLLLLLLK", "KKKKKKKKKK"], { K: "#4a5070", L: "#dfe4f0", G: light });
+const MONITOR = (light) => grid(["KKKKKKKKK", "KGGGGGGGK", "KGWWGGGGK", "KGGGWWWGK", "KGGGGGGGK", "KKKKKKKKK", "....K....", "..KKKKK.."], { K: "#3a3f5e", G: light, W: "#ffffff" });
+const PLANT = grid(["...LL.L...", "..LLLLLL..", ".LLDLLDLL.", "LLDLLLLDLL", ".LLLDDLLL.", "..LLLLLL..", "...PPPP...", "..PPPPPP..", "..PPPPPP..", "...PPPP..."], { L: "#5fbf7f", D: "#3f9a5f", P: "#d9805a" });
+const CAT = grid(["O.......O..", "OO.....OO..", "OWWWWWWWO..", "WWEWWWEWW..", "WWWWNWWWWOO", ".WWWWWWWWWO", ".WOWWWWOW.."], { O: "#e8964a", W: "#fff6ea", E: "#2a2240", N: "#f4a1ae" });
+const CUP = grid(["WWW.", "WCWW", "WWW."], { W: "#ffffff", C: "#7a4a2a" });
+const CROSS = grid(["WWWWW", "WWRWW", "WRRRW", "WWRWW", "WWWWW"], { W: "#ffffff", R: "#e0474c" });
+
+// ---------- rooms ----------
+const ROOMS = [
+  { id: "agv", name: "agentville", note: "사원 4", x0: 0, y0: 0, x1: 14, y1: 10, floor: ["#ead5b3", "#e3cba5"], wall: ["#f7dbe2", "#efc9d3"] },
+  { id: "epics", name: "EPICS-env", note: "사원 2", x0: 14, y0: 0, x1: 26, y1: 10, floor: ["#e1eaf6", "#d6e1f1"], wall: ["#dce9f8", "#c9dbf1"] },
+  { id: "co", name: "공용 사무실", note: "저장소 밖 1", x0: 0, y0: 10, x1: 8, y1: 18, floor: ["#e2efdf", "#d6e8d2"], wall: ["#e3f2df", "#d0e6ca"] },
+  { id: "lounge", name: "휴게실", note: "Fika 2", x0: 8, y0: 10, x1: 19, y1: 18, floor: ["#f5e5c6", "#efdab6"] },
+  { id: "inf", name: "양호실", note: "오류 1", x0: 19, y0: 10, x1: 26, y1: 18, floor: ["#ede7f8", "#e3dbf3"] },
+];
+const roomAt = (gx, gy) => ROOMS.find((r) => gx >= r.x0 && gx < r.x1 && gy >= r.y0 && gy < r.y1);
+
+function drawFloor() {
+  poly([iso(0, GH), iso(GW, GH), up(iso(GW, GH), -6), up(iso(0, GH), -6)], "#cbb791");
+  poly([iso(GW, 0), iso(GW, GH), up(iso(GW, GH), -6), up(iso(GW, 0), -6)], "#b7a27c");
+  for (let gx = 0; gx < GW; gx++) for (let gy = 0; gy < GH; gy++) {
+    const r = roomAt(gx, gy);
+    poly([iso(gx, gy), iso(gx + 1, gy), iso(gx + 1, gy + 1), iso(gx, gy + 1)], r.floor[(gx + gy) % 2]);
+  }
+  const rug = (a, b, c, d, fill, edge) => {
+    poly([iso(a, b), iso(c, b), iso(c, d), iso(a, d)], edge);
+    poly([iso(a + .4, b + .4), iso(c - .4, b + .4), iso(c - .4, d - .4), iso(a + .4, d - .4)], fill);
+  };
+  rug(1.5, 1, 13, 9, "#f5e3e8", "#e6bfca");
+  rug(15.5, 1, 25, 8.6, "#eaf1fc", "#c9daf2");
+  rug(9.4, 11.4, 18, 17.4, "#f9dfcd", "#ecc0a2");
+}
+
+// Back walls: along gy=0 (right-hand) and gx=0 (left-hand).
+const P = (gx, z) => [OX + gx * 8, OY + gx * 4 - z];
+const Q = (gy, z) => [OX - gy * 8, OY + gy * 4 - z];
+function windowOn(fn, a, b, z1, z2) {
+  poly([fn(a - .3, z1 - 2), fn(b + .3, z1 - 2), fn(b + .3, z2 + 2), fn(a - .3, z2 + 2)], "#ffffff");
+  poly([fn(a, z1), fn(b, z1), fn(b, z2), fn(a, z2)], "#bfe5fb");
+  poly([fn(a, z1), fn(b, z1), fn(b, z1 + 6), fn(a, z1 + 6)], "#8fd19f");
+  poly([fn(a + (b - a) * .25, z2 - 8), fn(a + (b - a) * .55, z2 - 8), fn(a + (b - a) * .55, z2 - 5), fn(a + (b - a) * .25, z2 - 5)], "#ffffff");
+  const mid = (a + b) / 2;
+  poly([fn(mid - .1, z1), fn(mid + .1, z1), fn(mid + .1, z2), fn(mid - .1, z2)], "#ffffff");
+}
+function drawWalls() {
+  [[0, 14, ROOMS[0].wall[0]], [14, 26, ROOMS[1].wall[0]]].forEach(([a, b, c]) => {
+    poly([P(a, 0), P(b, 0), P(b, WALL), P(a, WALL)], c);
+    poly([P(a, 0), P(b, 0), P(b, 4), P(a, 4)], "#d7c3a3");
+    poly([P(a, WALL - 3), P(b, WALL - 3), P(b, WALL), P(a, WALL)], "#ffffff");
+  });
+  [[0, 10, ROOMS[0].wall[1]], [10, 18, ROOMS[2].wall[1]]].forEach(([a, b, c]) => {
+    poly([Q(a, 0), Q(b, 0), Q(b, WALL), Q(a, WALL)], c);
+    poly([Q(a, 0), Q(b, 0), Q(b, 4), Q(a, 4)], "#cdb796");
+    poly([Q(a, WALL - 3), Q(b, WALL - 3), Q(b, WALL), Q(a, WALL)], "#f4f4f7");
+  });
+  windowOn(P, 4.5, 8.5, 18, 44);
+  windowOn(P, 18.5, 22.5, 18, 44);
+  windowOn(Q, 13, 16.5, 18, 42);
+  // agentville whiteboard
+  poly([P(9.8, 18), P(13, 18), P(13, 40), P(9.8, 40)], "#9aa1b6");
+  poly([P(10, 19), P(12.8, 19), P(12.8, 39), P(10, 39)], "#ffffff");
+  [[10.4, 33, "#4f74f0"], [10.4, 28, "#23a866"], [10.4, 23, "#e99a0c"]].forEach(([x, z, c]) => poly([P(x, z), P(x + 1.6, z), P(x + 1.6, z + 2), P(x, z + 2)], c));
+  // EPICS wall clock
+  poly([P(24, 36), P(25, 36), P(25, 44), P(24, 44)], "#ffffff");
+  poly([P(24.4, 38), P(24.5, 38), P(24.5, 42), P(24.4, 42)], "#3a3f5e");
+}
+
+// ---------- objects (painter's order by depth) ----------
+const objects = [];
+const add = (key, draw) => objects.push({ key, draw });
+const addBox = (gx, gy, w, d, h, c) => add(gx + gy + (w + d) / 2, () => box(gx, gy, w, d, h, c[0], c[1], c[2]));
+const WOOD = ["#ecc596", "#cf9a68", "#b78253"];
+const WALLC = ["#fbf8f1", "#e6dfd0", "#d6cdb9"];
+
+// Low partition walls with doorways.
+function partition(axis, c, from, to, gaps) {
+  for (let k = from; k < to; k++) {
+    if (gaps.some(([a, b]) => k >= a && k < b)) continue;
+    if (axis === "x") addBox(c - .2, k, .4, 1, 14, WALLC);
+    else addBox(k, c - .2, 1, .4, 14, WALLC);
+  }
+}
+partition("x", 14, 0, 10, [[6, 8]]);
+partition("y", 10, 0, 26, [[3, 5], [11, 13], [21, 23]]);
+partition("x", 8, 10, 18, [[13, 15]]);
+partition("x", 19, 10, 18, [[15, 17]]);
+
+// Bookshelves against the back walls.
+function shelf(gx, gy, w, d, h, along) {
+  addBox(gx, gy, w, d, h, ["#a87447", "#8c5d36", "#7a4f2c"]);
+  add(gx + gy + (w + d) / 2 + .01, () => {
+    const colors = ["#e0474c", "#4f74f0", "#23a866", "#e99a0c", "#8a6cf0", "#ffffff"];
+    const n = Math.floor((along === "y" ? d : w) / .3);
+    [6, 16].forEach((z0) => {
+      for (let i = 0; i < n; i++) {
+        const t = .1 + i * .3;
+        const c = colors[(i * 7 + z0) % colors.length];
+        if (along === "y") poly([up(iso(gx + w, gy + t), z0), up(iso(gx + w, gy + t + .22), z0), up(iso(gx + w, gy + t + .22), z0 + 7), up(iso(gx + w, gy + t), z0 + 7)], c);
+        else poly([up(iso(gx + t, gy + d), z0), up(iso(gx + t + .22, gy + d), z0), up(iso(gx + t + .22, gy + d), z0 + 7), up(iso(gx + t, gy + d), z0 + 7)], c);
+      }
+    });
+  });
+}
+shelf(.1, .8, .9, 3, 26, "y");
+shelf(15, .1, 3, .9, 26, "x");
+shelf(.1, 10.8, .9, 2, 20, "y");
+
+const plant = (gx, gy) => add(gx + gy, () => { const [x, y] = iso(gx, gy); sprite(PLANT, x, y); });
+[[0.7, 9.1], [13.2, 0.9], [25.1, 8.8], [15.1, 9.2], [1, 17.1], [7.2, 17.2], [18.2, 17.3], [9.2, 10.9], [25.2, 17.2]].forEach(([a, b]) => plant(a, b));
+
+// Desks with seated Employees. Desk at (gx, gy) is 2x1 tiles; the Employee stands just behind it.
+const people = [];
+function desk(gx, gy, p) {
+  const cg = [gx + .3, gy - .6];
+  const [cx, cy] = iso(...cg);
+  add(cg[0] + cg[1], () => sprite(person(p), cx, cy));
+  addBox(gx, gy, 2, 1, 7, WOOD);
+  add(gx + gy + 1.51, () => {
+    sprite(LAPTOP(STATE[p.state]), cx, cy - 1);
+    if (p.monitor) sprite(MONITOR(STATE[p.state]), cx - 15, cy - 3);
+    if (p.cup) sprite(CUP, cx + 11, cy - 1);
+  });
+  people.push({ ...p, x: cx, y: cy - 19 });
+}
+desk(4, 8, { id: "c1", name: "Claude 1", pv: "claude", hair: "#5a3e2b", shirt: "#e9845b", state: "work", what: "Bash", monitor: true, phones: true });
+desk(8, 7, { id: "c2", name: "Claude 2", pv: "claude", hair: "#2e2433", shirt: "#e9845b", state: "think", what: "생각 중" });
+desk(7, 2, { id: "x1", name: "Codex 1", pv: "codex", hair: "#3b2a4a", shirt: "#3fb8a5", state: "wait", what: "승인 대기 · 2분", wave: true });
+desk(11, 1, { id: "x2", name: "Codex 2", pv: "codex", hair: "#8a5a3b", shirt: "#3fb8a5", state: "work", what: "apply_patch", branch: "Office", phones: true });
+desk(17, 5, { id: "e1", name: "Claude 1", pv: "claude", hair: "#6b2f2f", shirt: "#e9845b", state: "idle", what: "휴대폰 · 12분" });
+desk(22, 4, { id: "e2", name: "Claude 2", pv: "claude", hair: "#2e2433", shirt: "#e9845b", state: "idle", what: "졸음 · 41분", sleep: true });
+desk(3, 13, { id: "o1", name: "Codex 1", pv: "codex", hair: "#8a5a3b", shirt: "#3fb8a5", state: "work", what: "exec_command", cup: true });
+
+// Contractor in a hard hat beside Claude 1.
+(() => { const [x, y] = iso(6.5, 8.6); add(15.1, () => sprite(person({ hat: true, hair: "#5a3e2b", shirt: "#ffd65a" }), x, y)); })();
+
+// Lounge: sofa, table, cat; two Employees on a break.
+addBox(14, 10.4, 4, .5, 12, ["#f2a4b8", "#d9839b", "#c6728a"]);
+(() => {
+  const [x, y] = iso(15.6, 11.2);
+  add(26.8, () => sprite(person({ hair: "#3b2a4a", shirt: "#3fb8a5" }), x, y));
+  people.push({ id: "l2", name: "Codex", pv: "codex", state: "idle", what: "Fika · 2시간", x, y: y - 19 });
+})();
+addBox(14, 11, 4, 1.2, 5, ["#f7b8c8", "#e293a8", "#cf8198"]);
+addBox(14.6, 13.4, 1.8, 1.4, 4, ["#ffffff", "#e3dcf0", "#d3c9e6"]);
+add(29.4, () => { const [x, y] = iso(15.2, 13.9); sprite(CUP, x - 2, y - 4); sprite(CUP, x + 4, y - 3); });
+(() => {
+  const [x, y] = iso(10.5, 15);
+  add(25.5, () => sprite(person({ hair: "#5a3e2b", shirt: "#e9845b" }), x, y));
+  add(25.51, () => sprite(CUP, x + 7, y - 6));
+  people.push({ id: "l1", name: "Claude", pv: "claude", state: "idle", what: "Fika · 1시간 20분", x, y: y - 19 });
+})();
+add(28.3, () => { const [x, y] = iso(11.5, 16.8); sprite(CAT, x, y); });
+
+// Infirmary: bed, first-aid cabinet, one Employee resting.
+(() => {
+  const [x, y] = iso(22.4, 12.9);
+  add(35.3, () => sprite(person({ hair: "#2e2433", shirt: "#c8b6f5", sleep: false }), x, y));
+  people.push({ id: "i1", name: "Claude", pv: "claude", state: "error", what: "API 529 · 9분", x, y: y - 19 });
+})();
+addBox(21.5, 13, 2.2, 3.5, 6, ["#cdbdf5", "#b3a1e6", "#a08ed6"]);
+addBox(21.7, 13.2, 1.8, .8, 9, ["#ffffff", "#ece8f6", "#ddd6ee"]);
+addBox(24.6, 10.3, 1.2, .7, 16, ["#ffffff", "#ece8f6", "#ddd6ee"]);
+add(35.62, () => { const [x, y] = iso(25.2, 11); sprite(CROSS, x - 3, y - 7); });
+
+function render() {
+  ctx.clearRect(0, 0, LW, LH);
+  drawFloor();
+  drawWalls();
+  objects.sort((a, b) => a.key - b.key).forEach((o) => o.draw());
+}
+render();
+
+// ---------- overlays ----------
+const LABEL = { work: "작업", think: "생각", wait: "대기", idle: "유휴", error: "오류" };
+const bubbles = document.getElementById("bubbles");
+let selected = "c1";
+function chipStyle(s) { return `background:${STATE[s]}22;color:${s === "idle" ? "#586079" : STATE[s]}`; }
+function drawBubbles() {
+  bubbles.replaceChildren(...people.map((p) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "bubble" + (p.id === selected ? " sel" : "");
+    b.style.left = (p.x / LW * 100) + "%";
+    b.style.top = (p.y / LH * 100) + "%";
+    b.style.border = "0";
+    b.setAttribute("aria-label", `${p.name}, ${LABEL[p.state]}, ${p.what}`);
+    b.innerHTML = `<span class="who"><i class="pv ${p.pv}">${p.pv === "claude" ? "CL" : "CX"}</i>${p.name}${p.branch ? ` <span class="tag">${p.branch}</span>` : ""}</span>`
+      + `<span class="what"><i class="sd" style="background:${STATE[p.state]}"></i>${p.what}</span>`;
+    b.addEventListener("click", () => { selected = p.id; drawBubbles(); drawPeople(); });
+    return b;
+  }));
+}
+drawBubbles();
+
+document.getElementById("rooms").innerHTML = ROOMS.map((r) =>
+  `<span class="room-chip"><i style="background:${r.floor[0]}"></i><b>${r.name}</b>${r.note}</span>`).join("");
+
+// Side list with tiny pixel portraits and workload sparklines.
+const ROSTER = [
+  { id: "c1", name: "Claude 1", room: "agentville", pv: "claude", hair: "#5a3e2b", shirt: "#e9845b", state: "work", t: "방금", load: [1, 2, 2, 3, 4, 3, 5, 6] },
+  { id: "x1", name: "Codex 1", room: "agentville", pv: "codex", hair: "#3b2a4a", shirt: "#3fb8a5", state: "wait", t: "2분", load: [2, 3, 3, 2, 1, 1, 0, 0] },
+  { id: "c2", name: "Claude 2", room: "agentville", pv: "claude", hair: "#2e2433", shirt: "#e9845b", state: "think", t: "1분", load: [0, 1, 1, 2, 1, 2, 2, 1] },
+  { id: "x2", name: "Codex 2", room: "agentville · Office", pv: "codex", hair: "#8a5a3b", shirt: "#3fb8a5", state: "work", t: "방금", load: [1, 1, 2, 2, 3, 2, 3, 4] },
+  { id: "o1", name: "Codex 1", room: "공용 사무실", pv: "codex", hair: "#8a5a3b", shirt: "#3fb8a5", state: "work", t: "방금", load: [0, 0, 1, 1, 1, 2, 1, 1] },
+  { id: "i1", name: "Claude", room: "양호실 · cloud-provision", pv: "claude", hair: "#2e2433", shirt: "#c8b6f5", state: "error", t: "9분", load: [3, 4, 4, 2, 0, 0, 0, 0] },
+];
+function spark(values, color) {
+  const max = Math.max(1, ...values), n = values.length;
+  const pts = values.map((v, i) => [Math.round(i * 52 / (n - 1)) + 1, 15 - Math.round(v / max * 12)]);
+  const line = pts.map((p) => p.join(",")).join(" ");
+  const last = pts[pts.length - 1];
+  return `<svg viewBox="0 0 54 16" aria-hidden="true"><polygon points="1,16 ${line} ${last[0]},16" fill="${color}" opacity=".15"/><polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5"/><circle cx="${last[0]}" cy="${last[1]}" r="2" fill="${color}"/></svg>`;
+}
+function drawPeople() {
+  const list = document.getElementById("people");
+  list.replaceChildren(...ROSTER.map((r) => {
+    const li = document.createElement("li");
+    if (r.id === selected) li.className = "sel";
+    li.innerHTML = `<div class="avatar"><canvas width="12" height="17"></canvas></div>`
+      + `<div style="min-width:0"><div class="p-name"><i class="pv ${r.pv}">${r.pv === "claude" ? "CL" : "CX"}</i><span>${r.name}</span></div>`
+      + `<div class="p-sub"><span class="chip" style="${chipStyle(r.state)}">${LABEL[r.state]}</span>${r.room}</div></div>`
+      + `<div class="p-right"><time>${r.t}</time>${spark(r.load, STATE[r.state])}</div>`;
+    const c = li.querySelector("canvas").getContext("2d");
+    const spr = person({ hair: r.hair, shirt: r.shirt });
+    spr.rows.forEach((row, j) => row.forEach((ch, i) => { if (ch !== "." && spr.pal[ch]) { c.fillStyle = spr.pal[ch]; c.fillRect(i, j, 1, 1); } }));
+    return li;
+  }));
+}
+drawPeople();
+
+document.querySelectorAll(".counts button").forEach((btn) => btn.addEventListener("click", () => {
+  document.querySelectorAll(".counts button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+}));
+</script>
