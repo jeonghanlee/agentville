@@ -4,9 +4,14 @@ import { demoState } from "./demo.js";
 import { updateWorkGestures, WORK_MOTION_INTERVAL } from "./motion.js";
 import { createOfficeCats } from "./cats.js";
 import { mountFurniture } from "./furniture.js";
+import { mountDecor } from "./decor.js";
 import { createDaylight, branchZone } from "./daylight.js";
 import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
+import { createLounge } from "./lounge.js";
+import { createWalkers } from "./walk.js";
+import { APPROACH, NODES, route, distance } from "./floor.js";
+import { walkerDepth } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
 
@@ -59,7 +64,13 @@ const lastStates = new Map();
 const facilityOccupancy = new Map();
 let daylight = null;
 let furniture = null;
+let decor = null;
 let coffee = null;
+let lounge = null;
+let walkers = null;
+// Last floor place of each shown colleague, so a change of place becomes a walk.
+const places = new Map();
+const motionAllowed = () => !matchMedia("(prefers-reduced-motion: reduce)").matches && !document.body.classList.contains("reduce-motion");
 let cats = null;
 let notifications = null;
 // The first state of each socket is a baseline: it records states without notifying.
@@ -301,6 +312,30 @@ function renderRooms(ctx) {
   $("previous-floor").disabled = floor === 0;
   $("next-floor").disabled = floor >= count - 1;
 }
+// Where a colleague stands for a place: in front of a chair, beside the bed, or on a standing spot.
+// Seats also name the free side of the chair, which walkers pass through when sitting down or getting up.
+function placeOf(room, index, home, spot) {
+  if (spot) return { foot: spot, approach: null };
+  const side = APPROACH[room]?.[index];
+  if (home[2] === "lying") return { foot: side ? NODES[side] : home.slice(0,2), approach: null };
+  return { foot: [home[0], home[1] + (home[2].startsWith("back") ? 2.2 : 3.6)], approach: side ? NODES[side] : null };
+}
+// A changed place starts a walk along the floor routes; the first sighting, another Branch, or reduced motion places directly.
+function moveWalker(key, target) {
+  const last = places.get(key);
+  places.set(key, { ...target, scope: branchId });
+  const current = walkers?.get(key);
+  if (!walkers || !last || last.scope !== branchId || !motionAllowed()) { walkers?.stop(key); return null; }
+  if (distance(current ? current.goal : last.foot, target.foot) < .05) return current;
+  const start = current ? [current.x, current.y] : last.foot;
+  const leave = !current && last.approach ? [last.approach] : [];
+  const path = [start, ...route(leave[0] || start, target.approach || target.foot).slice(leave.length ? 0 : 1),
+    ...(target.approach ? [target.foot] : [])].filter((point, i, all) => i === 0 || distance(point, all[i-1]) > .01);
+  if (path.length < 2) return null;
+  const visit = coffee?.get(key);
+  walkers.start(key, path, () => coffee?.arrived(key), visit?.phase === "walking-back");
+  return walkers.get(key);
+}
 function renderCharacters(ctx) {
   const groups = new Map();
   for (const row of ctx.office) {
@@ -328,9 +363,10 @@ function renderCharacters(ctx) {
       occupants.set(key,free); occupied.add(free);
     }
   }
-  const lounge = facilityOccupancy.get(keyOf(branchId,"fika"));
-  coffee?.sync([...lounge].filter(([,index]) => index !== null)
+  const fika = facilityOccupancy.get(keyOf(branchId,"fika"));
+  coffee?.sync([...fika].filter(([,index]) => index !== null)
     .map(([key,index]) => [key,ROOM_LAYOUT.fika.seats[index]]),branchId);
+  lounge?.sync([...fika.keys()].map((key) => [key, JSON.parse(key)[1]]));
   const used = new Set(), hired = new Set(), dark = new Set();
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
@@ -362,13 +398,18 @@ function renderCharacters(ctx) {
       const visit = coffee?.get(row.key);
       const waitingIndex = shownWaiting.indexOf(row.key);
       const spot = waitingIndex >= 0 ? WAITING_SPOTS[room][waitingIndex] : null;
-      const seat = visit?.seat || (spot ? [...spot,"standing",Math.floor(spot[1])+1] : layout.seats[index]);
+      const home = spot ? [...spot,"standing",Math.floor(spot[1])+1] : layout.seats[index];
+      const walk = moveWalker(row.key, visit?.point ? { foot: visit.point, approach: null } : placeOf(room, index, home, spot));
+      const counter = !walk && visit?.point;
+      const seat = walk ? [walk.x, walk.y, "coffee-back", walk.depth]
+        : counter ? [...visit.point, "coffee-back", walkerDepth(...visit.point)] : home;
       const desk = seat[2];
-      node.classList.add(visit ? "coffee-standing" : spot ? "standing" : desk === "lying" ? "reclining" : "seated");
+      node.classList.add(walk || counter ? "coffee-standing" : spot ? "standing" : desk === "lying" ? "reclining" : "seated");
+      if (walk) node.classList.add("walking");
       node.dataset.room = room;
       node.dataset.seatFacing = desk;
-      node.dataset.coffeePhase = visit?.phase || "";
-      node.dataset.coffeeFacing = visit?.facing || "";
+      node.dataset.coffeePhase = visit?.phase || (walk ? "walking" : "");
+      node.dataset.coffeeFacing = walk?.facing || (counter ? "right" : "");
       node.dataset.queuePosition = spot ? String(waiting.indexOf(row.key)+1) : "";
       node.dataset.seatIndex = index === null ? "" : String(index);
       node.style.width = desk === "lying" ? "8%" : SEATED_WIDTH + "%";
@@ -377,8 +418,11 @@ function renderCharacters(ctx) {
       node.style.zIndex = String(seat[3]);
       // Keep unchanged SVG nodes alive so data refreshes do not restart gestures.
       const workstation = WORKSTATIONS[room]?.[index] ? { seat, keys: WORKSTATIONS[room][index] } : null;
-      const cup = coffee?.cup(row.key);
-      const detail = visit ? visit.cup ? "coffee-cup" : visit.phase === "waiting" ? "coffee-wait" : "coffee-walk" : row.detail;
+      // Lounge colleagues hold their own drink; a counter visit shows the drink being fetched.
+      const drink = row.detail === "fika" && lounge ? lounge.drink(row.key, row.agent.agent_id) : null;
+      const cup = visit?.drink || drink || coffee?.cup(row.key);
+      const detail = walk ? (walk.carrying ? "coffee-cup" : "coffee-walk")
+        : counter ? (visit.phase === "waiting" ? "coffee-wait" : "coffee-walk") : row.detail;
       // Limited Employees switch off the visible desk screen, or show a small dark monitor when none is visible.
       const glass = row.state === "limited" && !visit && !spot ? SCREENS[room]?.[index] : null;
       if (glass) {
@@ -408,12 +452,14 @@ function renderCharacters(ctx) {
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
         if (done) children.push(el("span", { class: "done-check", title: stateName("completed") }, icon("check")));
-        if (visit?.phase === "waiting") children.push(el("span", { class: "coffee-status" }, t("coffee.brewing")));
+        if (counter && visit.phase === "waiting") children.push(el("span", { class: "coffee-status" },
+          t({ coffee: "coffee.brewing", tea: "drink.steeping" }[visit.drink?.kind || "coffee"] || "drink.pouring")));
         if (spot) children.push(el("span", { class: "queue-status" },
           t(room === "infirmary" ? "queue.bed" : "queue.seat") + " / " + node.dataset.queuePosition));
         node.replaceChildren(...children);
         node.dataset.appearance = appearance;
       }
+      lounge?.decorate(node, row.key);
       // Each Contractor shows its own activity; further Contractors collapse into "+N".
       const shown = row.contractors.slice(0, MAX_CONTRACTORS);
       shown.forEach((contractor, i) => {
@@ -457,7 +503,7 @@ function renderCharacters(ctx) {
     }
   }
   for (const [key,node] of actors) {
-    if (!used.has(key)) { node.remove(); actors.delete(key); }
+    if (!used.has(key)) { node.remove(); actors.delete(key); walkers?.stop(key); places.delete(key); }
   }
   for (const [key,node] of companions) {
     if (!hired.has(key)) { node.remove(); companions.delete(key); }
@@ -622,6 +668,7 @@ function render() {
   $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "summary.onDuty"],
     ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
     el("span", { class: "summary-item" }, icon(symbol), el("strong", {}, n), t(label))));
+  decor?.update(branchId);
   renderFilters(ctx); renderRooms(ctx); renderCharacters(ctx); renderTeam(ctx);
   $("scene-empty").hidden = ctx.present.length > 0;
   $("scene").classList.toggle("is-empty", ctx.present.length === 0);
@@ -773,7 +820,9 @@ document.addEventListener("keydown", (event) => {
 });
 $("settings-dialog").addEventListener("click", (event) => { if (event.target === $("settings-dialog")) $("settings-dialog").close(); });
 daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.querySelector(".scene-sun"), $("setting-daylight"));
-coffee = createCoffeeBreaks($("characters"),render);
+lounge = createLounge($("characters"), { motionAllowed });
+walkers = createWalkers($("characters"), { motionAllowed, changed: render });
+coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
 if (DEMO) {
   acceptState(demoState());
@@ -783,6 +832,7 @@ if (DEMO) {
 changeZoom(100);
 cats = createOfficeCats($("characters"));
 applyLanguage();
+decor = mountDecor($("world"));
 furniture = mountFurniture($("world"));
 furniture.update();
 if (!DEMO) connect();

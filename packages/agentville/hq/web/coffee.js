@@ -1,14 +1,17 @@
 import { randomMug } from "./mugs.js";
+import { COFFEE_SPOT } from "./floor.js";
 
 const FIRST_VISIT = [9000, 15000];
 const NEXT_VISIT = [26000, 48000];
 const WAIT = [6000, 10000];
-const MACHINE = [53, 60];
+// A walk that has not reported arrival by then is ended, so a visit can never stall.
+const WALK_LIMIT = 40000;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const between = ([min,max]) => min + Math.random()*(max-min);
 
-// Coffee visits decorate Fika only; live activity and room membership stay authoritative.
-export function createCoffeeBreaks(root, changed) {
+// Counter visits decorate Fika only; live activity and room membership stay authoritative.
+// The colleague walks along the floor routes to the counter, waits, takes a drink, and walks back.
+export function createCoffeeBreaks(root, changed, lounge) {
   const cups = new Map();
   let eligible = new Map(), active = null, scope = null, remaining = between(FIRST_VISIT);
   let previous = performance.now();
@@ -16,14 +19,14 @@ export function createCoffeeBreaks(root, changed) {
     if (!cups.has(key)) cups.set(key,randomMug());
     return cups.get(key);
   }
-  function start(key, home) {
-    const foot = [home[0],home[1] + (home[2].startsWith("back") ? 2.2 : 3.6)];
-    const route = home[1] > 75 ? [[50,88],[43,80],[43,69],[43,61],MACHINE] : [[43,70],[43,61],MACHINE];
-    const stages = [{ position: foot, phase: "leaving", duration: 100 }];
-    for (const position of route) stages.push({ position, phase: "walking-out", duration: 2200 });
-    stages.push({ position: MACHINE, phase: "waiting", duration: between(WAIT) });
-    for (const position of [...route.slice(0,-1).reverse(),foot]) stages.push({ position, phase: "walking-back", duration: 2200 });
-    active = { key, stages, index: 0, remaining: stages[0].duration };
+  function end() { active = null; remaining = between(NEXT_VISIT); }
+  function advance() {
+    if (!active) return;
+    if (active.phase === "walking-out") { active.phase = "waiting"; active.remaining = between(WAIT); }
+    else if (active.phase === "waiting") {
+      lounge?.set(active.key, active.next);
+      active.phase = "walking-back"; active.remaining = WALK_LIMIT;
+    } else end();
     changed();
   }
   setInterval(() => {
@@ -33,35 +36,34 @@ export function createCoffeeBreaks(root, changed) {
     if (!active) {
       remaining -= delta;
       if (remaining > 0 || !eligible.size) return;
-      const choices = [...eligible.entries()].filter(([key]) => {
+      const choices = [...eligible.keys()].filter((key) => {
         const node = [...root.querySelectorAll(".agent")].find((actor) => actor.dataset.employeeKey === key);
-        return node && !node.classList.contains("filtered");
+        return node && !node.classList.contains("filtered") && node.classList.contains("seated");
       });
       if (!choices.length) return;
-      start(...choices[Math.floor(Math.random()*choices.length)]);
+      const key = choices[Math.floor(Math.random()*choices.length)];
+      active = { key, phase: "walking-out", remaining: WALK_LIMIT, next: lounge ? lounge.refill(key) : null };
+      changed();
       return;
     }
     active.remaining -= delta;
-    if (active.remaining > 0) return;
-    if (active.stages[active.index].phase === "waiting") cups.set(active.key,randomMug(cup(active.key)));
-    active.index++;
-    if (active.index >= active.stages.length) { active = null; remaining = between(NEXT_VISIT); }
-    else active.remaining = active.stages[active.index].duration;
-    changed();
+    if (active.remaining <= 0) advance();
   },200);
   return {
     cup,
     sync(places, branch) {
       eligible = new Map(places);
-      if (active && (scope !== branch || !eligible.has(active.key))) { active = null; remaining = between(NEXT_VISIT); }
+      if (active && (scope !== branch || !eligible.has(active.key))) end();
       scope = branch;
+    },
+    // The walker reports arrival at the counter or back at the seat.
+    arrived(key) {
+      if (active?.key === key && active.phase.startsWith("walking")) advance();
     },
     get(key) {
       if (active?.key !== key) return null;
-      const stage = active.stages[active.index];
-      const from = active.stages[Math.max(0,active.index-1)].position;
-      return { phase: stage.phase, seat: [...stage.position,"coffee-back",Math.floor(stage.position[1])+1],
-        facing: stage.position[0] < from[0] ? "left" : "right", cup: stage.phase === "walking-back" };
+      return { phase: active.phase, point: active.phase === "walking-back" ? null : COFFEE_SPOT,
+        drink: active.phase === "walking-back" ? lounge?.drink(key) : active.next };
     },
   };
 }

@@ -11,7 +11,7 @@ export function demoState(now = Date.now()) {
     ["theo", "Theo", "home", "agentville", "claude", "thinking", 45, "", "study-mode"],
     ["sage", "Sage", "garden", "agentville", "codex", "working", 225, "apply_patch", "normal"],
     ["ivy", "Ivy", "home", "garden-ui", "claude", "idle", 720, "", "normal"],
-    ["otto", "Otto", "home", "garden-ui", "codex", "idle", 2460, "", "light"],
+    ["otto", "Otto", "home", "garden-ui", "codex", "idle", 4300, "", "light"],
     ["noah", "Noah", "home", "common-office", "codex", "working", 32, "exec_command", "normal"],
     ["luna", "Luna", "home", "agentville", "claude", "idle", 4000, "", "extra-coffee"],
     ["pip", "Pip", "home", "garden-ui", "codex", "idle", 5200, "", "lazy"],
