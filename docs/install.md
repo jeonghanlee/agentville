@@ -25,7 +25,7 @@ Debian 12 ships Python 3.11 and is not supported.
 ## 2. Download
 
 ````bash
-git clone -b claude/modest-albattani-dn2ho3 https://github.com/jeonghanlee/agentville.git ~/.local/src/agentville
+git clone https://github.com/jeonghanlee/agentville.git ~/.local/src/agentville
 cd ~/.local/src/agentville
 ````
 
