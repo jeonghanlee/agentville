@@ -1,0 +1,13 @@
+[book]
+title = "AgentVille"
+authors = ["Jeong Han Lee"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "build/book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/jeonghanlee/agentville"
+edit-url-template = "https://github.com/jeonghanlee/agentville/edit/master/{path}"
