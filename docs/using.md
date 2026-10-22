@@ -58,7 +58,7 @@ In the Lounge, colleagues drink, read, and talk to each other with picture bubbl
 
 Select a colleague in the office or in the list on the right. The detail shows status, condition, tool name, recent tool count (tools started in the last 5 minutes, falling to 0 without new tools), room and Branch, Contractors, the last observed time, and the colleague id in small text.
 
-A colleague is named by provider and seat, for example "Codex 2"; seat numbers are unique per provider on a Branch. A display name set for the colleague id under `aliases` in the Collector configuration replaces it everywhere in the page ([Configuration](configuration.md)). Conditions are set by model settings: study-mode (high effort), extra-coffee, light (low effort), or normal.
+A colleague is named by provider and seat, for example "Codex 2"; seat numbers are unique per provider on a Branch. A display name set for the colleague id under `aliases` in the Collector configuration of the colleague's Branch replaces it everywhere in the page ([Configuration](configuration.md)). Conditions are set by model settings: study-mode (high effort), extra-coffee, light (low effort), or normal.
 
 ## Other views
 
@@ -98,7 +98,7 @@ The Work log (근무 일지) shows, for one day, how long each colleague was on 
 |---|---|
 | On duty | Time on duty while the Branch was reporting. |
 | Working, Waiting, Idle, Error, ... | Time in each state; together they equal On duty. Rare states appear only when used. |
-| Unobserved | Time on duty during which the Branch did not report; not counted in the other columns. |
+| Unobserved | Time on duty during which the Branch was not reporting, counted from three missed heartbeats (about 90 s with the default interval), as for "Waiting for Branch report"; not counted in the other columns. |
 | Waits | How many times the colleague started waiting. |
 | Longest wait | The longest single wait. |
 | Errors, Limits | How many times the colleague entered Error or Limited. |

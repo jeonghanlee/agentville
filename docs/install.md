@@ -329,13 +329,13 @@ language: en                                     # optional; en or ko
 | Key | Value |
 |---|---|
 | `url` | The topic URL. Subscribe to the same topic in the ntfy app. |
-| `token_file` | A file holding an ntfy access token, for a server with access control. Mode 0600. |
+| `token_file` | A file holding an ntfy access token, for a server with access control. Mode 0600: `install -m600 /dev/null ~/.config/agentville/ntfy.token`, then write the token into it. |
 | `events` | `waiting`: a colleague starts waiting. `error`: a colleague has an error. `branch`: a Branch stops or resumes reporting. |
 | `language` | Language of the texts: `en` or `ko`. |
 
 On a public server such as ntfy.sh, anyone who knows a topic name can read it. Use a long random name, for example from `python3 -c 'import secrets; print("agentville-" + secrets.token_hex(12))'`, or a server with access control and a token.
 
-Add the option to `ExecStart` in `~/.config/systemd/user/agentville-hq.service`, then reload and restart:
+Append the option to the existing `ExecStart` line in `~/.config/systemd/user/agentville-hq.service`, keeping every option already there (for example those of Section 6.3), then reload and restart. With the default line:
 
 ```ini
 ExecStart=%h/.local/bin/agentville-hq --host 127.0.0.1 --port 8470 \

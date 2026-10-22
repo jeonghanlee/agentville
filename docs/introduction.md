@@ -14,10 +14,10 @@ AgentVille observes only. It never starts, resumes, answers, or interrupts an ag
 
 | Chapter | Content |
 |---|---|
-| [Installation](install.md) | Requirements, install, services, connecting other hosts, upgrade, removal. |
+| [Installation](install.md) | Requirements, install, services, connecting other hosts, external notifications, upgrade, removal. |
 | [Configuration](configuration.md) | The Collector configuration file. |
 | [Using the Office](using.md) | Rooms, states, views, and settings. |
-| [Data and Security](data.md) | What is sent to HQ and what never is. |
+| [Data and Security](data.md) | What is sent to HQ and to a notification server, and what never is. |
 
 Design and protocol specifications for developers are in the repository: [docs/architecture.md](https://github.com/jeonghanlee/agentville/blob/master/docs/architecture.md), [docs/protocol.md](https://github.com/jeonghanlee/agentville/blob/master/docs/protocol.md).
 

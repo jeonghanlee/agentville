@@ -104,7 +104,7 @@ def test_aliases_map_agent_ids_to_display_names():
 
 
 @pytest.mark.parametrize("aliases, text", [
-    (["a-1"], "aliases must be a mapping of agent_id to name"),
+    (["a-1"], "aliases must be a mapping of colleague id to name"),
     ({"a-1": 5}, "aliases.a-1 must be a non-empty string of at most 40 characters"),
     ({"a-1": "  "}, "aliases.a-1 must be a non-empty string"),
     ({"a-1": "x" * 41}, "at most 40 characters"),

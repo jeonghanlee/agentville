@@ -10,7 +10,7 @@ This document lists the user-visible changes of each AgentVille release.
 
 ### Collector
 
-- `aliases` in the configuration gives colleagues display names (agent_id to name, at most 40 characters); the name is sent as the colleague `alias`.
+- `aliases` in the configuration gives colleagues display names (colleague id to name, at most 40 characters, in the configuration of the colleague's Branch); the name is sent as the colleague `alias`.
 - Seat numbers are unique per provider on a Branch, so default names such as "Codex 2" no longer repeat across repositories. Rosters with duplicate seats are renumbered at start.
 
 ### HQ

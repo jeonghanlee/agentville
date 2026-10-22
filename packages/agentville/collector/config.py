@@ -199,7 +199,7 @@ def _number(section: str, key: str, value: Any, kind: type[int] | type[float]) -
 def _aliases(document: dict[str, Any]) -> dict[str, str]:
     value = document.get("aliases") or {}
     if not isinstance(value, dict):
-        raise ValueError("aliases must be a mapping of agent_id to name")
+        raise ValueError("aliases must be a mapping of colleague id to name")
     for agent_id, name in value.items():
         if not isinstance(name, str) or not name.strip() or len(name) > MAX_ALIAS:
             raise ValueError(f"aliases.{agent_id} must be a non-empty string of at most {MAX_ALIAS} characters")
