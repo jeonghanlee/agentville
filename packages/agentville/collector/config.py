@@ -17,6 +17,8 @@ import yaml
 
 DEFAULT_THRESHOLDS = {"phone": 300, "doze": 1800, "lounge": 3600, "leave": 604800}
 
+MAX_ALIAS = 40
+
 DEFAULT_CONDITIONS: list[dict[str, Any]] = [
     {"provider": "claude", "fast_mode": True, "condition": "extra-coffee"},
     {"provider": "*", "effort": "high", "condition": "study-mode"},
@@ -77,6 +79,8 @@ class BranchConfig:
     conditions: list[dict[str, Any]] = field(default_factory=list)
     poll_interval: float = 1.0
     heartbeat_interval: int = 30
+    # Employee display names by agent_id; sent as the agent ``alias``.
+    aliases: dict[str, str] = field(default_factory=dict)
 
     def branch_payload(self) -> dict[str, Any]:
         return {
@@ -144,6 +148,7 @@ def _default_document(home: str) -> dict[str, Any]:
         },
         "conditions": [dict(rule) for rule in DEFAULT_CONDITIONS],
         "collector": {"poll_interval": 1.0, "heartbeat_interval": 30},
+        "aliases": {},
     }
 
 
@@ -191,6 +196,16 @@ def _number(section: str, key: str, value: Any, kind: type[int] | type[float]) -
         raise ValueError(f"{section}.{key} must be {'an integer' if kind is int else 'a number'}") from None
 
 
+def _aliases(document: dict[str, Any]) -> dict[str, str]:
+    value = document.get("aliases") or {}
+    if not isinstance(value, dict):
+        raise ValueError("aliases must be a mapping of colleague id to name")
+    for agent_id, name in value.items():
+        if not isinstance(name, str) or not name.strip() or len(name) > MAX_ALIAS:
+            raise ValueError(f"aliases.{agent_id} must be a non-empty string of at most {MAX_ALIAS} characters")
+    return {str(agent_id): name for agent_id, name in value.items()}
+
+
 def parse(document: dict[str, Any]) -> BranchConfig:
     host = _section(document, "host")
     host_id = host.get("id")
@@ -229,4 +244,5 @@ def parse(document: dict[str, Any]) -> BranchConfig:
         conditions=list(conditions),
         poll_interval=poll_interval,
         heartbeat_interval=heartbeat_interval,
+        aliases=_aliases(document),
     )

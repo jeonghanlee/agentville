@@ -44,10 +44,10 @@ User manual: [jeonghanlee.github.io/agentville](https://jeonghanlee.github.io/ag
 
 | Chapter | Content |
 |---|---|
-| [Installation](docs/install.md) | Services, other hosts, TLS, upgrade, removal. |
+| [Installation](docs/install.md) | Services, other hosts, TLS, external notifications, upgrade, removal. |
 | [Configuration](docs/configuration.md) | The Collector configuration file. |
 | [Using the Office](docs/using.md) | Rooms, states, views, settings. |
-| [Data and Security](docs/data.md) | What is sent to HQ and what never is. |
+| [Data and Security](docs/data.md) | What is sent to HQ and to a notification server, and what never is. |
 
 Specifications: [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Test Fixtures](docs/fixtures.md).
 

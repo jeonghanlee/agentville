@@ -64,10 +64,10 @@ An `Agent` is identified by:
 (project, host, provider, seat)
 ```
 
-- `seat` is a number distinguishing concurrent agents of the same provider in the same Project on the same Host.
+- `seat` is a number unique among the Employees of one provider on one Host, so the default display name `<Provider> <seat>` (e.g. "Codex 2") names one Employee on a Branch. Employees of different Projects never share a seat number.
 - One shift of an Employee is defined per provider by its Adapter (Section 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server, or, for a run outside the app-server daemon, the period its rollout file is written (Section 3.4).
 - Account and model are Employee attributes; the latest values are kept. Recording their changes as history is not implemented (Section 9).
-- `alias` (Employee display name) is part of the payload and is currently always null (Section 9).
+- `alias` (Employee display name) is set per `agent_id` in the `aliases` mapping of the Branch configuration (Section 3.5) and is null otherwise. The Web UI shows it in place of the default name.
 
 #### Seat assignment
 
@@ -77,7 +77,9 @@ When a new agent process is observed, the Employee is selected in this order:
 2. The Employee matching the previous runtime location (e.g. tmux pane).
 3. The Employee with the lowest free seat number.
 
-A candidate already on shift is skipped and the next rule applies.
+A candidate already on shift is skipped and the next rule applies. Candidates are Employees of the same Project and provider. When none remains, a new Employee is created with the lowest seat number that no Employee of that provider on the Host holds.
+
+A roster written before seats were unique per provider on the Host may hold duplicate numbers. At start the first Employee of each number, in roster order, keeps it; the others take the lowest free numbers.
 
 #### Employee states
 
@@ -354,13 +356,15 @@ conditions:
   - {provider: "*", effort: xhigh, condition: study-mode}
   - {provider: "*", effort: low, condition: light}
 collector: {poll_interval: 1.0, heartbeat_interval: 30}
+aliases: {}
 ````
 
+- `aliases` maps an `agent_id` to an Employee display name, sent as the agent `alias`. Each name is a non-empty string of at most 40 characters. The Web UI shows the `agent_id` in the Colleague detail.
 - `time` is the host's local zone at first start (`TZ`, `/etc/timezone`, or the `/etc/localtime` link; `UTC` when none is found).
 - One provider home is one account. At first start, `~/.<provider>` and existing `~/.<provider>-*` directories are listed in that order as `<provider>-account-1`, `<provider>-account-2`, …; `~/.claude` is always listed. Account names and homes are local settings.
 - A single mapping (`claude: {home: ~/.claude}`) is read as a one-account list.
 - The generated file lists provider homes as absolute paths with the home directory expanded; `~` is accepted when editing.
-- Values are validated at start: `host`, `hq`, `thresholds`, `providers`, and `collector` are mappings, each `providers` entry a list (or the single-mapping form), `conditions` a list of mappings; thresholds are integers >= 0 with `phone` <= `doze` <= `lounge`; `poll_interval` > 0; `heartbeat_interval` >= 1. A file holding `hq.token` must not be accessible by group or others.
+- Values are validated at start: `host`, `hq`, `thresholds`, `providers`, `collector`, and `aliases` are mappings, each `providers` entry a list (or the single-mapping form), `conditions` a list of mappings; thresholds are integers >= 0 with `phone` <= `doze` <= `lounge`; `poll_interval` > 0; `heartbeat_interval` >= 1. A file holding `hq.token` must not be accessible by group or others.
 - An invalid file, including a YAML syntax error or a top level that is not a mapping, stops the Collector with one line `agentville-collector: invalid configuration: <reason>`; one that cannot be read or created with `agentville-collector: configuration <path>: <reason>`.
 - A loopback HQ is contacted without environment proxies.
 - Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns. The defaults are listed in Section 1.6. A configuration without a `conditions` key uses them; an empty list maps everything to `normal`.
@@ -379,8 +383,8 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 
 - Process: `agentville-hq` (FastAPI, uvicorn), bound to `127.0.0.1:8470` by default.
 - `--tls-cert` and `--tls-key` (PEM files, used together) make HQ serve HTTPS directly; without them HQ serves plain HTTP.
-- At start HQ checks its token files and TLS certificate and key (loaded into a TLS context), opens the database, and binds and listens on the port itself (`SO_REUSEADDR`, IPv6 when the host contains `:`), handing the socket to uvicorn. Only then does it print `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
-- A missing or unreadable token file, a malformed token file, an unusable certificate or key, a database that cannot be opened, or a port that cannot be bound stops HQ with one line starting with `agentville-hq:`, e.g. `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`.
+- At start HQ checks its token files, the notification configuration (Section 4.6), and TLS certificate and key (loaded into a TLS context), opens the database, and binds and listens on the port itself (`SO_REUSEADDR`, IPv6 when the host contains `:`), handing the socket to uvicorn. Only then does it print `agentville-hq: serving <scheme>://<host>:<port>/ (database <path>)` to standard error.
+- A missing or unreadable token file, a malformed token file, an invalid notification configuration, an unusable certificate or key, a database that cannot be opened, or a port that cannot be bound stops HQ with one line starting with `agentville-hq:`, e.g. `agentville-hq: cannot listen on 127.0.0.1:8470: Address already in use`.
 - `agentville-hq --version` and `agentville-collector --version` print the installed package version, which HQ also reports as its API version in `/openapi.json`.
 - Storage: SQLite (WAL) at `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`).
 
@@ -389,8 +393,15 @@ collector: {poll_interval: 1.0, heartbeat_interval: 30}
 | `messages` | Every accepted message, keyed by `(branch_id, seq)` |
 | `branches` | Branch payload, last `seq`, last seen time, heartbeat interval |
 | `agents`, `activities`, `contractors` | Current state, keyed by `(branch_id, id)` |
+| `changes` | Every change HQ applies to current state: `(branch_id, at, kind, key, payload)`, `payload` NULL for a removal (Section 4.4) |
+| `baseline` | State as of the start of the kept history, keyed by `(branch_id, kind, key)` |
+| `checkpoints`, `checkpoint_keys` | State at whole hours (UTC): each key with the id of its latest change, or NULL for its `baseline` payload (Section 4.4) |
+| `meta` | `history_from`: the start of the kept history |
 
-- Message history retention: 30 days by default (`--retention-days`); current state is never pruned.
+- Retention: 30 days by default (`--retention-days`), applied at most once per hour during ingest. Messages received before the cutoff are deleted, and history changes and checkpoints before it are folded into the baseline (Section 4.4). Current state is never pruned.
+- Ingest, pruning, and the live state use one connection under one lock. History reads (Sections 4.4 and 4.5) use separate read-only connections, each in one read transaction and used by one query at a time; WAL lets them read while ingest writes, so they never wait for ingest and ingest never waits for them.
+- Write-ahead log: ingest never checkpoints the log itself (`wal_autocheckpoint` 0; `journal_size_limit` 32 MiB). A read transaction keeps the log frames it may need, so overlapping history reads would keep the log from restarting. When the log file exceeds 32 MiB after an ingest, a background thread holds back new history reads, waits for the running ones to finish, copies the log into the database with passive checkpoints (up to five passes, which do not block ingest), then runs a truncating checkpoint under the store lock for the remaining frames, and lets history reads continue. The log thus stays near 32 MiB, exceeding it by what is written while the longest running history read finishes. New history reads wait up to that read's remaining time; ingest and the live state do not wait for reads.
+- HQ sets the interpreter's thread switch interval to 0.5 ms, so a long history computation yields often to ingest and the live state.
 
 ### 4.1 Ingest Rules
 
@@ -422,11 +433,27 @@ A Branch is reported unreachable when no message arrived within three heartbeat 
 | `GET` | `/health` | Liveness |
 | `POST` | `/api/v1/ingest/messages` | Branch ingest, body `{"messages": [...]}`, one Branch per batch, at most 1000 messages (more: 413) |
 | `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors |
+| `GET` | `/api/v1/state?at=<time>` | The same for a past time within the kept history (Section 4.4) |
+| `GET` | `/api/v1/history` | The kept history: `{"from", "to"}` |
+| `GET` | `/api/v1/changes?from=&to=[&branch_id=]` | Activity, presence, and reachability transitions in a period |
+| `GET` | `/api/v1/worklog?from=&to=[&branch_id=]` | Seconds per state of each Employee in a period (Section 4.5) |
 | `GET` | `/api/v1/branches` | Branches |
 | `GET` | `/api/v1/agents` | Agents |
 | `GET` | `/api/v1/stats` | Ingest totals since HQ start |
 
 Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
+
+- Every `GET` under `/api/v1/` is a read endpoint and requires the viewer token when one is set (Section 4.3).
+- Times in query parameters are ISO 8601 with an offset (`Z` or `+hh:mm`). A missing, malformed, or offset-less time is answered with 400.
+- A time whose UTC form falls outside the representable range (years 1 to 9999) is answered with 400; in ingest such a `date-time` fails schema validation (422).
+- `state?at=` answers 400 for a time before `history_from` or after now, and before the first message (`from` null). `reachable` is the value derived for that time (Section 4.4); `last_seq` and `last_seen_at` are those of the last message received by then.
+- `history`: `from` is `history_from`, or null before the first message; `to` is HQ's current time.
+- `changes` and `worklog` take a period of at most 31 days (`to` after `from`; otherwise 400). The period is clipped to the kept history and to now; the response `from` and `to` are the clipped period. When no part of the period lies within the kept history and before now (or before the first message), `from` and `to` are null and the lists empty.
+- `changes` and `worklog` responses are shared: a request with the same `from`, `to`, and `branch_id` as one answered within the last 30 s gets that answer, and identical requests in progress share one computation (at most 32 distinct requests kept). At most two such computations run at once; further requests wait for a slot without holding a worker thread.
+- `changes` returns `{"from", "to", "changes", "truncated", "agents", "branches"}`. Each entry of `changes` is one of `{"at", "kind": "activity", "branch_id", "agent_id", "state", "state_since"}` (a new state or a new `state_since`; tool and workload changes alone are not listed), `{"at", "kind": "presence", "branch_id", "agent_id", "presence"}`, or `{"at", "kind": "reachability", "branch_id", "reachable"}`, in time order, after `from` and up to `to`. At most 5000 entries are returned, the latest ones; `truncated` is true when more exist. `agents` holds the last agent payload (as in `state`) of each Employee listed; `branches` the last Branch payloads (`{"branch_id", "branch"}`).
+- `worklog` returns `{"from", "to", "rows", "branches"}`; each row is `{"branch_id", "agent_id", "project_id", "project_alias", "provider", "seat", "alias", "seconds", "waits", "longest_wait", "errors", "limits"}`, where `seconds` holds `on_duty`, the eight activity states, and `unobserved`.
+- Neither response carries fields beyond those of `state`.
+- An activity transition in `changes` follows the entry rule of Section 4.5: a `state` or `state_since` other than the Employee's last known activity, also across a removal of the activity.
 
 ### 4.3 Authorization
 
@@ -445,6 +472,55 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - The Collector refuses to send a token over plain HTTP to a non-loopback HQ and does not follow redirects.
 - On shutdown HQ checkpoints the WAL and closes the database.
 
+### 4.4 State History
+
+- Every change HQ applies to current state is recorded in `changes`: a key whose payload is set to a different value, or a key removed (`payload` NULL). Kinds and keys: `branch` (key empty), `agent` and `activity` (`agent_id`), `contractor` (`contractor_id`). Heartbeats, and messages that are duplicates or stale, record nothing.
+- A `snapshot` records only the keys it changes or removes. An `agent` without instance records the removal of its activity; a `contractor` with status `ended` records its removal.
+- `at` is the message `event_at`, or HQ's receive time when `event_at` is later (a Branch clock ahead of HQ's), and never earlier than the previous change of the same key or `history_from`. Ordering one key's changes by `at` therefore keeps the order in which they were applied, and no change is later than its receipt.
+- The state at a time T is the baseline overlaid with the latest change of each key at or before T; changes with the same `at` apply in recording order. At the current time it equals the current state.
+- Checkpoints: ingest records the state at whole hours (UTC) in `checkpoints` and `checkpoint_keys`: for each key, the id of its latest change at or before the hour, or NULL when that is its `baseline` payload. Each ingest walks the changes after the latest checkpoint in time order; before a change past the next whole hour, it records a checkpoint at the last whole hour before that change. It then records one at the last whole hour at or before the ingest time. Other whole hours get no checkpoint: after a checkpoint at 00:00, changes at 01:10 and 03:05 and an ingest at 05:05 give checkpoints at 01:00, 03:00, and 05:00. A change recorded later with an `at` at or before a checkpoint (a late fact) is the latest of its key there, so it updates every checkpoint from its `at` on. The state at T is computed from the latest checkpoint at or before T (the baseline when there is none) and the latest change of each key after it up to T, so a read costs the changes of at most about one hour plus those of the requested period. A database without checkpoints gets them when HQ opens it.
+- `history_from`: a new database starts its history at the receive time of its first message. A database written by 0.1.0 starts it at the first start of 0.2.0: the current state is copied into the baseline then, and no earlier history exists.
+- Pruning (Section 4) uses the same cutoff as messages. The baseline becomes the state just before the cutoff (from the latest checkpoint before it and the changes since); checkpoint keys whose change is before the cutoff are set to NULL, whose baseline payload is now that change's; checkpoints and changes before the cutoff are deleted and `history_from` moves to the cutoff.
+- Reachability at a past time comes from `messages`, not from `changes`: a Branch is observed at T when the last message received at or before T arrived within three heartbeat intervals before T (the interval of the latest `heartbeat` received by then; 30 s before the first). A gap between received messages longer than that is unobserved. The live rule that a Branch not heard since HQ started is unreachable (Section 4.1) does not apply to past times. Messages discarded when a Branch lost its sequence state (Section 4.1) shorten this record.
+
+### 4.5 Work Log
+
+`GET /api/v1/worklog` sums, for each Employee `(branch_id, project_id, agent_id)`, the time within the period:
+
+| Field | Content |
+|---|---|
+| `seconds.on_duty` | Presence `on_duty` while the Branch is observed. |
+| `seconds.<state>` | Each of `working`, `thinking`, `waiting`, `idle`, `completed`, `error`, `limited`, `unknown` while on duty and observed; on duty without an activity counts as `unknown`. Together they equal `on_duty`. |
+| `seconds.unobserved` | Branch gaps (Section 4.4) while the Employee's last known presence is `on_duty`. |
+| `waits`, `errors`, `limits` | Entries into `waiting`, `error`, and `limited` at a time within the period: an activity in that state whose `state` or `state_since` differs from the Employee's last known activity: the latest activity recorded up to then, also one removed before or within the period. An activity removed and restored with the same `state` and `state_since` is not a new entry. |
+| `longest_wait` | The longest single wait: observed seconds of one `waiting` `state_since`. A wait across a Branch gap stays one wait without the unobserved time. |
+
+- Total waiting time is `seconds.waiting`.
+- Intervals are clipped to the period; a wait that began before it counts its time within the period but no entry.
+- Rows are listed only for Employees with on-duty or unobserved time, or an entry, in the period. Each row carries the Employee's last agent payload fields `project_alias`, `provider`, `seat`, and `alias`.
+- Contractors are not included.
+
+### 4.6 External Notifications
+
+With `--notify-config <file>`, HQ posts the notifications of Section 6.4 to an ntfy topic, so they reach a subscribed phone or desktop without an open page. Off by default.
+
+Configuration file (YAML, mode 0600 required, read at start only):
+
+| Key | Content |
+|---|---|
+| `url` | ntfy topic URL. `https` required unless the host is loopback; the path names the topic. |
+| `token_file` | Optional. File holding an access token (mode 0600), sent as `Authorization: Bearer <token>`. `~` is expanded. |
+| `events` | Optional list of `waiting`, `error`, `branch`; default all. |
+| `language` | Optional, `en` (default) or `ko`. |
+
+- Other keys, a wrong value, an unreadable or group- or other-accessible file, or an empty token file stop HQ at start with one line `agentville-hq: <file>: <reason>`.
+- Rules, as in the browser (Section 6.4): a colleague entering `waiting` or `error` (a new `state_since` in the same state counts as a new entry), and a Branch becoming unreachable or reachable again. Nothing is sent for the first evaluation after HQ starts, for a colleague or Branch seen for the first time, or for colleagues of a Branch whose ingest applied a snapshot (a resync). A Branch takes part only once it has been heard since HQ started, so Branches reporting again after an HQ restart are not announced.
+- Evaluation runs after each ingest and every 5 s, since reachability changes with time alone. Evaluations run one at a time; each reads the current state together with the Branches whose snapshot was applied since the previous evaluation, which ingest records in the same locked step that applies the snapshot. Whichever evaluation first sees a snapshot's state therefore treats it as a resync.
+- Rate limit: at most one message per subject per 30 s; a change inside that window is held and sent at the first evaluation after it ends, only if the subject is still in that state and it differs from what was last sent. When more than three subjects qualify in one evaluation, one summary is sent instead.
+- Texts are the browser notification texts, read from the Web UI dictionary (`web/i18n.js`) in the configured language.
+- Request: `POST` to `url`, body the text (`text/plain; charset=utf-8`), headers `Title`, `Tags` (`agentville,<event>` with event `waiting`, `error`, `unreachable`, `reachable`, or `summary`), and `Priority` (`default` for waiting and reporting again; `high` for error and unreachable; a summary takes `high` when it includes either). A non-ASCII title is sent as an RFC 2047 encoded word (`=?UTF-8?B?...?=`); control characters become spaces. Redirects are not followed; a loopback server is contacted without environment proxies.
+- Sending runs in one background thread with a queue of 100 messages and a 10 s timeout per request. A message that does not fit is dropped. Failures are logged to standard error as `agentville-hq: notification failed: <reason>`, at most once per minute. Ingest never waits for sending.
+
 ## 5. Transport
 
 - The Collector sends each tick's messages as one batch by HTTP(S) POST to `hq.url`. Remote Branches connect outbound only; HQ never connects to a Branch.
@@ -455,13 +531,14 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 ## 6. Web UI
 
-- Navigation: Virtual office, Dashboard, Colleagues, Projects, Timeline, Branches, and display settings.
+- Navigation: Virtual office, Dashboard, Colleagues, Projects, Timeline, Work log, Branches, and display settings.
 - Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
-- Interface terms. The domain model keeps its names; only the visible labels differ. Employee is shown as "Colleague" (동료) everywhere in visible text, including headings, navigation, search, table headers, empty states, and accessible names; internal names and payload fields (`agent`, `agent_id`) are unchanged. Other labels: Branch (지점), HQ (본사), Room (방; each Project room carries a small "repository" / "저장소" sublabel, since one repository is one room; the Common Office carries none), Common Office (공용 사무실), Lounge (Fika) (휴게실 (Fika)), Infirmary (양호실), Contractor (외주), Seat (자리).
+- Interface terms. The domain model keeps its names; only the visible labels differ. Employee is shown as "Colleague" (동료) everywhere in visible text, including headings, navigation, search, table headers, empty states, and accessible names; internal names and payload fields (`agent`, `agent_id`) are unchanged. Other labels: Branch (지점), HQ (본사), Room (방; each Project room carries a small "repository" / "저장소" sublabel, since one repository is one room; the Common Office carries none), Common Office (공용 사무실), Lounge (Fika) (휴게실 (Fika)), Infirmary (양호실), Contractor (외주), Seat (자리), Work log (근무 일지), Replay (되감기), waiting time (대기 시간).
 - Presence labels: On duty (출근), Off duty (퇴근), On leave (휴가). Activity labels: Working (작업 중), Thinking (생각 중), Waiting (대기), Idle (유휴), Closed (닫힘) for `completed`, Error (오류), Limited (한도), Not measured (재지 못함) for `unknown`. Connection labels: Unverified (확인 안 됨), Waiting for Branch report (지점 보고 대기), Not connected to HQ (HQ 연결 끊김). The label Closed (폐쇄) is reserved for a closed Branch or Project (Section 1.8; not implemented), distinct from the `completed` activity label. Idle details: At desk (자리에서), Phone (휴대폰), Dozing (조는 중), Fika (휴게실). Conditions: Normal (보통), study-mode (집중), extra-coffee (커피 추가), Light (가볍게); the legacy value `lazy` is shown as Light and keeps the same pose.
 - Copy is plain and factual: interface text states what is shown or what to do, without slogans, decorative captions, or exclamations. Labels use noun phrases; Korean sentences use 합니다체.
 - Language: English and Korean. Every visible string, including accessible names, titles, and alternative text, comes from one dictionary in `i18n.js` through a `t(key, params)` helper. The display settings offer English / 한국어. The default follows the browser language (Korean when it starts with `ko`, otherwise English); the choice is kept in local storage when available. Switching re-renders the page in place and sets `<html lang>`. Dates and times use the matching locale (`en-US` or `ko-KR`) with the Branch time-zone rules below. Branch-provided text (Branch, Project, and Employee aliases, locations, tool names) is never translated.
-- Employee detail: current activity, condition, tool name, workload, Project, Branch alias, usage-limit reset time when known, and the Employee's Contractors with provider badge, activity, and tool name.
+- Employee name: the `alias` when set, otherwise the provider name and seat ("Codex 2"); seats are unique per provider on a Branch (Section 1.4). The same name is used in the office, lists, tables, the Timeline, the Work log, and notifications.
+- Employee detail: current activity, condition, tool name, workload, Project, Branch alias, usage-limit reset time when known, waiting time of the browser day ("Waited today", duration and number of waits, from the work log; not shown while replaying), the `agent_id` in small monospace text for use in the Branch configuration `aliases`, and the Employee's Contractors with provider badge, activity, and tool name.
 - Status filters and Branch indicators highlight waiting Employees, errors, and unverified connections.
 - Employee detail ends with factual notes only: the reason for an unverified, limited, or unmeasured state, and "Last observed" with the time of the Branch's last report.
 - Visual style: Cyworld-inspired isometric minirooms with chibi pixel characters, as inspiration only; original artwork, no copied graphics or brand assets.
@@ -470,11 +547,12 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 - Served by HQ at `/` (static HTML, CSS, JavaScript, and bundled artwork; no build step). The initial view is the virtual office.
 - Live data: `WS /ws/v1/live` sends `{"type": "state", "state": ...}` (the `/api/v1/state` shape) on connect, after ingest (bursts coalesced), and every 10 s. The page reconnects with backoff up to 30 s.
-- With a viewer token, the page reads it from the URL fragment (`#token=...`), keeps it in session storage, and removes it from the address bar. On each socket open the page sends `{"type": "auth", "token": ...}` as its first message (`null` without a token); HQ without a viewer token ignores it.
+- With a viewer token, the page reads it from the URL fragment (`#token=...`), keeps it in session storage, and removes it from the address bar (`history.replaceState`; no page module declares a top-level name that shadows a window global such as `history`, `location`, or `name`). On each socket open the page sends `{"type": "auth", "token": ...}` as its first message (`null` without a token); HQ without a viewer token ignores it.
 - Close code 4401 shows that a viewer token is required and 4403 that HQ refused the connection; neither is retried.
 - A Branch not heard since HQ started is reported unreachable, so the page shows "Waiting for Branch report" until its first message after an HQ restart.
 - Idle detail (at desk, phone, dozing, fika) is computed in the page from `state_since` and the Branch thresholds.
 - Branch-provided text is rendered as text only, never as markup.
+- History (Timeline, replay, Work log, waiting times) is read with `fetch` from the read endpoints of Section 4.2; with a viewer token the page sends it as `Authorization: Bearer`, never in a URL. The page reads `/api/v1/history` at load and every 60 s.
 
 ### 6.2 Virtual office presentation
 
@@ -493,7 +571,9 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Lounge activities (`lounge.js`). Each seated Lounge colleague has a profile seeded from its `agent_id`, stable for the visit: a drink (coffee, tea, juice, water, soda, or milk; coffee and tea use the ten mug designs, the others have their own glass or can), a sip rhythm (interval, duration, and style: raised to the mouth, held up briefly, or stirred), and a page-turn interval. Sip timing is scheduled per colleague, so colleagues never sip in step. Colleagues rotate between drinking, reading (an open book held in both hands with a page that turns; on the rear-facing chair the book is raised beside the head, showing its covers, spine, and page edges behind the reader's hands), and sitting. When two or more colleagues are seated, a pair occasionally talks: both turn their heads toward each other and small speech bubbles alternate between them for a few seconds, each showing one non-verbal pixel glyph (dots, heart, cup, light bulb, question mark, note, or sun); bubbles never contain words or agent data. Pairs vary, usually nearest neighbours. A counter visit can change the drink. Lounge activities are presentation only.
 - Window lighting follows the displayed Branch's local time: morning from 05:00, day from 10:00, evening from 17:00, and night from 20:00. Night windows show a moon and stars while indoor lamps remain warm. When the Branch `time` is a valid IANA time zone, the heading clock, date, window lighting, and usage-limit reset times use that zone and the clock is labeled with the zone; a missing or fictional value falls back to browser-local time labeled "Browser time" (브라우저 시각). The scene caption names the current light period (Morning, Day, Evening, Night).
 - Search, status filters, and room filters select the team list and highlight matching characters. Status filter chips wrap onto a second line on narrow screens instead of scrolling sideways. Selecting a Colleague opens their current details. Selection survives Project-page changes while the Employee still matches the filters. Remote participants of local Projects remain visible in shared facilities on every Project page.
-- Dashboard and Colleagues provide tabular views. Workload is shown as the reported count of recent tool executions ("N recent tools"); the window size is not displayed because it is not part of the payload. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
+- Dashboard and Colleagues provide tabular views. Workload is shown as the reported count of recent tool executions ("N recent tools"); the window size is not displayed because it is not part of the payload. Projects and Branches link to the office; Timeline and Work log are described in Sections 6.5 and 6.6.
+- Dashboard cards: Branches, On duty, Waiting, Error, "Waited today" (대기 시간 합계: the sum of `seconds.waiting` of the work log of the browser-local day, which HQ clips to now, with the number of waits; refreshed every 60 s and when the Dashboard opens; the request names the whole day, so pages share HQ's answer (Section 4.2); hidden while replaying), and "Longest current wait" (현재 최장 대기: the longest time since `state_since` among on-duty Employees in `waiting`, with that Employee's name, at the shown time).
+- The "Recent activity" card of the office lists changes observed since the page loaded; while replaying it lists the recorded changes of the shown day up to the replay time.
 - Display settings control language, name labels, reduced motion, automatic or manually selected window light, and browser notifications (Section 6.4). The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity. With reduced motion nobody walks, cats keep a static pose, and each Lounge colleague shows a static prop, a cup or a book, without sips, page turns, or speech bubbles.
 - Decoration (`decor.js`). Code-drawn paintings are placed inside the five framed pictures of `office.png`: each painting is a small pixel grid (landscapes, sea, mountains, botanical, still life, and abstract compositions in the office palette, with slight per-cell tone changes) mapped onto the frame's measured quadrilateral on the isometric wall and clipped to it. A few code-drawn flower props (vases, jars, bowls, and pots with blossoms in several colours) stand on free surfaces: the lounge coffee table, the top of the lounge refrigerator, the cabinet in the left project room, the infirmary window sill, and the Common Office desk corner; none is a seat or on a floor route, and each has its own stacking depth. Paintings and flowers are chosen deterministically from the Branch id, so each Branch looks distinct but stable; frames in one office never repeat a painting. They contain no text, logos, or Branch data and follow the room light.
 - The browser marks activity unverified when its HQ connection is lost or the Branch is unreachable. Tables mark on-duty, off-duty, and on-leave rows of such Branches alike. Placement, pose, and counts keep the last observed state, dimmed and marked with "?".
@@ -503,19 +583,36 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 The `/?demo=1` URL loads fictional Employees from `demo.js` and displays a Demo label. The fictional roster includes three Lounge colleagues, so Lounge activities and counter visits are visible. It does not open a live socket, write to HQ, or send browser notifications. Display settings switch between Demo and live views.
 
+`demo.js` also generates three days of history ending at page load: shifts with rests of 1 to 13 hours and activity drawn from a fixed mix, from a random generator seeded by each `agent_id`, so the same structure appears on every load; the Home Branch stops reporting for 36 minutes a day earlier and the Night Branch 14 minutes before load. The Timeline, replay, Work log, and waiting times read this history through the same calls as live data, computed in the page with the rules of Sections 4.4 and 4.5.
+
 ### 6.4 Browser notifications
 
-The page raises notifications through the Web Notification API (`notify.js`). HQ sends none itself; a notification exists only while a page with the setting turned on is open.
+The page raises notifications through the Web Notification API (`notify.js`). A browser notification exists only while a page with the setting turned on is open. HQ sends the same notifications to an ntfy topic when configured (Section 4.6).
 
 - Setting: "Browser notifications" (브라우저 알림) in display settings, off by default. Turning it on requests the browser permission from that click. The choice is kept in local storage (`agentville-notifications`) when available. The setting shows its state: On (켜짐), Off (꺼짐), blocked by the browser, or not supported. A page that is not a secure context (plain HTTP other than localhost) cannot use notifications; the control is disabled with a note that HTTPS or localhost is required. Demo mode disables the control and never notifies.
 - Triggers, only for transitions the page observes:
   - an Employee enters `waiting` or `error` (a new `state_since` in the same state counts as a new entry);
   - a Branch becomes unreachable (`reachable` true to false) or reachable again.
-- Not notified: `limited`, `completed`, idle progression, Contractors, unverified marks, the first state after load, the first state after a reconnect (resync), and the first state of a newly appearing Employee or Branch.
+- Not notified: `limited`, `completed`, idle progression, Contractors, unverified marks, the first state after load, the first state after a reconnect (resync), and the first state of a newly appearing Employee or Branch. While replaying (Section 6.5) live states are recorded as a baseline and nothing is notified; changes that happened during the replay are not notified afterwards.
 - Content is text only, in the interface language at the time of sending. Employee: title "{name} is waiting" / "{name} has an error" ("{name} 대기" / "{name} 오류"), body provider initials, Project alias, and Branch alias ("CL · alpha · Home"). Branch: "{alias} is unreachable" / "{alias} is reporting again" with a fixed explanatory body. Notifications never include tool names, tool arguments, prompts, paths, or account details. The icon is `favicon.svg`. Each Employee and each Branch has its own `tag`, so a newer notification replaces an older one for the same subject.
 - Rate limit: at most one notification per subject per 30 s. A change inside that window is held until the window ends and is sent only if the subject is still in that state and it differs from what was last notified. When more than three subjects qualify in one update, a single summary is sent instead: "{n} colleagues need attention" (동료 {n}명 확인 필요), or "{n} colleagues and branches need attention" (동료·지점 {n}건 확인 필요) when Branches are included.
 - Click: focuses the window, clears search and filters, opens the virtual office of the Employee's Branch with that Employee selected (a summary selects its first Employee), or the Branches view for a Branch notification, then closes the notification.
 - A missing or throwing `Notification`, a refused permission, or unavailable local storage leaves the rest of the page unaffected.
+
+### 6.5 Timeline and Replay
+
+- The Timeline lists the recorded changes of one day (`GET /api/v1/changes` for that day, clipped to the kept history and now), newest first: activity and presence transitions with the Employee name, Project, and Branch, and Branch reachability ("is unreachable", "is reporting again"). Times and day boundaries use the displayed Branch's time zone rules (Section 6.2). The list shows at most 400 entries in its own scroll area and notes when more exist. Today's list is reloaded at most every 15 s while the view is rendered; the request names the whole day, which HQ clips to now, so reloads and pages share HQ's answer for up to 30 s (Section 4.2).
+- Replay control (되감기): a day picker limited to the kept history, a time slider over that day (from its start or the start of history to its end or now), play and pause, speeds 1x, 10x, and 60x, and steps to the previous and next listed change. Selecting a list entry, moving the slider, or pressing play starts replay; Escape or "Back to live" ends it.
+- While replaying, every view shows `GET /api/v1/state?at=` instead of the live state: the office, its people and walks, team list, details, tables, Branch indicators, clock, window light, and idle progression all use the replay time. A banner above the heading on every view reads "Replay <date time>" (되감기 <날짜 시각>) with the step, play, and speed controls and "Back to live" (실시간으로 돌아가기); the office scene is outlined.
+- Fetching: a chosen time (slider, entry, step) is read exactly, after 150 ms without further movement; playback reads one state per replayed minute, at its last instant, so it asks HQ at most once per replayed minute at any speed. Responses are cached (360 entries). Playback stops at now; crossing midnight moves the Timeline to the next day.
+- A replayed state is shown as verified unless its Branch was unreachable at that time (Section 4.4).
+- The live socket keeps running during replay. Its states are kept but not drawn; "Back to live" draws the latest one.
+
+### 6.6 Work Log View
+
+- "Work log" (근무 일지) shows `GET /api/v1/worklog` for one day: a Branch selector ("All branches" or one Branch) and a day picker with previous and next day. Days follow the selected Branch's time zone rules (Section 6.2); for all Branches, browser time. The zone is named under the controls.
+- Rows are grouped Branch, Project, colleague; Branch and Project rows carry subtotals and a final row the total. Columns: On duty, the activity states, Unobserved, Waits (entries into `waiting`), Longest wait, Errors, and Limits (entries). Thinking, Closed, Limited, Not measured, and Unobserved columns appear only when a row has time in them. Durations are `h:mm`; zero is "-". The colleague column stays in place while the table scrolls sideways.
+- A day before the kept history shows that no history is kept; a day that starts before it notes the time history starts. Today's log is reloaded every 60 s while shown. The search field filters rows by name, Project, and Branch.
 
 ## 7. Repository Layout
 
@@ -546,11 +643,12 @@ agentville/
 
 - Fork or mirror grouping, and Project `alias`, in Branch configuration (Section 1.3).
 - History of account and model changes per Employee (Section 1.4). The `account.changed` observation is defined but not emitted.
-- Employee `alias`: sent as null (Section 1.4).
 - Closing a Branch or Project at HQ, automatic reopening, and its notification (Section 1.8).
 - Monitor count by workload, and a per-Branch workload window and mapping (Section 2.5). The window is fixed at 5 minutes.
 - Child-process Contractors (Section 1.5, Section 3.2).
 - Antigravity Adapter (Section 3.4).
+- Precomputed daily totals: each work log request is computed from the recorded changes (Section 4.5).
+- Contractors in the work log, and a Branch filter in the Timeline.
 
 ### 9.2 Open questions
 

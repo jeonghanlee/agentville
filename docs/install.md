@@ -84,8 +84,8 @@ The commands in this guide call the programs by name, so `~/.local/bin` must be 
 Check:
 
 ```bash
-agentville-collector --version                                          # agentville-collector 0.1.0
-agentville-hq --version                                                 # HQ host: agentville-hq 0.1.0
+agentville-collector --version                                          # agentville-collector 0.2.0
+agentville-hq --version                                                 # HQ host: agentville-hq 0.2.0
 ```
 
 ## 4. Start the services
@@ -124,7 +124,9 @@ To change the port:
 - in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
 - use the same port in the addresses of Section 5.
 
-HQ keeps its database in `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`; the directory is created with mode 0700). To place it elsewhere, add `--db <path>` to `ExecStart`. Received messages are kept for 30 days; `--retention-days <n>` changes that. The current state of each Branch is kept regardless.
+HQ keeps its database in `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`; the directory is created with mode 0700). To place it elsewhere, add `--db <path>` to `ExecStart`. Received messages and the state history (used by the work log and timeline replay) are kept for 30 days; `--retention-days <n>` changes that. The current state of each Branch is kept regardless. An HQ database from 0.1.0 starts its history at the first start after the upgrade.
+
+The database size follows what is kept: about 0.8 KB per state change (the message and its history entry, indexes included) and 0.4 KB per other message such as a heartbeat; hourly state checkpoints add a few MB. For 30 days, five colleagues changing state three times a minute take about 0.5 GB, one change per second around the clock about 2 GB, and heartbeats every 30 s about 35 MB per Branch. A database without checkpoints gets them when HQ opens it, before serving (about 6 s for 2.5 million changes). The write-ahead log next to the database (`hq.sqlite3-wal`) adds about 32 MB, briefly more while HQ checkpoints it during long history reads.
 
 User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user (optional; the services themselves never need root):
 
@@ -159,7 +161,7 @@ journalctl --user -u agentville-collector -n 50
 journalctl --user -u agentville-hq -n 50                                # HQ host
 ```
 
-A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with one line starting with `agentville-collector:` or `agentville-hq:` that names the file or option and the reason, for example `agentville-collector: invalid configuration: collector.poll_interval must be greater than 0` or `agentville-hq: cannot read /home/<user>/.config/agentville/tokens.yaml: No such file or directory`.
+A Collector that cannot reach HQ logs `agentville-collector: delivery failed: <reason>` on each attempt, for example `delivery failed: HTTP 401 token required`. An unusable configuration or option stops the program with one line starting with `agentville-collector:` or `agentville-hq:` that names the file or option and the reason, for example `agentville-collector: invalid configuration: collector.poll_interval must be greater than 0` or `agentville-hq: /home/<user>/.config/agentville/tokens.yaml: No such file or directory`.
 
 On the HQ host:
 
@@ -307,7 +309,51 @@ HQ reads `tokens.yaml` and `viewer.token` only at start.
 - Branch token: replace its line in `tokens.yaml` and `systemctl --user restart agentville-hq`; on the Branch, set the new `hq.token` and `systemctl --user restart agentville-collector`. Deleting the line and restarting HQ revokes the Branch.
 - Viewer token: write a new value to `viewer.token`, restart HQ, and open the page with the new `#token=`.
 
-## 7. Upgrade
+## 7. External notifications
+
+HQ can post notifications to an [ntfy](https://ntfy.sh) topic, so a phone or desktop subscribed to the topic is notified without an open browser tab. They are off by default.
+
+The rules are those of browser notifications ([Using the Office](using.md), Settings): a colleague starts waiting or has an error, and a Branch stops or resumes reporting. Nothing is sent when HQ starts, for a colleague or Branch seen for the first time, or for changes that arrive with a Branch snapshot, for example after a Collector restart. Each colleague and Branch is notified at most once per 30 s; a change within that time is sent at its end if it still holds. More than three at once become one summary. [Data and Security](data.md) lists what is sent.
+
+Create the file with mode 0600:
+
+```bash
+install -m600 /dev/null ~/.config/agentville/notify.yaml
+```
+
+```yaml
+url: https://ntfy.sh/<topic>                     # https unless the host is loopback
+token_file: ~/.config/agentville/ntfy.token       # optional; mode 0600
+events: [waiting, error, branch]                 # optional; default all three
+language: en                                     # optional; en or ko
+```
+
+| Key | Value |
+|---|---|
+| `url` | The topic URL. Subscribe to the same topic in the ntfy app. |
+| `token_file` | A file holding an ntfy access token, for a server with access control. Mode 0600: `install -m600 /dev/null ~/.config/agentville/ntfy.token`, then write the token into it. |
+| `events` | `waiting`: a colleague starts waiting. `error`: a colleague has an error. `branch`: a Branch stops or resumes reporting. |
+| `language` | Language of the texts: `en` or `ko`. |
+
+On a public server such as ntfy.sh, anyone who knows a topic name can read it. Use a long random name, for example from `python3 -c 'import secrets; print("agentville-" + secrets.token_hex(12))'`, or a server with access control and a token.
+
+Append the option to the existing `ExecStart` line in `~/.config/systemd/user/agentville-hq.service`, keeping every option already there (for example those of Section 6.3), then reload and restart. With the default line:
+
+```ini
+ExecStart=%h/.local/bin/agentville-hq --host 127.0.0.1 --port 8470 \
+    --notify-config %h/.config/agentville/notify.yaml
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart agentville-hq
+```
+
+- HQ reads the file at start only; restart HQ after editing it.
+- An invalid file stops HQ with one line, for example `agentville-hq: /home/<user>/.config/agentville/notify.yaml: url must use https unless its host is loopback`.
+- Sending runs in the background and never delays Branch reports. A failure is logged at most once a minute, for example `agentville-hq: notification failed: URLError: <urlopen error [Errno 111] Connection refused>` in `journalctl --user -u agentville-hq`.
+
+## 8. Upgrade
 
 Branch only:
 
@@ -333,7 +379,7 @@ Installed with `install.sh`: run the same command again; it moves to the latest 
 
 Configuration, roster, HQ data, and the installed unit files are kept.
 
-## 8. Uninstall
+## 9. Uninstall
 
 Branch only:
 
@@ -359,6 +405,6 @@ Data left in place, to be removed separately if no longer needed:
 
 | Path | Content |
 |---|---|
-| `~/.config/agentville/` | Collector configuration; on HQ, token files and, in form (a) with the example paths, the TLS certificate and private key |
+| `~/.config/agentville/` | Collector configuration; on HQ, token files, the notification configuration, and, in form (a) with the example paths, the TLS certificate and private key |
 | `~/.local/state/agentville/` | Collector `seq` and `roster.json` |
 | `~/.local/share/agentville/hq.sqlite3` | HQ database (HQ host) |

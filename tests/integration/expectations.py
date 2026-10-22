@@ -30,12 +30,12 @@ GLOBAL_KEYS = {"after", "agent_count", "contractors_ended"}
 
 
 def find_agent(agents, exp):
-    """The Employee at ``seat`` (default 1) in ``project`` (default: any), or None without per-Employee keys."""
+    """The Employee at ``seat`` (default: the lowest) in ``project`` (default: any), or None without per-Employee keys."""
     if set(exp) <= GLOBAL_KEYS:
         return None
-    return next(
-        a for a in agents if a.seat == exp.get("seat", 1) and exp.get("project", a.project.project_id) == a.project.project_id
-    )
+    candidates = [a for a in agents if exp.get("project", a.project.project_id) == a.project.project_id]
+    seat = exp.get("seat", min(a.seat for a in candidates))
+    return next(a for a in candidates if a.seat == seat)
 
 
 def load_scenario(scenario: Path):

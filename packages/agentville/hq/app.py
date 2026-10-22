@@ -8,21 +8,25 @@ import hmac
 import json
 import logging
 import math
-from collections.abc import AsyncIterator, Callable
+import threading
+import time
+from collections import OrderedDict
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from importlib import resources
 from typing import Any
 from urllib.parse import urlsplit
 
 import jsonschema
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from agentville import version
-from agentville.common.protocol import load_schema
+from agentville.common.protocol import iso, load_schema
+from agentville.hq.notify import Notifier
 from agentville.hq.store import Store, now_utc
 
 log = logging.getLogger(__name__)
@@ -34,6 +38,15 @@ MAX_BODY = 4 * 1024 * 1024
 LIVE_REFRESH = 10.0
 SEND_TIMEOUT = 5.0
 AUTH_TIMEOUT = 5.0
+# Seconds between notification evaluations without ingest; reachability changes with time alone.
+NOTIFY_INTERVAL = 5.0
+# Longest period one changes or work log request may cover.
+MAX_RANGE = timedelta(days=31)
+# Changes and work log responses are kept this many seconds, for this many distinct requests, and at most this many
+# are computed at once, so history reads never take every worker thread from ingest and the live state.
+HISTORY_TTL = 30.0
+HISTORY_ENTRIES = 32
+HISTORY_WORKERS = 2
 
 
 def _bearer_matches(request: Request, token: str) -> bool:
@@ -63,11 +76,71 @@ _FORMATS = jsonschema.FormatChecker(formats=())
 
 @_FORMATS.checks("date-time", raises=ValueError)
 def _date_time(value: object) -> bool:
-    return not isinstance(value, str) or datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is not None
+    if not isinstance(value, str):
+        return True
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return False
+    try:
+        # A time whose UTC form falls outside the datetime range is not a usable time.
+        parsed.astimezone(UTC)
+    except OverflowError:
+        return False
+    return True
+
+
+def _time(value: str | None, name: str) -> datetime:
+    """An ISO 8601 query time with an explicit offset, as UTC."""
+    if not value:
+        raise HTTPException(status_code=400, detail=f"{name} is required")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{name} must be an ISO 8601 time") from None
+    if parsed.tzinfo is None:
+        raise HTTPException(status_code=400, detail=f"{name} must include a time zone")
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError:
+        raise HTTPException(status_code=400, detail=f"{name} is out of range") from None
+
+
+def _period(start: str | None, end: str | None) -> tuple[datetime, datetime]:
+    first, last = _time(start, "from"), _time(end, "to")
+    if last <= first:
+        raise HTTPException(status_code=400, detail="to must be later than from")
+    if last - first > MAX_RANGE:
+        raise HTTPException(status_code=400, detail=f"the period must not exceed {MAX_RANGE.days} days")
+    return first, last
 
 
 def _encode_state(state: dict[str, Any]) -> str:
     return json.dumps({"type": "state", "state": state}, allow_nan=False, separators=(",", ":"))
+
+
+class _Results:
+    """Recent history responses by request; concurrent identical requests share one computation."""
+
+    def __init__(self, ttl: float, size: int, monotonic: Callable[[], float] = time.monotonic) -> None:
+        self._ttl, self._size, self._monotonic = ttl, size, monotonic
+        self._entries: OrderedDict[tuple[Any, ...], tuple[float, asyncio.Future[Any]]] = OrderedDict()
+
+    async def get(self, key: tuple[Any, ...], compute: Callable[[], Awaitable[Any]]) -> Any:
+        now = self._monotonic()
+        entry = self._entries.get(key)
+        if entry is None or entry[0] <= now:
+            entry = (now + self._ttl, asyncio.ensure_future(compute()))
+            self._entries[key] = entry
+            while len(self._entries) > self._size:
+                self._entries.popitem(last=False)
+        self._entries.move_to_end(key)
+        try:
+            return await asyncio.shield(entry[1])
+        except Exception:
+            # A failure is not kept.
+            if self._entries.get(key) is entry:
+                del self._entries[key]
+            raise
 
 
 class _Viewer:
@@ -96,6 +169,8 @@ def create_app(
     server_names: frozenset[str] = frozenset(),
     send_timeout: float = SEND_TIMEOUT,
     auth_timeout: float = AUTH_TIMEOUT,
+    notifier: Notifier | None = None,
+    notify_interval: float = NOTIFY_INTERVAL,
 ) -> FastAPI:
     """Build the HQ app.
 
@@ -105,6 +180,7 @@ def create_app(
     socket as its first message ``{"type": "auth", "token": ...}`` within ``auth_timeout``.
     ``hosts`` lists the accepted Host header names (DNS rebinding guard); None accepts any.
     ``server_names`` are public names of a reverse proxy, accepted as Host and as page Origin.
+    ``notifier``, when set, is evaluated after each ingest and every ``notify_interval`` seconds.
     """
     tokens = tokens or {}
     validator = jsonschema.Draft202012Validator(load_schema(), format_checker=_FORMATS)
@@ -112,6 +188,10 @@ def create_app(
 
     viewers: set[_Viewer] = set()
     changed = asyncio.Event()
+    results = _Results(HISTORY_TTL, HISTORY_ENTRIES)
+    workers = asyncio.Semaphore(HISTORY_WORKERS)
+    # Evaluations run one at a time, each on the state and resyncs it read, so none announces a resync's changes.
+    evaluating = threading.Lock()
 
     async def broadcast() -> None:
         if not viewers:
@@ -151,17 +231,35 @@ def create_app(
         token = data.get("token") if isinstance(data, dict) and data.get("type") == "auth" else None
         return isinstance(token, str) and hmac.compare_digest(token.encode(), viewer_token.encode())
 
+    def evaluate() -> None:
+        assert notifier is not None
+        try:
+            with evaluating:
+                now = clock()
+                state, heard, resynced = store.observe(now)
+                notifier.observe(state, heard, now, resynced)
+        except Exception:  # noqa: BLE001 - notifications never affect ingest
+            log.exception("notification evaluation failed")
+
+    async def notify_loop() -> None:
+        while True:
+            await run_in_threadpool(evaluate)
+            await asyncio.sleep(notify_interval)
+
     async def drain(socket: WebSocket) -> None:
         while (await socket.receive())["type"] != "websocket.disconnect":
             pass
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        task = asyncio.create_task(broadcast_loop())
+        tasks = [asyncio.create_task(broadcast_loop())]
+        if notifier is not None:
+            tasks.append(asyncio.create_task(notify_loop()))
         yield
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         store.close()
 
     app = FastAPI(title="AgentVille HQ", version=version(), lifespan=lifespan)
@@ -202,7 +300,12 @@ def create_app(
         if not last_prune or now - last_prune[0] >= timedelta(hours=1):
             store.prune(now - retention)
             last_prune[:] = [now]
-        return store.ingest(branch_id, messages, now).as_dict()
+        result = store.ingest(branch_id, messages, now)
+        if notifier is not None:
+            # Changes revealed by a snapshot are a resync, not transitions; the store hands the resync to
+            # whichever evaluation first reads the snapshot's state.
+            evaluate()
+        return result.as_dict()
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -279,9 +382,38 @@ def create_app(
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(socket.close(), 1.0)
 
+    async def read_history(compute: Callable[..., dict[str, Any]], *args: Any) -> dict[str, Any]:
+        async with workers:
+            return await run_in_threadpool(compute, *args)
+
     @app.get("/api/v1/state", dependencies=[Depends(authorize_viewer)])
-    def state() -> dict[str, Any]:
-        return store.state(clock())
+    async def state(at: str | None = None) -> dict[str, Any]:
+        if at is None:
+            return await run_in_threadpool(store.state, clock())
+        when = _time(at, "at")
+        start, now = store.history_range(clock())
+        if start is None or not start <= when <= now:
+            raise HTTPException(status_code=400, detail="at is outside the kept history")
+        return await read_history(store.state_at, when)
+
+    @app.get("/api/v1/history", dependencies=[Depends(authorize_viewer)])
+    def history() -> dict[str, Any]:
+        start, now = store.history_range(clock())
+        return {"from": iso(start) if start else None, "to": iso(now)}
+
+    @app.get("/api/v1/changes", dependencies=[Depends(authorize_viewer)])
+    async def changes(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to"),
+                      branch_id: str | None = None) -> dict[str, Any]:
+        first, last = _period(start, end)
+        return await results.get(("changes", first, last, branch_id),
+                                 lambda: read_history(store.changes, first, last, clock(), branch_id))
+
+    @app.get("/api/v1/worklog", dependencies=[Depends(authorize_viewer)])
+    async def worklog(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to"),
+                      branch_id: str | None = None) -> dict[str, Any]:
+        first, last = _period(start, end)
+        return await results.get(("worklog", first, last, branch_id),
+                                 lambda: read_history(store.worklog, first, last, clock(), branch_id))
 
     @app.get("/api/v1/branches", dependencies=[Depends(authorize_viewer)])
     def branches() -> list[dict[str, Any]]:

@@ -103,6 +103,7 @@ class Collector:
             leave_after=timedelta(seconds=config.thresholds["leave"]),
             condition_for=config.condition_for,
             save=self._save_roster,
+            alias_for=config.aliases.get,
         )
         self._roster = roster
         if roster is not None:

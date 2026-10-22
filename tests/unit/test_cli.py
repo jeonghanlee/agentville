@@ -52,6 +52,7 @@ def _refused(main, argv, prefix, text):
     ("host: {id: b}\nproviders: {codex: x}\n", "providers.codex must be a list"),
     ("host: {id: b}\nhq: x\n", "hq must be a mapping"),
     ("host: {id: b}\nconditions: 5\n", "conditions must be a list"),
+    ("host: {id: b}\naliases: {a: ''}\n", "aliases.a must be a non-empty string of at most 40 characters"),
 ])
 def test_collector_reports_bad_configuration_in_one_line(tmp_path, content, text):
     path = tmp_path / "config.yaml"
@@ -78,8 +79,8 @@ def _hq(tmp_path, *options):
 
 def test_hq_reports_missing_or_malformed_token_files(tmp_path):
     missing = str(tmp_path / "missing")
-    _refused(hq_main.main, _hq(tmp_path, "--tokens", missing), "agentville-hq", f"cannot read {missing}")
-    _refused(hq_main.main, _hq(tmp_path, "--viewer-token-file", missing), "agentville-hq", f"cannot read {missing}")
+    _refused(hq_main.main, _hq(tmp_path, "--tokens", missing), "agentville-hq", f"{missing}: No such file or directory")
+    _refused(hq_main.main, _hq(tmp_path, "--viewer-token-file", missing), "agentville-hq", f"{missing}: No such file or directory")
     malformed = _private(tmp_path / "tokens.yaml", "b1: [\n")
     _refused(hq_main.main, _hq(tmp_path, "--tokens", malformed), "agentville-hq", "YAML syntax error at line 2")
 

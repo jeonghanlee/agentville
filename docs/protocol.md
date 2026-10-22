@@ -50,8 +50,8 @@ Carries the full current state of one Employee.
 | `project_id` | Normalized remote URL, or hash of `(host, path)` for a repository without a remote. |
 | `project_alias` | Project display name: the base name of the repository directory, or `Common Office`. |
 | `provider` | e.g. `claude`, `codex` |
-| `seat` | Seat number. |
-| `alias` | Employee display name. Currently always null. |
+| `seat` | Seat number, unique per provider on the Branch. |
+| `alias` | Employee display name from the Branch configuration `aliases` (at most 40 characters), or null. |
 | `presence` | `on_duty`, `off_duty`, `on_leave` |
 | `presence_since` | UTC time of the last presence change. |
 | `account_alias` | Account display name. |
@@ -127,4 +127,4 @@ The following are never sent to HQ:
 - Tool arguments, file paths, prompt content.
 - Details of `waiting` requests and `error` causes, including provider error and usage-limit fields (Claude `error`, `apiError`, `errorDetails`, `quotaLimits` other than the reset time; Codex `task_complete.error`). A usage-limit reset time is sent only as `reset_at`.
 
-The Employee `alias` is currently always null, so no Employee display name is sent.
+The Employee `alias` is sent only when the Branch configuration sets one for that `agent_id`.
