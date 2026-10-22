@@ -45,7 +45,9 @@ curl -fsSL https://raw.githubusercontent.com/jeonghanlee/agentville/master/insta
 | `--token-file <file>` | Sets `hq.token` from the file (Section 6.5). |
 | `--no-start` | Installs the unit files without enabling or restarting the services. |
 
-It writes the Collector configuration before the first service start, copies a unit file only when none is installed, and then enables and restarts the services. Without a systemd user instance it prints the foreground commands instead. Continue with Section 5.
+It writes the Collector configuration before the first service start, copies a unit file only when none is installed, and then enables and restarts the services and checks that they are running. Without a systemd user instance it prints the foreground commands instead. It stops without changes when `~/.local/src/agentville` has local changes. Continue with Section 5.
+
+A Branch reporting to an HQ on another host needs a token for its `host.id` (Section 6.1), which the first run writes. Run the script once, create the token on HQ (Section 6.2), then run it again with `--hq-url` and `--token-file`.
 
 The manual steps:
 
@@ -325,7 +327,7 @@ git pull
 systemctl --user restart agentville-hq agentville-collector
 ```
 
-Installed with `install.sh`: run the same command again; it moves to the latest release (or `--ref`) and restarts the services.
+Installed with `install.sh`: run the same command again; it moves to the latest release (or `--ref`) and restarts the services. It leaves the source on a detached commit, so the `git pull` steps above apply only to a manual installation.
 
 Configuration, roster, HQ data, and the installed unit files are kept.
 

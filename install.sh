@@ -55,6 +55,9 @@ has_user_systemd() {
 fetch_source() {
     local ref="$1"
     if [[ -d "$SRC_DIR/.git" ]]; then
+        if [[ -n "$(git -C "$SRC_DIR" status --porcelain --untracked-files=no)" ]]; then
+            die "$SRC_DIR has local changes; commit, stash, or discard them first"
+        fi
         info "Updating $SRC_DIR"
         git -C "$SRC_DIR" fetch --quiet --tags --force origin
     else
@@ -66,9 +69,10 @@ fetch_source() {
         ref="$(git -C "$SRC_DIR" tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
         [[ -n "$ref" ]] || ref="origin/HEAD"
     fi
+    # A branch name resolves to the fetched remote branch; local branches are never updated.
     local commit
-    commit="$(git -C "$SRC_DIR" rev-parse --verify --quiet "${ref}^{commit}" \
-        || git -C "$SRC_DIR" rev-parse --verify --quiet "origin/${ref}^{commit}")" \
+    commit="$(git -C "$SRC_DIR" rev-parse --verify --quiet "origin/${ref}^{commit}" \
+        || git -C "$SRC_DIR" rev-parse --verify --quiet "${ref}^{commit}")" \
         || die "unknown ref: $ref"
     info "Checking out $ref"
     git -C "$SRC_DIR" checkout --quiet --detach "$commit"
@@ -135,6 +139,11 @@ install_services() {
         info "Starting ${units[*]}"
         systemctl --user enable --quiet "${units[@]}"
         systemctl --user restart "${units[@]}"
+        sleep 2
+        for unit in "${units[@]}"; do
+            systemctl --user is-active --quiet "$unit" \
+                || die "$unit did not start; see: journalctl --user -u $unit"
+        done
     fi
 }
 
@@ -158,7 +167,7 @@ main() {
 
     command -v git >/dev/null 2>&1 || die "git is required"
     local python
-    python="$(find_python)" || die "Python 3.12 or later with venv is required (docs/install.md Section 1)"
+    python="$(find_python)" || die "Python 3.12 or later with venv is required; see https://jeonghanlee.github.io/agentville/install.html"
 
     fetch_source "$ref"
     install_package "$python" "$with_hq"
