@@ -81,6 +81,12 @@ systemctl --user daemon-reload
 systemctl --user enable --now agentville-hq agentville-collector
 ````
 
+HQ listens on `127.0.0.1:8470`. When that port is taken (`ss -ltn 'sport = :8470'` lists a listener), choose another port, for example 8471, before enabling the services:
+
+- in `~/.config/systemd/user/agentville-hq.service`, change `--port 8470` in `ExecStart` to `--port 8471`;
+- in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
+- use the same port in the addresses of Section 5.
+
 User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user; this is optional and is the only step that needs root:
 
 ````bash
