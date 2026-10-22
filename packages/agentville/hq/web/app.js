@@ -228,12 +228,18 @@ function context(all) {
     || ["common", "fika", "infirmary"].includes(roomOf(r)));
   return { local, projects, page, present, office };
 }
+// Unverified has two causes: the page has no HQ connection, or HQ is connected but has no fresh Branch report.
+// Both keep the last observed state; only the wording differs.
+function hqConnected() { return DEMO || connected; }
+function branchWording(branch) {
+  return branch?.reachable && hqConnected() ? "reporting" : hqConnected() ? "awaiting" : "hqLost";
+}
 function stateLabel(row) {
   const label = !row.duty ? presenceName(row.agent.presence)
     : row.detail && row.detail !== "at desk" ? t("idle." + row.detail) : stateName(row.state);
   const unverified = !row.verified;
   return el("span", { class: "state-label" + (unverified ? " unverified" : ""), style: { "--state-color": color(row.state) },
-    ...(unverified ? { title: t("state.unverifiedTitle", { label }) } : {}) },
+    ...(unverified ? { title: t(hqConnected() ? "state.awaitingTitle" : "state.unverifiedTitle", { label }) } : {}) },
     el("i", { class: "status-dot" }), label, unverified ? el("span", { class: "unverified-mark", "aria-hidden": "true" }, "?") : null,
     unverified ? el("span", { class: "sr-only" }, t("state.unverifiedSuffix")) : null);
 }
@@ -427,12 +433,13 @@ function renderCharacters(ctx) {
         companion.tabIndex = visible ? 0 : -1;
         const foot = desk === "lying" ? [seat[0]+4.2,seat[1]+13]
           : [seat[0]+3.1,seat[1]+(visit || spot ? 0 : desk.startsWith("back") ? 2.2 : 3.6)];
-        companion.style.left = (foot[0] + i * 2.3) + "%";
+        companion.style.left = (foot[0] + i * 2.8) + "%";
         companion.style.top = (foot[1] + i * .9) + "%";
         companion.style.zIndex = String(Math.floor(foot[1] + i * .9)+1);
         const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra]);
         if (companion.dataset.appearance !== appearance) {
           companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
+            el("span", { class: "contractor-tag" + (contractor.provider === "codex" ? " codex" : ""), "aria-hidden": "true" }, providerInitials(contractor.provider)),
             el("span", { class: "contractor-name" }, badge(contractor.provider), t("contractor") + " / " + stateName(state), tool ? " / " + tool : null),
             ...(extra ? [el("small", {}, "+" + extra)] : []));
           companion.dataset.appearance = appearance;
@@ -485,7 +492,7 @@ function renderTeam(ctx) {
   const occupants = facilityOccupancy.get(keyOf(branchId,roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
   if (waiting) stats.push([t("detail.place"), t(roomOf(row) === "infirmary" ? "queue.bed" : "queue.seat")]);
-  const note = !row.verified ? t("detail.unverified") : row.state === "limited" ? t("detail.limited")
+  const note = !row.verified ? t(hqConnected() ? "detail.awaiting" : "detail.unverified") : row.state === "limited" ? t("detail.limited")
     : row.state === "unknown" ? t("detail.unknown") : "";
   const observed = clockTime(row.branch?.last_seen_at);
   $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, t("detail.eyebrow")),
@@ -576,7 +583,7 @@ function renderData(all) {
     const branches = current.branches.filter((b) => !query || (b.branch?.alias || "").toLowerCase().includes(query));
     root.replaceChildren(el("div", { class: "data-grid" }, branches.length ? branches.map((b) =>
       el("article", { class: "branch-card" }, icon("house"), el("h2", {}, branchName(b)),
-        el("p", {}, t(b.reachable && (DEMO || connected) ? "branch.reporting" : "branch.unreachable")),
+        el("p", {}, t("branch." + branchWording(b))),
         el("p", {}, t("branch.counts", { duty: all.filter((r) => r.agent.branch_id === b.branch_id && r.duty).length, age: age(b.last_seen_at, false) })),
         button(t("branch.open"), "secondary-button", () => { branchId = b.branch_id; floor = 0; roomFilter = ""; stateFilter = "all"; setView("office"); })))
       : el("p", { class: "empty-list" }, t("branch.noMatch"))));
@@ -608,9 +615,9 @@ function render() {
   $("branch-select").disabled = !current.branches.length;
   const branch = current.branches.find((b) => b.branch_id === branchId);
   text("branch-subtitle", branch ? (branch.branch?.location || t("branch.noLocation")) : t("branch.waiting"));
-  const available = branch?.reachable && (DEMO || connected);
-  $("office-open").classList.toggle("unreachable", !available);
-  $("office-open").replaceChildren(el("i", { class: "status-dot" }), t(available ? "branch.reporting" : "branch.noReport"));
+  const wording = branch || !hqConnected() ? branchWording(branch) : "noReport";
+  $("office-open").classList.toggle("unreachable", wording !== "reporting");
+  $("office-open").replaceChildren(el("i", { class: "status-dot" }), t("branch." + wording));
   const projects = new Set(all.filter((r) => r.agent.project_id !== COMMON).map((r) => r.agent.project_id));
   $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "summary.onDuty"],
     ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
@@ -621,14 +628,15 @@ function render() {
   const first = !current.branches.length;
   text("empty-title", t(first ? "empty.firstTitle" : "empty.dutyTitle"));
   text("empty-text", t(first ? "empty.firstText" : "empty.dutyText"));
-  text("office-footer-text", connected || DEMO ? t("footer.counts", { present: ctx.present.length, rooms: ctx.projects.length }) : t("footer.waiting"));
+  text("office-footer-text", hqConnected() ? t("footer.counts", { present: ctx.present.length, rooms: ctx.projects.length })
+    : t(everOpened ? "footer.hqLost" : "footer.waiting"));
   $("recent-activity").replaceChildren(...(visibleEvents().length ? visibleEvents().slice(0,4).map(eventNode)
     : [el("p", { class: "empty-list" }, t("activity.none"))]));
   $("branch-statuses").replaceChildren(...current.branches.map((b) =>
-    el("span", { class: "branch-status" + (b.reachable && (DEMO || connected) ? "" : " unreachable") },
+    el("span", { class: "branch-status" + (branchWording(b) === "reporting" ? "" : " unreachable") },
       el("i", { class: "status-dot" }), branchName(b),
       el("time", { datetime: b.last_seen_at },
-        t(b.reachable && (DEMO || connected) ? "branch.lastReport" : "branch.lost", { age: age(b.last_seen_at) })))));
+        t({ reporting: "branch.lastReport", awaiting: "branch.awaitingAge", hqLost: "branch.hqLostAge" }[branchWording(b)], { age: age(b.last_seen_at) })))));
   if (view !== "office") renderData(all);
   updateClock();
   restoreFocus(focused);

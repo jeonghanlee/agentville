@@ -75,7 +75,12 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
     + rect(left) + '</clipPath><clipPath id="' + id + '-right">' + rect(right) + '</clipPath></defs>'
     + '<g class="body" mask="url(#' + id + '-body)">' + art + '</g><g class="head" clip-path="url(#' + id + '-head)">' + art
     + '</g><g class="hand-left" clip-path="url(#' + id + '-left)">' + art + '</g><g class="pointer-hand"><g class="hand-right" clip-path="url(#' + id + '-right)">' + art + '</g></g>';
-  if (contractor) svg.insertAdjacentHTML("beforeend", '<path d="M9 5q7-5 14 1v3H8Z" fill="#d7ad59"/><path d="M7 9h17" stroke="#f3d18c" stroke-width="2" stroke-linecap="round"/>');
+  // Contractors wear a safety-yellow hard hat with a dark outline so they read apart from Employee hats.
+  if (contractor) svg.insertAdjacentHTML("beforeend", '<g class="hard-hat" stroke="#4a3812" stroke-width=".9" stroke-linejoin="round">'
+    + '<path d="M7.6 9.6C7.6 1.6 24.4 1.6 24.4 9.6Z" fill="#f6c51f"/>'
+    + '<path d="M14.6 3v6.4h2.8V3" fill="#ffe27a" stroke-width=".6"/>'
+    + '<rect x="5.2" y="9.1" width="21.6" height="2.3" rx="1.1" fill="#e9ab0c"/>'
+    + '<path d="M10 5.6q1.5-2 4-2.4" fill="none" stroke="#fff4c4" stroke-width=".8" stroke-linecap="round"/></g>');
   const symbol = { thinking: "...", waiting: "!", unknown: "?", error: "+" }[state]
     || (detail === "dozing" ? "z" : "");
   if (symbol) {
