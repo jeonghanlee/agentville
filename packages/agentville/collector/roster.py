@@ -28,8 +28,9 @@ def atomic_write(path: str, text: str) -> None:
 class Roster:
     """JSON list of Employee records; an unreadable file starts an empty roster."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, readonly: bool = False) -> None:
         self.path = path
+        self.readonly = readonly
 
     def load(self) -> list[dict[str, Any]]:
         try:
@@ -40,4 +41,6 @@ class Roster:
         return [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
 
     def save(self, records: list[dict[str, Any]]) -> None:
+        if self.readonly:
+            return
         atomic_write(self.path, json.dumps(records, separators=(",", ":")) + "\n")

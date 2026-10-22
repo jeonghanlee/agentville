@@ -41,8 +41,9 @@ class SeqStore:
 
     BLOCK = 1000
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, readonly: bool = False) -> None:
         self.path = path
+        self.readonly = readonly
 
     def reserve(self, next_seq: int) -> int:
         bound = next_seq + self.BLOCK - 1
@@ -57,7 +58,8 @@ class SeqStore:
             return 0
 
     def save(self, seq: int) -> None:
-        atomic_write(self.path, f"{seq}\n")
+        if not self.readonly:
+            atomic_write(self.path, f"{seq}\n")
 
 
 def build_adapters(config: BranchConfig) -> list[Adapter]:
@@ -229,8 +231,9 @@ def main(argv: list[str] | None = None) -> int:
             deliver,
             build_adapters(config),
             GitProjectResolver(config.host_id),
-            SeqStore(os.path.join(state_dir(), "seq")),
-            roster=Roster(os.path.join(state_dir(), "roster.json")),
+            # Diagnostic output starts from the stored state but never writes it back.
+            SeqStore(os.path.join(state_dir(), "seq"), readonly=bool(args.output)),
+            roster=Roster(os.path.join(state_dir(), "roster.json"), readonly=bool(args.output)),
         )
         while True:
             collector.tick()

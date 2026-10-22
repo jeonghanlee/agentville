@@ -114,6 +114,10 @@ class Judge:
             case Kind.SESSION_STARTED:
                 inst.session_id = obs.data.get("session_id")
                 if inst.session_id:
+                    # Only the colleague who last worked on a session keeps it, for seat rule 1.
+                    for other in self.agents:
+                        if other is not agent and inst.session_id in other.sessions:
+                            other.sessions.remove(inst.session_id)
                     agent.remember(inst.session_id)
                     self._save(self.records())
                 self._emit_activity(agent, obs.event_at)

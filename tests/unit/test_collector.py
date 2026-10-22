@@ -104,7 +104,7 @@ def test_cli_once_writes_valid_messages(tmp_path, monkeypatch):
     for message in messages:
         validator.validate(message)
     assert (tmp_path / "config" / "agentville" / "config.yaml").exists()
-    assert (tmp_path / "state" / "agentville" / "seq").read_text().strip() == "1000"
+    assert not (tmp_path / "state" / "agentville" / "seq").exists()
 
 
 class FailingAdapter:
@@ -255,3 +255,32 @@ def test_unreadable_roster_starts_empty(tmp_path):
     collector, out = _rostered(tmp_path, ScriptedAdapter(), [T0])
     collector.tick()
     assert _snapshot_agents(out) == []
+
+
+def test_resumed_session_returns_to_the_colleague_who_last_worked_on_it(tmp_path):
+    a, b = ShiftKey("claude", "1:1"), ShiftKey("claude", "2:2")
+
+    def obs(kind, shift, **data):
+        return Observation(kind, shift, T0, T0, Source.SESSION_FILE, data)
+
+    adapter = ScriptedAdapter()
+    adapter.batches = [
+        [obs(Kind.PROCESS_STARTED, a, cwd="/r", session_id="s", runtime={"type": "shell"}), obs(Kind.SESSION_STARTED, a, session_id="s"),
+         obs(Kind.PROCESS_STARTED, b, cwd="/r", session_id="s", runtime={"type": "shell"}), obs(Kind.SESSION_STARTED, b, session_id="s"),
+         obs(Kind.PROCESS_EXITED, a), obs(Kind.PROCESS_EXITED, b)],
+        [obs(Kind.PROCESS_STARTED, ShiftKey("claude", "3:3"), cwd="/r", session_id="s", runtime={"type": "shell"})],
+    ]
+    collector, _ = _collector(tmp_path, adapter, lambda: T0)
+    collector.tick()
+    collector.tick()
+    assert [(x.seat, x.instance is not None) for x in collector.judge.agents] == [(1, False), (2, True)]
+
+
+def test_diagnostic_output_does_not_write_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    config = tmp_path / "config.yaml"
+    config.write_text("host: {id: b}\nproviders: {claude: [], codex: []}\n")
+    config.chmod(0o600)
+    assert main(["--config", str(config), "--once", "--output", str(tmp_path / "out.jsonl")]) == 0
+    assert (tmp_path / "out.jsonl").read_text()
+    assert not (tmp_path / "state").exists()
