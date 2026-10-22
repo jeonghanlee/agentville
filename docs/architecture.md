@@ -148,11 +148,11 @@ conditions:
 |---|---|---|---|
 | `working` | Tool execution started, not finished. Tool failures (tests, compile errors) remain `working`. | Desk | Hands moving, head turning |
 | `thinking` | Explicit model-generation signal. Not inferred when the provider emits none. | Desk | Thought bubble; posture chosen randomly per occurrence (chin on hand or leaning back) |
-| `waiting` | Explicit user-input or approval request. | Desk | Waving hand. No time-based transition. HQ notification. |
+| `waiting` | Explicit user-input or approval request. | Desk | Waving hand. No time-based transition. Browser notification from the Web UI (6.4). |
 | `idle` | Alive, no active turn. | See 2.3 | See 2.3 |
 | `completed` | Provider turn-completed event. | Desk | Momentary checkmark, then `idle` |
-| `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | HQ notification |
-| `limited` | Provider usage-limit event. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No HQ notification. |
+| `error` | Agent-level failure (API error, authentication failure, abnormal halt). Normal process exit is not an error. | Infirmary | Browser notification from the Web UI (6.4) |
+| `limited` | Provider usage-limit event. | Desk | Computer off, watching wall clock. Reset time shown on the clock when available. No time-based transition. No browser notification. |
 | `unknown` | Insufficient or contradictory evidence. | Desk | Dimmed, question mark overhead |
 
 ### 2.3 Idle Progression
@@ -460,12 +460,26 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Window lighting follows the displayed Branch's local time: morning from 05:00, day from 10:00, evening from 17:00, and night from 20:00. Night windows show a moon and stars while indoor lamps remain warm. When the Branch `time` is a valid IANA time zone, the heading clock, date, window lighting, and usage-limit reset times use that zone and the clock is labeled with the zone; a missing or fictional value falls back to browser-local time labeled "Browser time" (브라우저 시각). The scene caption names the current light period (Morning, Day, Evening, Night).
 - Search, status filters, and room filters select the team list and highlight matching characters. Selecting a Colleague opens their current details. Selection survives Project-page changes while the Employee still matches the filters. Remote participants of local Projects remain visible in shared facilities on every Project page.
 - Dashboard and Colleagues provide tabular views. Workload is shown as the reported count of recent tool executions ("N recent tools"); the window size is not displayed because it is not part of the payload. Projects and Branches link to the office; Timeline shows current activity and changes observed during the browser visit.
-- Display settings control language, name labels, reduced motion, and automatic or manually selected window light. The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
+- Display settings control language, name labels, reduced motion, automatic or manually selected window light, and browser notifications (6.4). The interface also respects the system reduced-motion preference. Hidden views and reduced motion pause random office activity.
 - The browser marks activity unverified when its HQ connection is lost or the Branch is unreachable. Tables mark on-duty, off-duty, and on-leave rows of such Branches alike. Placement, pose, and counts keep the last observed state, dimmed and marked with "?".
 
 ### 6.3 Synthetic demonstration mode
 
-The `/?demo=1` URL loads fictional Employees from `demo.js` and displays a Demo label. It does not open a live socket or write to HQ. Display settings switch between Demo and live views.
+The `/?demo=1` URL loads fictional Employees from `demo.js` and displays a Demo label. It does not open a live socket, write to HQ, or send browser notifications. Display settings switch between Demo and live views.
+
+### 6.4 Browser notifications
+
+The page raises notifications through the Web Notification API (`notify.js`). HQ sends none itself; a notification exists only while a page with the setting turned on is open.
+
+- Setting: "Browser notifications" (브라우저 알림) in display settings, off by default. Turning it on requests the browser permission from that click. The choice is kept in local storage (`agentville-notifications`) when available. The setting shows its state: On (켜짐), Off (꺼짐), blocked by the browser, or not supported. A page that is not a secure context (plain HTTP other than localhost) cannot use notifications; the control is disabled with a note that HTTPS or localhost is required. Demo mode disables the control and never notifies.
+- Triggers, only for transitions the page observes:
+  - an Employee enters `waiting` or `error` (a new `state_since` in the same state counts as a new entry);
+  - a Branch becomes unreachable (`reachable` true to false) or reachable again.
+- Not notified: `limited`, `completed`, idle progression, Contractors, unverified marks, the first state after load, the first state after a reconnect (resync), and the first state of a newly appearing Employee or Branch.
+- Content is text only, in the interface language at the time of sending. Employee: title "{name} is waiting" / "{name} has an error" ("{name} 대기" / "{name} 오류"), body provider initials, Project alias, and Branch alias ("CL · alpha · Home"). Branch: "{alias} is unreachable" / "{alias} is reporting again" with a fixed explanatory body. Notifications never include tool names, tool arguments, prompts, paths, or account details. The icon is `favicon.svg`. Each Employee and each Branch has its own `tag`, so a newer notification replaces an older one for the same subject.
+- Rate limit: at most one notification per subject per 30 s. A change inside that window is held until the window ends and is sent only if the subject is still in that state and it differs from what was last notified. When more than three subjects qualify in one update, a single summary is sent instead: "{n} colleagues need attention" (동료 {n}명 확인 필요), or "{n} colleagues and branches need attention" (동료·지점 {n}건 확인 필요) when Branches are included.
+- Click: focuses the window, clears search and filters, opens the virtual office of the Employee's Branch with that Employee selected (a summary selects its first Employee), or the Branches view for a Branch notification, then closes the notification.
+- A missing or throwing `Notification`, a refused permission, or unavailable local storage leaves the rest of the page unaffected.
 
 ## 7. Repository Layout
 

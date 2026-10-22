@@ -8,6 +8,7 @@ import { createDaylight, branchZone } from "./daylight.js";
 import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
+import { createNotifications } from "./notify.js";
 
 const DEMO = new URLSearchParams(location.search).get("demo") === "1";
 const TOKEN = takeToken();
@@ -60,6 +61,9 @@ let daylight = null;
 let furniture = null;
 let coffee = null;
 let cats = null;
+let notifications = null;
+// The first state of each socket is a baseline: it records states without notifying.
+let resync = true;
 let connection = ["connection.connecting", ""];
 
 function el(tag, attrs = {}, ...children) {
@@ -111,9 +115,11 @@ function repositoryTag(projectId) {
   return projectId === COMMON ? null : el("span", { class: "room-kind" }, t("room.repository"));
 }
 function branchName(branch) { return branch?.branch?.alias || t("branch.unnamed"); }
+function providerInitials(provider) {
+  return provider === "claude" ? "CL" : provider === "codex" ? "CX" : String(provider).slice(0, 2).toUpperCase();
+}
 function badge(provider) {
-  return el("span", { class: "provider" + (provider === "codex" ? " codex" : "") },
-    provider === "claude" ? "CL" : provider === "codex" ? "CX" : String(provider).slice(0, 2).toUpperCase());
+  return el("span", { class: "provider" + (provider === "codex" ? " codex" : "") }, providerInitials(provider));
 }
 function age(iso, compact = true) {
   const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
@@ -646,18 +652,37 @@ function setConnection(key, cls) {
   $("connection").className = "connection " + cls;
   $("connection").replaceChildren(el("i", { class: "status-dot" }), t(key));
 }
+// Notification subjects carry only names, aliases, and provider initials.
+function notificationSubjects(all) {
+  return [...all.map((row) => ({ id: "colleague:" + row.key, kind: "colleague", state: row.state, since: row.activity?.state_since || "",
+      name: row.name, provider: providerInitials(row.agent.provider), project: row.project, branch: row.branchName,
+      target: { kind: "colleague", key: row.key, branchId: row.agent.branch_id } })),
+    ...current.branches.map((b) => ({ id: "branch:" + b.branch_id, kind: "branch", reachable: Boolean(b.reachable),
+      branch: branchName(b), target: { kind: "branch", branchId: b.branch_id } }))];
+}
+// A notification click shows the colleague in their Branch office, or the Branches view for a Branch.
+function openNotified(target) {
+  if ($("settings-dialog").open) $("settings-dialog").close();
+  $("search").value = ""; stateFilter = "all"; roomFilter = "";
+  if (target.kind === "branch") { setView("branches"); return; }
+  if (current.branches.some((b) => b.branch_id === target.branchId)) { branchId = target.branchId; floor = 0; }
+  selectEmployee(target.key);
+  setView("office");
+}
 function acceptState(state) {
   if (!state || !["branches","agents","activities","contractors"].every((key) => Array.isArray(state[key]))) return false;
   current = state; connected = true;
   const all = rows();
-  recordEvents(all); noteCompletions(all); render(); return true;
+  recordEvents(all); noteCompletions(all);
+  if (!DEMO) { notifications?.observe(notificationSubjects(all), resync); resync = false; }
+  render(); return true;
 }
 function connect(delay = 1000) {
   if (DEMO) return;
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(scheme + "://" + location.host + "/ws/v1/live" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : ""));
   activeSocket = socket;
-  socket.addEventListener("open", () => { everOpened = true; failedOpens = 0; });
+  socket.addEventListener("open", () => { everOpened = true; failedOpens = 0; resync = true; });
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(event.data);
@@ -712,7 +737,7 @@ function applyLanguage() {
   text("settings-mode-toggle", t(DEMO ? "settings.toLive" : "settings.toDemo"));
   setConnection(...connection);
   labels($("labels-toggle").getAttribute("aria-pressed") === "true");
-  daylight?.relabel(); cats?.relabel();
+  daylight?.relabel(); cats?.relabel(); notifications?.relabel();
   setView(view);
 }
 document.querySelectorAll("[data-icon]").forEach((node) => node.replaceChildren(icon(node.dataset.icon)));
@@ -741,6 +766,7 @@ document.addEventListener("keydown", (event) => {
 $("settings-dialog").addEventListener("click", (event) => { if (event.target === $("settings-dialog")) $("settings-dialog").close(); });
 daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.querySelector(".scene-sun"), $("setting-daylight"));
 coffee = createCoffeeBreaks($("characters"),render);
+notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
 if (DEMO) {
   acceptState(demoState());
   connection = ["connection.demo", "demo"];
