@@ -52,6 +52,7 @@ def _refused(main, argv, prefix, text):
     ("host: {id: b}\nproviders: {codex: x}\n", "providers.codex must be a list"),
     ("host: {id: b}\nhq: x\n", "hq must be a mapping"),
     ("host: {id: b}\nconditions: 5\n", "conditions must be a list"),
+    ("host: {id: b}\naliases: {a: ''}\n", "aliases.a must be a non-empty string of at most 40 characters"),
 ])
 def test_collector_reports_bad_configuration_in_one_line(tmp_path, content, text):
     path = tmp_path / "config.yaml"

@@ -73,7 +73,7 @@
         "project_alias": {"type": "string"},
         "provider": {"type": "string"},
         "seat": {"type": "integer", "minimum": 1},
-        "alias": {"type": ["string", "null"]},
+        "alias": {"type": ["string", "null"], "maxLength": 40},
         "presence": {"enum": ["on_duty", "off_duty", "on_leave"]},
         "presence_since": {"$ref": "#/$defs/timestamp"},
         "account_alias": {"type": ["string", "null"]},

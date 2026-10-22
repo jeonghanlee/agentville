@@ -133,3 +133,51 @@ def test_snapshot_includes_active_contractors(tmp_path):
     instance_id = snapshot["agents"][0]["instance"]["instance_id"]
     assert [(c["parent_instance_id"], c["status"], c["state"]) for c in snapshot["contractors"]] == [
         (instance_id, "hired", "working")]
+
+
+class Repositories:
+    def resolve(self, cwd):
+        return Project("github.com/example/" + cwd.strip("/"), cwd.strip("/"))
+
+
+def _started(judge, shift, cwd, seconds=0):
+    at = T0 + timedelta(seconds=seconds)
+    judge.apply(Observation(Kind.PROCESS_STARTED, shift, at, at, Source.SESSION_LOG,
+                            {"cwd": cwd, "session_id": shift.native_id, "runtime": {"type": "rollout"}}))
+
+
+def test_seats_are_unique_per_provider_on_the_branch():
+    judge = Judge(Repositories(), lambda kind, at, payload: None)
+    # Rollout-only Codex shifts in different repositories, and a Claude shift beside them.
+    _started(judge, ShiftKey("codex", "rollout:1"), "/alpha")
+    _started(judge, ShiftKey("codex", "rollout:2"), "/beta")
+    _started(judge, ShiftKey("codex", "rollout:3"), "/gamma")
+    _started(judge, ShiftKey("claude", "1:1"), "/beta")
+    seats = [(a.provider, a.project.alias, a.seat) for a in judge.agents]
+    assert seats == [("codex", "alpha", 1), ("codex", "beta", 2), ("codex", "gamma", 3), ("claude", "beta", 1)]
+    judge.apply(Observation(Kind.PROCESS_EXITED, ShiftKey("codex", "rollout:2"), T0, T0, Source.SESSION_LOG, {}))
+    # A later shift in the same repository returns to its Employee; a new repository takes the next free seat.
+    _started(judge, ShiftKey("codex", "rollout:4"), "/beta", 5)
+    _started(judge, ShiftKey("codex", "rollout:5"), "/delta", 6)
+    assert [(a.project.alias, a.seat) for a in judge.agents if a.provider == "codex"] == [
+        ("alpha", 1), ("beta", 2), ("gamma", 3), ("delta", 4)]
+
+
+def test_restored_duplicate_seats_are_renumbered():
+    judge = Judge(Resolver(), lambda kind, at, payload: None)
+    record = {"project_alias": "p", "presence_since": "2026-01-01T00:00:00.000Z"}
+    judge.restore([{**record, "agent_id": "a", "project_id": "p1", "provider": "codex", "seat": 1},
+                   {**record, "agent_id": "b", "project_id": "p2", "provider": "codex", "seat": 1},
+                   {**record, "agent_id": "c", "project_id": "p2", "provider": "codex", "seat": 2},
+                   {**record, "agent_id": "d", "project_id": "p2", "provider": "claude", "seat": 1}], T0)
+    assert [(a.agent_id, a.seat) for a in judge.agents] == [("a", 1), ("b", 3), ("c", 2), ("d", 1)]
+
+
+def test_alias_from_configuration_is_sent():
+    messages = []
+    envelope = Envelope("b")
+    judge = Judge(Resolver(), lambda kind, at, payload: messages.append(envelope.wrap(kind, at, payload, at)),
+                  new_id=lambda: "agent-1", alias_for={"agent-1": "Reviewer"}.get)
+    judge.apply(_obs(Kind.PROCESS_STARTED, cwd="/r", runtime={"type": "shell"}))
+    assert _of(messages, "agent")[0]["alias"] == "Reviewer"
+    assert judge.snapshot(T0)[0][0]["alias"] == "Reviewer"

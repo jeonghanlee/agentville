@@ -56,7 +56,9 @@ In the Lounge, colleagues drink, read, and talk to each other with picture bubbl
 
 ![Colleague details](images/detail.png)
 
-Select a colleague in the office or in the list on the right. The detail shows status, condition, tool name, recent tool count (tools started in the last 5 minutes, falling to 0 without new tools), room and Branch, Contractors, and the last observed time. Conditions are set by model settings: study-mode (high effort), extra-coffee, light (low effort), or normal.
+Select a colleague in the office or in the list on the right. The detail shows status, condition, tool name, recent tool count (tools started in the last 5 minutes, falling to 0 without new tools), room and Branch, Contractors, the last observed time, and the colleague id in small text.
+
+A colleague is named by provider and seat, for example "Codex 2"; seat numbers are unique per provider on a Branch. A display name set for the colleague id under `aliases` in the Collector configuration replaces it everywhere in the page ([Configuration](configuration.md)). Conditions are set by model settings: study-mode (high effort), extra-coffee, light (low effort), or normal.
 
 ## Other views
 

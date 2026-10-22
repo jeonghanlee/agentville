@@ -14,7 +14,7 @@ AgentVille sends only state, never content. The lists below are exact.
   - Every message: `schema_version`, `branch_id` (the Branch `host.id`), `seq` (per-Branch sequence number), `kind` (`snapshot`, `heartbeat`, `branch`, `agent`, `activity`, or `contractor`), `event_at`, `sent_at`, and `payload` (the fields below).
   - Heartbeat: the heartbeat interval in seconds (`collector.heartbeat_interval`).
   - Branch: alias, country, time zone, location, thresholds.
-  - Colleague: id, display alias (currently always null), project id and alias, provider, seat, presence and its time, `account_alias`, model, settings (such as effort), condition, and, while on duty, the instance id, start time, and runtime (type `tmux`, `shell`, `app_server`, or `rollout`; for tmux, the pane location reported by Claude Code).
+  - Colleague: id, display alias (set in the Collector configuration `aliases`, otherwise null), project id and alias, provider, seat, presence and its time, `account_alias`, model, settings (such as effort), condition, and, while on duty, the instance id, start time, and runtime (type `tmux`, `shell`, `app_server`, or `rollout`; for tmux, the pane location reported by Claude Code).
   - Activity: colleague id, instance id, session id, state and its start time, source, confidence, tool name, usage-limit reset time (`reset_at`), and workload (tool executions in the last 5 minutes).
   - Contractor: id, parent instance id, provider, origin, status, state and its start time, tool name.
   - For a repository without a remote, the project alias is the repository directory's base name and `project_id` is a hash of the host id and repository path; the path itself is not sent.

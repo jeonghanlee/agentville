@@ -563,6 +563,8 @@ function renderTeam(ctx) {
   $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, t("detail.eyebrow")),
     el("div", { class: "detail-top" }, avatar(row), el("div", {}, el("strong", {}, row.name),
       el("small", {}, row.project, " ", repositoryTag(row.agent.project_id), " / " + row.branchName))),
+    // The id is shown so it can be copied into the Collector configuration `aliases`.
+    el("p", { class: "detail-id" }, t("detail.agentId") + " ", el("code", {}, row.agent.agent_id)),
     el("dl", { class: "detail-grid" }, ...stats.map(([name,value]) => el("div", {}, el("dt", {}, name), el("dd", {}, value)))),
     ...(row.contractors.length ? [el("div", { class: "detail-contractors" }, el("p", { class: "detail-eyebrow" }, t("contractor.upper")),
       el("ul", {}, ...row.contractors.map((contractor) => {

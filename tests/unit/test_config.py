@@ -95,3 +95,26 @@ def test_single_mapping_provider_form_is_still_read():
     config = parse({"host": {"id": "b"}, "providers": {"claude": {"home": "/c"}, "codex": [{"home": "/x"}, {"home": "/y", "account_alias": "spare"}]}})
     assert [(c.home, c.account_alias) for c in config.claude_homes] == [("/c", "claude-account-1")]
     assert [(c.home, c.account_alias) for c in config.codex_homes] == [("/x", "codex-account-1"), ("/y", "spare")]
+
+
+def test_aliases_map_agent_ids_to_display_names():
+    config = parse({"host": {"id": "b"}, "aliases": {"a-1": "Reviewer", "a-2": "x" * 40}})
+    assert config.aliases == {"a-1": "Reviewer", "a-2": "x" * 40}
+    assert parse({"host": {"id": "b"}}).aliases == {}
+
+
+@pytest.mark.parametrize("aliases, text", [
+    (["a-1"], "aliases must be a mapping of agent_id to name"),
+    ({"a-1": 5}, "aliases.a-1 must be a non-empty string of at most 40 characters"),
+    ({"a-1": "  "}, "aliases.a-1 must be a non-empty string"),
+    ({"a-1": "x" * 41}, "at most 40 characters"),
+])
+def test_invalid_aliases_are_rejected(aliases, text):
+    with pytest.raises(ValueError, match=text):
+        parse({"host": {"id": "b"}, "aliases": aliases})
+
+
+def test_generated_config_lists_empty_aliases(tmp_path):
+    path = tmp_path / "config.yaml"
+    load_or_create(str(path), str(tmp_path))
+    assert yaml.safe_load(path.read_text())["aliases"] == {}

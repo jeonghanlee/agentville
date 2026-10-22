@@ -64,10 +64,10 @@ An `Agent` is identified by:
 (project, host, provider, seat)
 ```
 
-- `seat` is a number distinguishing concurrent agents of the same provider in the same Project on the same Host.
+- `seat` is a number unique among the Employees of one provider on one Host, so the default display name `<Provider> <seat>` (e.g. "Codex 2") names one Employee on a Branch. Employees of different Projects never share a seat number.
 - One shift of an Employee is defined per provider by its Adapter (Section 3.4). For Claude Code, one process lifetime; for Codex, one loaded-thread lifetime on the app-server, or, for a run outside the app-server daemon, the period its rollout file is written (Section 3.4).
 - Account and model are Employee attributes; the latest values are kept. Recording their changes as history is not implemented (Section 9).
-- `alias` (Employee display name) is part of the payload and is currently always null (Section 9).
+- `alias` (Employee display name) is set per `agent_id` in the `aliases` mapping of the Branch configuration (Section 3.5) and is null otherwise. The Web UI shows it in place of the default name.
 
 #### Seat assignment
 
@@ -77,7 +77,9 @@ When a new agent process is observed, the Employee is selected in this order:
 2. The Employee matching the previous runtime location (e.g. tmux pane).
 3. The Employee with the lowest free seat number.
 
-A candidate already on shift is skipped and the next rule applies.
+A candidate already on shift is skipped and the next rule applies. Candidates are Employees of the same Project and provider. When none remains, a new Employee is created with the lowest seat number that no Employee of that provider on the Host holds.
+
+A roster written before seats were unique per provider on the Host may hold duplicate numbers. At start the first Employee of each number, in roster order, keeps it; the others take the lowest free numbers.
 
 #### Employee states
 
@@ -354,13 +356,15 @@ conditions:
   - {provider: "*", effort: xhigh, condition: study-mode}
   - {provider: "*", effort: low, condition: light}
 collector: {poll_interval: 1.0, heartbeat_interval: 30}
+aliases: {}
 ````
 
+- `aliases` maps an `agent_id` to an Employee display name, sent as the agent `alias`. Each name is a non-empty string of at most 40 characters. The Web UI shows the `agent_id` in the Colleague detail.
 - `time` is the host's local zone at first start (`TZ`, `/etc/timezone`, or the `/etc/localtime` link; `UTC` when none is found).
 - One provider home is one account. At first start, `~/.<provider>` and existing `~/.<provider>-*` directories are listed in that order as `<provider>-account-1`, `<provider>-account-2`, …; `~/.claude` is always listed. Account names and homes are local settings.
 - A single mapping (`claude: {home: ~/.claude}`) is read as a one-account list.
 - The generated file lists provider homes as absolute paths with the home directory expanded; `~` is accepted when editing.
-- Values are validated at start: `host`, `hq`, `thresholds`, `providers`, and `collector` are mappings, each `providers` entry a list (or the single-mapping form), `conditions` a list of mappings; thresholds are integers >= 0 with `phone` <= `doze` <= `lounge`; `poll_interval` > 0; `heartbeat_interval` >= 1. A file holding `hq.token` must not be accessible by group or others.
+- Values are validated at start: `host`, `hq`, `thresholds`, `providers`, `collector`, and `aliases` are mappings, each `providers` entry a list (or the single-mapping form), `conditions` a list of mappings; thresholds are integers >= 0 with `phone` <= `doze` <= `lounge`; `poll_interval` > 0; `heartbeat_interval` >= 1. A file holding `hq.token` must not be accessible by group or others.
 - An invalid file, including a YAML syntax error or a top level that is not a mapping, stops the Collector with one line `agentville-collector: invalid configuration: <reason>`; one that cannot be read or created with `agentville-collector: configuration <path>: <reason>`.
 - A loopback HQ is contacted without environment proxies.
 - Condition rules are evaluated in order; the first match wins; `model` accepts shell-style patterns. The defaults are listed in Section 1.6. A configuration without a `conditions` key uses them; an empty list maps everything to `normal`.
@@ -546,7 +550,6 @@ agentville/
 
 - Fork or mirror grouping, and Project `alias`, in Branch configuration (Section 1.3).
 - History of account and model changes per Employee (Section 1.4). The `account.changed` observation is defined but not emitted.
-- Employee `alias`: sent as null (Section 1.4).
 - Closing a Branch or Project at HQ, automatic reopening, and its notification (Section 1.8).
 - Monitor count by workload, and a per-Branch workload window and mapping (Section 2.5). The window is fixed at 5 minutes.
 - Child-process Contractors (Section 1.5, Section 3.2).

@@ -510,7 +510,7 @@ def s11(root):
     s.session(t(0), 1001, SA, "idle", tmux="agents:@1.%1")
     s.check(project="github.com/example/repo", seat=1, ref="r", presence="on_duty")
     s.session(t(1), 1002, SB, "idle", tmux="agents:@1.%2", cwd=OUTSIDE)
-    s.check(project="common-office", seat=1, ref="c", presence="on_duty", state="idle")
+    s.check(project="common-office", seat=2, ref="c", presence="on_duty", state="idle")
     s.records(t(2), SB, [prompt()])
     s.session(t(2), 1002, SB, "busy"); s.check(project="common-office", state="working")
     s.records(t(3), SB, assistant(s, [tool_use("toolu_01", "Bash")], "tool_use"))
@@ -518,7 +518,7 @@ def s11(root):
     s.records(t(4), SB, [tool_result("toolu_01")])
     s.records(t(5), SB, assistant(s, [text()], "end_turn") + [turn_done()])
     s.session(t(5), 1002, SB, "idle"); s.check(project="common-office", state="idle", same_as="c")
-    s.remove(t(60), 1002); s.check(project="common-office", seat=1, presence="off_duty", same_as="c")
+    s.remove(t(60), 1002); s.check(project="common-office", seat=2, presence="off_duty", same_as="c")
     s.check(project="github.com/example/repo", seat=1, presence="on_duty", same_as="r", agent_count=2)
     s.save()
 

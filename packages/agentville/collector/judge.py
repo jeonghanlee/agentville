@@ -94,6 +94,7 @@ class Judge:
         leave_after: timedelta = LEAVE_AFTER,
         condition_for: Callable[[str, str | None, dict[str, Any]], str] = lambda provider, model, settings: "normal",
         save: Callable[[list[dict[str, Any]]], None] = lambda records: None,
+        alias_for: Callable[[str], str | None] = lambda agent_id: None,
     ) -> None:
         self._resolver = resolver
         self._emit = emit
@@ -101,6 +102,7 @@ class Judge:
         self._leave_after = leave_after
         self._condition_for = condition_for
         self._save = save
+        self._alias_for = alias_for
         self.agents: list[Agent] = []
         self._by_shift: dict[ShiftKey, Agent] = {}
 
@@ -213,7 +215,8 @@ class Judge:
                     return agent
         if free:
             return min(free, key=lambda a: a.seat)
-        taken = {a.seat for a in pool}
+        # Seats are unique per provider on the Branch, so "<provider> <seat>" names one Employee.
+        taken = {a.seat for a in self.agents if a.provider == provider}
         seat = next(n for n in range(1, len(taken) + 2) if n not in taken)
         agent = Agent(self._new_id(), project, provider, seat, at)
         self.agents.append(agent)
@@ -305,6 +308,17 @@ class Judge:
             agent.model = r.get("model") if isinstance(r.get("model"), str) else None
             agent.settings = r["settings"] if isinstance(r.get("settings"), dict) else {}
             self.agents.append(agent)
+        # Rosters written before seats were unique per provider on the Branch: the first holder keeps a seat,
+        # later duplicates take the lowest free ones.
+        taken: set[tuple[str, int]] = set()
+        duplicates = []
+        for agent in self.agents:
+            if (agent.provider, agent.seat) in taken:
+                duplicates.append(agent)
+            taken.add((agent.provider, agent.seat))
+        for agent in duplicates:
+            agent.seat = next(n for n in range(1, len(self.agents) + 2) if (agent.provider, n) not in taken)
+            taken.add((agent.provider, agent.seat))
 
     def refresh_presence(self, now: datetime) -> None:
         """Emit Employees whose time-based presence changed (off duty to on leave)."""
@@ -336,7 +350,7 @@ class Judge:
             "project_alias": agent.project.alias,
             "provider": agent.provider,
             "seat": agent.seat,
-            "alias": None,
+            "alias": self._alias_for(agent.agent_id),
             "presence": agent.presence(now, self._leave_after),
             "presence_since": iso(agent.presence_since),
             "account_alias": agent.account_alias,
