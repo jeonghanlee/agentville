@@ -4,10 +4,10 @@ Release line: 0.3.0
 Milestone index: 0.3.0
 Canonical path: `docs/milestone-0.3.0.md`
 Canonical branch or ref: `feature/0.3.0`
-Git upstream: none
+Git upstream: origin/feature/0.3.0
 Remote tracker: none
 
-Next session entry point: Check the implementation and CHANGELOG commits against origin/feature/0.3.0 and inspect their CI results, then record landing evidence before the version-only change. The owner delegated these two commits and one initial branch push on 2026-10-22. M4 owns candidate and published-object checks; tag creation and publication still require their separate authority. Office expansion requirements remain in `docs/milestone-0.4.0.md` M2.
+Next session entry point: Complete the separately authorized release-plan and pre-change evidence commit, then make the version-only 0.3.0 commit. Re-run the recorded candidate checks before master integration and annotated-tag publication. The owner requested release and master integration on 2026-10-22; the owner selected fast-forward master integration, and the exact Git execution scopes remain awaiting confirmation. Continue with docs/milestone-0.4.0.md after released-object verification and closure.
 
 ## Scope
 
@@ -21,9 +21,9 @@ Out of scope: 0.4.0 features, release publication, changes to running services, 
 
 | ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| M1 | Child-process Contractors | Milestone | In progress | No | D1, D2, G1 | Process descendants are Contractors without duplicate colleagues; [detail](#m1---child-process-contractors) |
-| M2 | Antigravity Adapter | Milestone | In progress | No | M1, D1 | Live Antigravity sessions report presence and observable activity; [detail](#m2---antigravity-adapter) |
-| M3 | Remote development environments | Milestone | In progress | No | M2, D1 | SSH and container procedures preserve identity and reach HQ securely; [detail](#m3---remote-development-environments) |
+| M1 | Child-process Contractors | Milestone | Complete | No | D1, D2, G1 | Process descendants are Contractors without duplicate colleagues; [detail](#m1---child-process-contractors) |
+| M2 | Antigravity Adapter | Milestone | Complete | No | M1, D1 | Live Antigravity sessions report presence and observable activity; [detail](#m2---antigravity-adapter) |
+| M3 | Remote development environments | Milestone | Complete | No | M2, D1 | SSH and container procedures preserve identity and reach HQ securely; [detail](#m3---remote-development-environments) |
 | G1 | Late parent observation policy | External gate | Complete | No | | D2 selects later reclassification while preserving the former Employee record; [detail](#g1---late-parent-observation-policy) |
 | M4 | Release 0.3.0 | Milestone | Blocked | No | M1, M2, M3, G2 | Reviewed candidate is tagged, published, installed, and verified; [detail](#m4---release-030) |
 | G2 | Git execution authority | External gate | Open | No | | Owner authorizes each exact Git operation before execution; [detail](#g2---git-execution-authority) |
@@ -42,7 +42,7 @@ Out of scope: 0.4.0 features, release publication, changes to running services, 
 Origin: 0.3.0 / M1
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -101,14 +101,14 @@ Superseded Plan Artifacts: none
 
 ##### Closure Evidence
 
-- D2 is implemented and T1-T4 passed. The full pytest run recorded 290 passed, zero failures, zero errors, and zero skips. The pre-fix failure remains in `/tmp/agentville-030-pytest.2FpfDt/results.xml`. Self-review is accepted; repository landing and release publication remain pending.
+- D2 is implemented and T1-T4 passed. The full pytest run recorded 290 passed, zero failures, zero errors, and zero skips. The pre-fix failure remains in `/tmp/agentville-030-pytest.2FpfDt/results.xml`. Self-review is accepted. Observed 2026-10-22 23:11:34 UTC: implementation commit `cc8168af4eae02ce05c921c9ccf191a9b0e62723` is an ancestor of fetched `origin/feature/0.3.0` at `42236e561ed5614a6c6e9da7d8cee6cccad4a981`. A Git comparison found no differences in packages, tests, pyproject.toml, architecture, or remote procedures. The 60 package and version files match the retained Docker context. GitHub test run [39864177993](https://github.com/jeonghanlee/agentville/actions/runs/39864177993) completed successfully for Python 3.12, Python 3.13, and the actual install.sh path. Required local checks and accepted self-review are recorded above; no external tracker issue exists.
 
 #### M2 - Antigravity Adapter
 
 Origin: 0.3.0 / M2
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -177,14 +177,14 @@ Review target: current 0.3.0 changes on `feature/0.3.0`, M1-M3 implementation, t
 
 ##### Closure Evidence
 
-- Native presence, synthetic activity, transcript-history deduplication, and subsequent fresh records passed. R1 is resolved and self-review is accepted. Repository landing and release publication remain pending.
+- Native presence, synthetic activity, transcript-history deduplication, and subsequent fresh records passed. R1 is resolved and self-review is accepted. Observed 2026-10-22 23:11:34 UTC: implementation commit `cc8168af4eae02ce05c921c9ccf191a9b0e62723` is an ancestor of fetched `origin/feature/0.3.0` at `42236e561ed5614a6c6e9da7d8cee6cccad4a981`. A Git comparison found no differences in packages, tests, pyproject.toml, architecture, or remote procedures. The 60 package and version files match the retained Docker context. GitHub test run [39864177993](https://github.com/jeonghanlee/agentville/actions/runs/39864177993) completed successfully for Python 3.12, Python 3.13, and the actual install.sh path. Required local checks and accepted self-review are recorded above; no external tracker issue exists.
 
 #### M3 - Remote Development Environments
 
 Origin: 0.3.0 / M3
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -243,7 +243,7 @@ Superseded Plan Artifacts: none
 
 ##### Closure Evidence
 
-- HTTP, Docker, SSH, browser, and mdBook checks ran against the working tree. `packages/` and `pyproject.toml` match `/tmp/agentville-030-system-liatpmu9/context/` byte for byte, excluding Python caches. Test containers are stopped; generated images, volumes, and private evidence remain. Self-review is accepted; repository landing and release publication remain pending.
+- HTTP, Docker, SSH, browser, and mdBook checks ran against the working tree. `packages/` and `pyproject.toml` match `/tmp/agentville-030-system-liatpmu9/context/` byte for byte, excluding Python caches. Test containers are stopped; generated images, volumes, and private evidence remain. Self-review is accepted. Observed 2026-10-22 23:11:34 UTC: implementation commit `cc8168af4eae02ce05c921c9ccf191a9b0e62723` is an ancestor of fetched `origin/feature/0.3.0` at `42236e561ed5614a6c6e9da7d8cee6cccad4a981`. A Git comparison found no differences in packages, tests, pyproject.toml, architecture, or remote procedures. The 60 package and version files match the retained Docker context. GitHub test run [39864177993](https://github.com/jeonghanlee/agentville/actions/runs/39864177993) completed successfully for Python 3.12, Python 3.13, and the actual install.sh path. Required local checks and accepted self-review are recorded above; no external tracker issue exists.
 
 #### G1 - Late Parent Observation Policy
 
@@ -294,23 +294,23 @@ Out of scope: deploying to existing user services, implementing 0.4.0, and chang
 
 ##### Dependencies And Decisions
 
-- M1-M3 supply implementation and local verification; their landing is still pending.
+- M1-M3 are Complete with local checks, accepted self-review, fetched-origin landing evidence, and successful Python 3.12/3.13 and installer CI. Release publication remains pending.
 - G2 is open; resume as Not started after execution authority is supplied.
-- The owner requested release preparation on 2026-10-22, then delegated the implementation and CHANGELOG commits and one initial push of feature/0.3.0. The version-only change and later release actions remain separate steps.
+- The owner requested formal release, master integration, and subsequent 0.4.0 work on 2026-10-22, and selected fast-forward integration. Release-plan acceptance and implementation authority are recorded below. The earlier implementation and CHANGELOG commit delegation and initial branch push were bounded and consumed; later Git actions need their matching scopes.
 - Public REST observation on 2026-10-22 found releases 0.1.0 and 0.2.0 and no remote milestones. Git SSH observation found master at `39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b` and no 0.3.0 tag. Local gh authentication returned 401; Git SSH reads succeeded. Recheck live state before execution.
 - `.github/workflows/release.yml` creates the Release when a numeric tag is pushed. Do not also create a duplicate Release manually. The workflow's extraction consumes the prepared CHANGELOG section.
 
 ##### Implementation Plan
 
-Plan Status: draft
-Plan Acceptance: none
-Implementation Authorization: none
+Plan Status: accepted
+Plan Acceptance: 2026-10-22, owner requested the formal release followed by 0.4.0 and selected fast-forward master integration.
+Implementation Authorization: 2026-10-22, owner requested this release plan; individual Git execution scopes remain separately required.
 Superseded Plan Artifacts: none
 
-1. Commit the reviewed cumulative implementation with its tests and documentation, using individual authored paths. Commit the CHANGELOG separately.
+1. Preserve the landed implementation and separate CHANGELOG commits. Commit the accepted release plan and observed pre-change evidence before the version change.
 2. After the pre-bump tree is otherwise clean, change only `pyproject.toml` version from 0.2.0 to 0.3.0 and commit it separately.
 3. Verify candidate versions, the full suite, Python 3.12/3.13 CI, and installation of the exact candidate through install.sh in an isolated environment. Record and commit readiness evidence under separate authority.
-4. Resolve the immutable candidate, fast-forward master only if possible, create an annotated 0.3.0 tag at that candidate, and perform only separately authorized pushes. Observe the existing workflow's published Release.
+4. Resolve and retain the immutable candidate. Fast-forward master only if possible, create an annotated 0.3.0 tag at that exact candidate, and perform only separately authorized branch and single-tag pushes. Record each observed action in a separately authorized checkpoint commit before the next dependent action. Checkpoint commits do not change the retained tag target. Observe the existing workflow's published Release.
 5. Check released objects and run install.sh against the published tag on a clean equivalent host after the storage preflight in the release-cycle closing procedure. Record closure without rewriting the tag; retain `docs/milestone-0.4.0.md` for the next line.
 
 ##### Test Plan
@@ -344,7 +344,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 
 | Step | Action | Authorization | Expected Result | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | Commit reviewed implementation and CHANGELOG separately | Commit scope or user execution | Named commits preserve reviewed bytes | Pending |
+| 1 | Commit reviewed implementation and CHANGELOG separately | Owner delegated the two commits and initial push on 2026-10-22 | Named commits preserve reviewed bytes | cc8168af4eae02ce05c921c9ccf191a9b0e62723 and 42236e561ed5614a6c6e9da7d8cee6cccad4a981; fetched origin/feature/0.3.0 matches HEAD; CI run 39864177993 succeeded |
 | 2 | Commit version-only 0.3.0 change and readiness evidence separately | Commit scope or user execution | Candidate checks identify immutable commit | Pending |
 | 3 | Push candidate branch and inspect test workflow | Push scope or user execution | Exact candidate passes supported Python CI | Pending |
 | 4 | Fast-forward master to the resolved candidate | Explicit authorization for previewed merge or user execution | No history rewrite or unresolved merge | Pending |
@@ -370,7 +370,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | Label | Observed At | Environment | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | Release Verification 1 | 2026-10-22 | Working tree and prepared release files | Pass | CHANGELOG covers the implemented M1-M3 behavior. The source still matches the 290-test and 18-assertion candidate checked before release preparation. The actual release.yml note-extraction step produced a byte-identical body to `work/release-notes-0.3.0.md`; retained output: `/tmp/agentville-release-notes-m14dkxhe/notes.md`. Explicit authored-path coverage, script syntax, ShellCheck, version-patch applicability, and diff checks passed. A static scan of the 38 proposed public files found no strong credential-pattern matches. This is pre-change evidence, not versioned-candidate or publication verification. |
-| Release Verification 2 | Not run | Git and TOML | Pending | Implementation remains uncommitted; version bump has not run |
+| Release Verification 2 | 2026-10-22 23:11:34 UTC | Git and TOML | Pass | HEAD and fetched origin/feature/0.3.0 both equal 42236e561ed5614a6c6e9da7d8cee6cccad4a981; the working tree was clean before this evidence update; pyproject.toml reports 0.2.0. The version change has not run. |
 | Release Verification 3 | Not run | Isolated package install | Pending | none |
 | Release Verification 4 | Not run | Local and GitHub Actions | Pending | Feature-tree checks passed; versioned candidate checks remain pending |
 | Release Verification 5 | Not run | Clean installation | Pending | none |
@@ -378,7 +378,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | Release Verification 7 | Not run | Released installation | Pending | none |
 | Release Verification 8 | Not run | Committed documents | Pending | none |
 
-Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. Plan acceptance and execution authority remain pending.
+Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. The owner accepted the release plan and selected fast-forward integration on 2026-10-22. Exact Git execution scopes remain pending.
 
 ##### Closure Evidence
 
