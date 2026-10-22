@@ -862,7 +862,8 @@ function loadDayChanges() {
   dayChangesKey = key; dayChangesAt = Date.now();
   const [start, end] = [dayStart(timelineDay, zone), dayEnd(timelineDay, zone)];
   if (end <= replay.range.from) { dayChanges = { changes: [], agents: [], branches: [], truncated: false }; return; }
-  records.changes(Math.max(start, replay.range.from), Math.min(end, replay.now()), "")
+  // The whole day is asked for, so HQ clips it to now and serves every refresh and page from one result for a while.
+  records.changes(Math.max(start, replay.range.from), end, "")
     .then((result) => { if (dayChangesKey === key) { dayChanges = result; render(); } })
     .catch(() => { if (dayChangesKey === key) { dayChangesKey = ""; dayChanges = null; } });
 }
@@ -951,7 +952,7 @@ function refreshToday() {
   const day = dayOf(Date.now(), "");
   if (today.key === day && Date.now() - today.at < TODAY_REFRESH - 1000) return;
   today = { ...today, key: day, at: Date.now() };
-  records.worklog(dayStart(day, ""), Date.now(), "").then((data) => {
+  records.worklog(dayStart(day, ""), dayEnd(day, ""), "").then((data) => {
     if (today.key === day) { today = { key: day, data, at: Date.now() }; if (view === "dashboard" || view === "office") render(); }
   }).catch(() => { today = { key: "", data: today.data, at: 0 }; });
 }

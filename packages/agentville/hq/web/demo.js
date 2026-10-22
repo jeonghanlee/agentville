@@ -158,11 +158,14 @@ export function demoHistory(now = Date.now()) {
       agents: of("agent"), activities: of("activity"), contractors: of("contractor"),
     };
   }
+  // An activity's state and state_since; a transition or an entry is a mark other than the last known one.
+  const mark = (p) => p ? p.state + "@" + p.state_since : null;
   function changes(start, end, branchId) {
     [start, end] = clip(start, end);
+    // A period entirely outside the kept history, or after now, is empty (Section 4.2).
+    if (start >= end) return { from: null, to: null, changes: [], truncated: false, agents: [], branches: [] };
     const initial = latest(start, branchId);
     const presence = new Map(), marks = new Map(), out = [], known = new Map(initial);
-    const mark = (p) => p ? p.state + "@" + p.state_since : null;
     for (const r of initial.values()) {
       if (r.kind === "agent") presence.set(r.key, r.payload.presence);
       if (r.kind === "activity") marks.set(r.key, mark(r.payload));
@@ -179,7 +182,8 @@ export function demoHistory(now = Date.now()) {
           out.push({ at: iso(r.at), kind: "activity", branch_id: r.branch_id, agent_id: r.key,
             state: r.payload.state, state_since: r.payload.state_since });
         }
-        marks.set(r.key, mark(r.payload));
+        // A removed activity keeps its last mark, so restoring it is not a new transition.
+        if (r.payload) marks.set(r.key, mark(r.payload));
       }
     }
     for (const [branch_id, spans] of Object.entries(observed)) {
@@ -197,11 +201,12 @@ export function demoHistory(now = Date.now()) {
   }
   function worklog(start, end, branchId) {
     [start, end] = clip(start, end);
+    if (start >= end) return { from: null, to: null, rows: [], branches: [] };
     const people = new Map();
     const person = (r) => {
       const key = r.branch_id + "/" + r.key;
       if (!people.has(key)) {
-        people.set(key, { branch_id: r.branch_id, agent_id: r.key, at: start, agent: null, activity: null, last: null,
+        people.set(key, { branch_id: r.branch_id, agent_id: r.key, at: start, agent: null, activity: null, last: null, mark: null,
           seconds: Object.fromEntries(["on_duty", ...STATES, "unobserved"].map((s) => [s, 0])), waits: 0, errors: 0, limits: 0, runs: new Map() });
       }
       return people.get(key);
@@ -217,7 +222,7 @@ export function demoHistory(now = Date.now()) {
     };
     for (const r of latest(start, branchId).values()) {
       if (r.kind === "agent") { const p = person(r); p.agent = p.last = r.payload; }
-      if (r.kind === "activity") person(r).activity = r.payload;
+      if (r.kind === "activity") { const p = person(r); p.activity = r.payload; p.mark = mark(r.payload); }
     }
     for (const r of between(start, end, branchId)) {
       if (r.kind !== "agent" && r.kind !== "activity") continue;
@@ -225,9 +230,10 @@ export function demoHistory(now = Date.now()) {
       close(p, r.at);
       if (r.kind === "agent") { p.agent = r.payload; p.last = r.payload || p.last; continue; }
       const state = r.payload?.state;
-      const entered = p.activity?.state !== state || p.activity?.state_since !== r.payload?.state_since;
-      if (ENTRIES[state] && entered) p[ENTRIES[state]]++;
+      // An entry is a state or state_since other than the last known one, also after the activity was removed.
+      if (ENTRIES[state] && mark(r.payload) !== p.mark) p[ENTRIES[state]]++;
       p.activity = r.payload;
+      p.mark = mark(r.payload) || p.mark;
     }
     const rows = [];
     for (const p of people.values()) {

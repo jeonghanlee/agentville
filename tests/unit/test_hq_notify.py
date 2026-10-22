@@ -279,3 +279,45 @@ def test_hq_stops_with_one_line_for_a_bad_notification_file(tmp_path):
     with pytest.raises(SystemExit) as error:
         main(["--notify-config", str(path), "--db", str(tmp_path / "hq.sqlite3"), "--port", "0"])
     assert error.value.code == f"agentville-hq: {path}: language must be en or ko"
+
+
+def test_a_resync_is_not_announced_by_an_evaluation_between_ingest_and_its_own(tmp_path):
+    """Another Branch's ingest evaluates after a snapshot is committed but before that ingest evaluates."""
+    committed, resumed = threading.Event(), threading.Event()
+
+    class PausingStore(Store):
+        def ingest(self, branch_id, messages, now):
+            result = super().ingest(branch_id, messages, now)
+            if branch_id == "b1" and messages[0]["kind"] == "snapshot" and now > at(0):
+                committed.set()
+                resumed.wait(5)
+            return result
+
+    sent, now = Sent(), [at(0)]
+    app = create_app(PausingStore(str(tmp_path / "hq.sqlite3")), clock=lambda: now[0], loopback=frozenset({"testclient"}),
+                     hosts=frozenset({"testserver"}), notifier=Notifier(NotifyConfig(URL), sent.append), notify_interval=3600)
+
+    def agent(agent_id):
+        return {"agent_id": agent_id, "project_id": "p", "project_alias": "alpha", "provider": "claude", "seat": 1,
+                "presence": "on_duty", "presence_since": "2026-01-01T00:00:00.000Z",
+                "instance": {"instance_id": "i", "started_at": "2026-01-01T00:00:00.000Z", "runtime": {}}}
+
+    def snapshot(agent_id, state, seconds):
+        activity = {"agent_id": agent_id, "instance_id": "i", "state": state, "source": "app_server", "confidence": "high",
+                    "state_since": at(seconds).isoformat().replace("+00:00", "Z")}
+        return {"branch": BRANCH, "agents": [agent(agent_id)], "activities": [activity], "contractors": []}
+
+    first, second = Envelope("b1"), Envelope("b2")
+    with TestClient(app) as client:
+        client.post("/api/v1/ingest/messages", json=_batch(first, "snapshot", snapshot("a1", "working", 0), 0))
+        client.post("/api/v1/ingest/messages", json=_batch(second, "snapshot", snapshot("z1", "working", 0), 0))
+        now[0] = at(10)
+        # b1 restarts and resyncs with a1 waiting; b2's heartbeat is ingested and evaluated in between.
+        resync = threading.Thread(target=lambda: client.post("/api/v1/ingest/messages",
+                                                             json=_batch(first, "snapshot", snapshot("a1", "waiting", 5), 10)))
+        resync.start()
+        assert committed.wait(5)
+        client.post("/api/v1/ingest/messages", json=_batch(second, "heartbeat", {"interval": 30}, 10))
+        resumed.set()
+        resync.join(5)
+    assert sent == []

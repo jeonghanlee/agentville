@@ -24,6 +24,9 @@ from agentville.hq.store import Store
 
 
 MIN_TOKEN = 16
+# Seconds a thread holds the GIL while another waits: a long history query yields often, so ingest and the live
+# state, which release the GIL on every database step, are not delayed by it (default 0.005).
+SWITCH_INTERVAL = 0.0005
 
 
 def data_dir() -> str:
@@ -151,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, sqlite3.Error) as exc:
         raise SystemExit(f"agentville-hq: cannot open database {db}: {getattr(exc, 'strerror', None) or exc}") from None
     outbox = Outbox(http_post(notify_config)) if notify_config else None
+    sys.setswitchinterval(SWITCH_INTERVAL)
     app = create_app(
         store,
         tokens,

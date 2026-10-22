@@ -15,8 +15,9 @@ This document lists the user-visible changes of each AgentVille release.
 
 ### HQ
 
-- State history: every change to current state is recorded with the time of the fact and kept for `--retention-days` (default 30); older changes fold into a baseline. A 0.1.0 database starts its history at the first start of 0.2.0.
-- New read endpoints: `/api/v1/state?at=`, `/api/v1/history`, `/api/v1/changes`, `/api/v1/worklog`.
+- State history: every change to current state is recorded with the time of the fact (never later than its receipt by HQ) and kept for `--retention-days` (default 30); older changes fold into a baseline. A 0.1.0 database starts its history at the first start of 0.2.0.
+- New read endpoints: `/api/v1/state?at=`, `/api/v1/history`, `/api/v1/changes`, `/api/v1/worklog`. History reads use their own read-only database connections and hourly state checkpoints, so their cost follows the requested period and they do not delay ingest or live updates; identical `changes` and `worklog` requests within 30 s share one answer.
+- Errors about the token, viewer token, and notification files read `agentville-hq: <file>: <reason>`, e.g. `agentville-hq: /etc/agentville/tokens.yaml: No such file or directory`.
 - External notifications to an ntfy topic with `--notify-config`, following the browser notification rules; off by default.
 
 ### Web UI

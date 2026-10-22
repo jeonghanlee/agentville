@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
@@ -92,10 +93,22 @@ def test_change_times_of_one_key_never_go_backwards(tmp_path):
     branch.send(70, "activity", activity("a1", "waiting", 30), event=30)
     assert _states(store.state_at(s(45))) == {"a1": "idle"}
     assert _states(store.state_at(s(60))) == {"a1": "waiting"}
-    # A fact far ahead of HQ's clock is placed at most five minutes ahead.
+    # A fact ahead of HQ's clock is placed at its receipt.
     branch.send(80, "activity", activity("a1", "idle", 80), event=3600)
     db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
-    assert db.execute("SELECT MAX(at) FROM changes").fetchone()[0] == iso(s(380))
+    assert db.execute("SELECT MAX(at) FROM changes").fetchone()[0] == iso(s(80))
+
+
+def test_state_at_now_equals_state_with_a_branch_clock_ahead(tmp_path):
+    store = _store(tmp_path)
+    branch = Branch(store)
+    branch.send(0, "snapshot", snapshot([agent("a1")], [activity("a1", "working", 0)]))
+    # The Branch clock is 20 s ahead of HQ's.
+    branch.send(100, "activity", activity("a1", "waiting", 120), event=120)
+    assert _states(store.state(s(100))) == _states(store.state_at(s(100))) == {"a1": "waiting"}
+    # Later changes of the key are still placed after it.
+    branch.send(101, "activity", activity("a1", "working", 121), event=121)
+    assert _states(store.state_at(s(100))) == {"a1": "waiting"} and _states(store.state_at(s(101))) == {"a1": "working"}
 
 
 def test_reachability_at_a_past_time_follows_received_messages(tmp_path):
@@ -255,6 +268,140 @@ def test_history_endpoints_reject_bad_times(tmp_path):
     assert empty.get("/api/v1/worklog", params={"from": iso(s(0)), "to": iso(s(50))}).json()["rows"] == []
 
 
+def _ingest_hours(store, hours=5):
+    """A colleague changing state every 7 minutes for some hours, received when sent; the live state after each."""
+    branch = Branch(store)
+    branch.send(0, "snapshot", snapshot([agent("a1"), agent("a2", seat=2)], [activity("a1"), activity("a2")]))
+    live = {0: store.state(s(0))}
+    states = ["working", "waiting", "idle", "error"]
+    for n, second in enumerate(range(420, hours * 3600, 420)):
+        if n % 9 == 4:
+            branch.send(second, "agent", agent("a2", on_duty=n % 2 == 0, seat=2))
+        else:
+            branch.send(second, "activity", activity("a1", states[n % 4], second))
+        live[second] = store.state(s(second))
+    return branch, live
+
+
+def _without(state):
+    return {key: sorted(state[key], key=str) for key in ("agents", "activities", "contractors")}
+
+
+def test_checkpoints_reproduce_the_live_state(tmp_path):
+    store = _store(tmp_path)
+    _branch, live = _ingest_hours(store)
+    db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
+    assert [row[0] for row in db.execute("SELECT at FROM checkpoints ORDER BY at")] == [iso(s(h * 3600)) for h in (1, 2, 3, 4)]
+    for second, state in live.items():
+        assert _without(store.state_at(s(second))) == _without(state), second
+    # The same answers without checkpoints: they only shorten the work.
+    expected = {second: store.state_at(s(second)) for second in live}
+    log = store.worklog(s(0), s(5 * 3600), s(5 * 3600))
+    db.execute("DELETE FROM checkpoints")
+    db.commit()
+    assert all(store.state_at(s(second)) == state for second, state in expected.items())
+    assert store.worklog(s(0), s(5 * 3600), s(5 * 3600)) == log
+
+
+def test_a_late_change_updates_the_checkpoints_after_it(tmp_path):
+    store = _store(tmp_path)
+    branch, _live = _ingest_hours(store)
+    # Received at 5 h, a new colleague of 30 min earlier; and a new Contractor of 3.5 h earlier.
+    branch.send(5 * 3600, "agent", agent("a3", seat=3), event=5 * 3600 - 1800)
+    contractor = {"contractor_id": "c1", "parent_agent_id": "a1", "provider": "claude", "status": "hired", "state": "working",
+                  "state_since": iso(s(5400))}
+    branch.send(5 * 3600 + 1, "contractor", contractor, event=5400)
+    times = [s(5400 - 1), s(5400), s(3 * 3600), s(4 * 3600), s(5 * 3600 - 1800), s(5 * 3600 + 1)]
+    with_checkpoints = [store.state_at(t) for t in times]
+    assert ["a3" in {a["agent_id"] for a in state["agents"]} for state in with_checkpoints] == [False] * 4 + [True] * 2
+    assert [len(state["contractors"]) for state in with_checkpoints] == [0, 1, 1, 1, 1, 1]
+    db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
+    db.execute("DELETE FROM checkpoints")
+    db.commit()
+    assert [store.state_at(t) for t in times] == with_checkpoints
+
+
+def test_prune_keeps_checkpoints_consistent(tmp_path):
+    store = _store(tmp_path)
+    _branch, live = _ingest_hours(store)
+    cutoff = s(2 * 3600 + 600)
+    expected = {second: store.state_at(s(second)) for second in live if s(second) >= cutoff}
+    store.prune(cutoff)
+    db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
+    assert db.execute("SELECT MIN(at) FROM checkpoints").fetchone()[0] == iso(s(3 * 3600))
+    # Keys whose change was folded now take the baseline payload.
+    assert db.execute("SELECT COUNT(*) FROM checkpoint_keys WHERE change_id IS NULL").fetchone()[0] > 0
+    assert all(store.state_at(s(second)) == state for second, state in expected.items())
+    db.execute("DELETE FROM checkpoints")
+    db.commit()
+    assert all(store.state_at(s(second)) == state for second, state in expected.items())
+
+
+def test_an_existing_history_gets_checkpoints_when_opened(tmp_path):
+    path = str(tmp_path / "hq.sqlite3")
+    store = _store(tmp_path)
+    _branch, live = _ingest_hours(store, hours=3)
+    store.close()
+    db = sqlite3.connect(path)
+    db.execute("DELETE FROM checkpoints")
+    db.execute("DELETE FROM checkpoint_keys")
+    db.commit()
+    reopened = Store(path, now=s(3 * 3600 + 5))
+    assert [row[0] for row in db.execute("SELECT at FROM checkpoints ORDER BY at")] == [iso(s(h * 3600)) for h in (1, 2, 3)]
+    assert all(_without(reopened.state_at(s(second))) == _without(state) for second, state in live.items())
+
+
+def test_history_reads_take_neither_the_lock_nor_the_writer(tmp_path):
+    store = _store(tmp_path)
+    branch, _live = _ingest_hours(store, hours=2)
+    results = []
+
+    def read():
+        results.append(store.state_at(s(3000)))
+        results.append(store.worklog(s(0), s(7200), s(7200)))
+        results.append(store.changes(s(0), s(7200), s(7200)))
+
+    # An ingest in progress holds the lock; history reads still finish.
+    with store._lock:
+        reader = threading.Thread(target=read)
+        reader.start()
+        reader.join(5)
+    assert len(results) == 3
+    # A read in progress does not hold up ingest.
+    with store._reading():
+        assert branch.send(7300, "activity", activity("a1", "working", 7300)).accepted == 1
+    assert _states(store.state(s(7300)))["a1"] == "working"
+
+
+def test_an_activity_removed_and_restored_is_not_a_new_entry(tmp_path):
+    store = _store(tmp_path)
+    branch = Branch(store)
+    branch.send(0, "snapshot", snapshot([agent("a1")], [activity("a1", "waiting", 0)]))
+    branch.send(10, "activity", activity("a1", "waiting", 10))
+    branch.send(20, "snapshot", snapshot([agent("a1")], []))
+    branch.send(30, "snapshot", snapshot([agent("a1")], [activity("a1", "waiting", 10)]))
+    row = store.worklog(s(0), s(40), s(40))["rows"][0]
+    assert (row["waits"], row["seconds"]["waiting"], row["longest_wait"], row["seconds"]["unknown"]) == (1, 30, 20, 10)
+    changes = store.changes(s(0), s(40), s(40))["changes"]
+    assert [(c["at"], c["state_since"]) for c in changes] == [(iso(s(10)), iso(s(10)))]
+    # A new state_since after the removal is a new entry.
+    branch.send(50, "snapshot", snapshot([agent("a1")], []))
+    branch.send(60, "snapshot", snapshot([agent("a1")], [activity("a1", "waiting", 55)]))
+    assert store.worklog(s(0), s(70), s(70))["rows"][0]["waits"] == 2
+
+
+def test_a_period_outside_the_kept_history_is_empty(tmp_path):
+    store = _store(tmp_path)
+    Branch(store).send(100, "snapshot", snapshot([agent("a1")], [activity("a1", "working", 100)]))
+    assert store.worklog(s(0), s(50), s(200)) == {"from": None, "to": None, "rows": [], "branches": []}
+    assert store.changes(s(300), s(400), s(200)) == {"from": None, "to": None, "changes": [], "truncated": False,
+                                                     "agents": [], "branches": []}
+    client = _client(store, s(200))
+    assert client.get("/api/v1/worklog", params={"from": iso(s(0)), "to": iso(s(50))}).json()["from"] is None
+    empty = _client(Store(str(tmp_path / "empty.sqlite3")), s(100))
+    assert empty.get("/api/v1/changes", params={"from": iso(s(0)), "to": iso(s(50))}).json()["to"] is None
+
+
 def test_times_outside_the_datetime_range_are_rejected(tmp_path):
     store = _store(tmp_path)
     Branch(store).send(0, "snapshot", snapshot([], []))
@@ -265,3 +412,39 @@ def test_times_outside_the_datetime_range_are_rejected(tmp_path):
     message = Envelope("b1", seq=10).wrap("heartbeat", s(1), {"interval": 30}, s(1))
     message["event_at"] = "0001-01-01T00:00:00+01:00"
     assert client.post("/api/v1/ingest/messages", json={"messages": [message]}).status_code == 422
+
+
+def test_identical_history_requests_share_one_computation(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    _day(store)
+    calls = []
+    worklog = store.worklog
+
+    def counted(*args):
+        calls.append(args)
+        return worklog(*args)
+
+    monkeypatch.setattr(store, "worklog", counted)
+    client = _client(store, s(400))
+    params = {"from": iso(s(0)), "to": iso(s(400))}
+    first = client.get("/api/v1/worklog", params=params).json()
+    assert client.get("/api/v1/worklog", params=params).json() == first
+    assert len(calls) == 1
+    client.get("/api/v1/worklog", params={**params, "branch_id": "b1"})
+    assert len(calls) == 2
+
+
+def test_a_rejected_batch_leaves_no_checkpoint_behind(tmp_path):
+    store = _store(tmp_path)
+    branch = Branch(store)
+    branch.send(0, "snapshot", snapshot([agent("a1")], [activity("a1")]))
+    message = Envelope("b2").wrap("heartbeat", s(7200), {"interval": 30}, s(7200))
+    try:
+        store.ingest("b1", [message], s(7200))
+    except ValueError:
+        pass
+    # The checkpoint of the rolled-back batch is written again by the next ingest.
+    branch.send(7200, "activity", activity("a1", "working", 7200))
+    db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
+    assert [row[0] for row in db.execute("SELECT at FROM checkpoints")] == [iso(s(7200))]
+    assert _states(store.state_at(s(3600))) == {"a1": "idle"}
