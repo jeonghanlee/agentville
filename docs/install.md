@@ -124,7 +124,7 @@ To change the port:
 - in `~/.config/agentville/config.yaml` of every Collector reporting to this HQ, set `hq.url: http://127.0.0.1:8471` (the file is written at the first Collector start; set it, then restart the Collector);
 - use the same port in the addresses of Section 5.
 
-HQ keeps its database in `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`; the directory is created with mode 0700). To place it elsewhere, add `--db <path>` to `ExecStart`. Received messages are kept for 30 days; `--retention-days <n>` changes that. The current state of each Branch is kept regardless.
+HQ keeps its database in `$XDG_DATA_HOME/agentville/hq.sqlite3` (default `~/.local/share/agentville/hq.sqlite3`; the directory is created with mode 0700). To place it elsewhere, add `--db <path>` to `ExecStart`. Received messages and the state history (used by the work log and timeline replay) are kept for 30 days; `--retention-days <n>` changes that. The current state of each Branch is kept regardless. An HQ database from 0.1.0 starts its history at the first start after the upgrade.
 
 User services run while the user is logged in. To keep them running after logout and start them at boot, an administrator can enable lingering for the user (optional; the services themselves never need root):
 

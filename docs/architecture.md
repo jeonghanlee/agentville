@@ -393,8 +393,11 @@ aliases: {}
 | `messages` | Every accepted message, keyed by `(branch_id, seq)` |
 | `branches` | Branch payload, last `seq`, last seen time, heartbeat interval |
 | `agents`, `activities`, `contractors` | Current state, keyed by `(branch_id, id)` |
+| `changes` | Every change HQ applies to current state: `(branch_id, at, kind, key, payload)`, `payload` NULL for a removal (Section 4.4) |
+| `baseline` | State as of the start of the kept history, keyed by `(branch_id, kind, key)` |
+| `meta` | `history_from`: the start of the kept history |
 
-- Message history retention: 30 days by default (`--retention-days`); current state is never pruned.
+- Retention: 30 days by default (`--retention-days`), applied at most once per hour during ingest. Messages received before the cutoff are deleted, and history changes before it are folded into the baseline (Section 4.4). Current state is never pruned.
 
 ### 4.1 Ingest Rules
 
@@ -426,11 +429,24 @@ A Branch is reported unreachable when no message arrived within three heartbeat 
 | `GET` | `/health` | Liveness |
 | `POST` | `/api/v1/ingest/messages` | Branch ingest, body `{"messages": [...]}`, one Branch per batch, at most 1000 messages (more: 413) |
 | `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors |
+| `GET` | `/api/v1/state?at=<time>` | The same for a past time within the kept history (Section 4.4) |
+| `GET` | `/api/v1/history` | The kept history: `{"from", "to"}` |
+| `GET` | `/api/v1/changes?from=&to=[&branch_id=]` | Activity, presence, and reachability transitions in a period |
+| `GET` | `/api/v1/worklog?from=&to=[&branch_id=]` | Seconds per state of each Employee in a period (Section 4.5) |
 | `GET` | `/api/v1/branches` | Branches |
 | `GET` | `/api/v1/agents` | Agents |
 | `GET` | `/api/v1/stats` | Ingest totals since HQ start |
 
 Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
+
+- Every `GET` under `/api/v1/` is a read endpoint and requires the viewer token when one is set (Section 4.3).
+- Times in query parameters are ISO 8601 with an offset (`Z` or `+hh:mm`). A missing, malformed, or offset-less time is answered with 400.
+- `state?at=` answers 400 for a time before `history_from` or after now, and before the first message (`from` null). `reachable` is the value derived for that time (Section 4.4); `last_seq` and `last_seen_at` are those of the last message received by then.
+- `history`: `from` is `history_from`, or null before the first message; `to` is HQ's current time.
+- `changes` and `worklog` take a period of at most 31 days (`to` after `from`; otherwise 400). The period is clipped to the kept history and to now; the response `from` and `to` are the clipped period.
+- `changes` returns `{"from", "to", "changes", "truncated", "agents", "branches"}`. Each entry of `changes` is one of `{"at", "kind": "activity", "branch_id", "agent_id", "state", "state_since"}` (a new state or a new `state_since`; tool and workload changes alone are not listed), `{"at", "kind": "presence", "branch_id", "agent_id", "presence"}`, or `{"at", "kind": "reachability", "branch_id", "reachable"}`, in time order, after `from` and up to `to`. At most 5000 entries are returned, the latest ones; `truncated` is true when more exist. `agents` holds the last agent payload (as in `state`) of each Employee listed; `branches` the last Branch payloads (`{"branch_id", "branch"}`).
+- `worklog` returns `{"from", "to", "rows", "branches"}`; each row is `{"branch_id", "agent_id", "project_id", "project_alias", "provider", "seat", "alias", "seconds", "waits", "longest_wait", "errors", "limits"}`, where `seconds` holds `on_duty`, the eight activity states, and `unobserved`.
+- Neither response carries fields beyond those of `state`.
 
 ### 4.3 Authorization
 
@@ -448,6 +464,33 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 - Ingest responds after storing. Each viewer has its own sender holding only the latest state, with a 5 s send limit; a viewer that exceeds it is disconnected without delaying others.
 - The Collector refuses to send a token over plain HTTP to a non-loopback HQ and does not follow redirects.
 - On shutdown HQ checkpoints the WAL and closes the database.
+
+### 4.4 State History
+
+- Every change HQ applies to current state is recorded in `changes`: a key whose payload is set to a different value, or a key removed (`payload` NULL). Kinds and keys: `branch` (key empty), `agent` and `activity` (`agent_id`), `contractor` (`contractor_id`). Heartbeats, and messages that are duplicates or stale, record nothing.
+- A `snapshot` records only the keys it changes or removes. An `agent` without instance records the removal of its activity; a `contractor` with status `ended` records its removal.
+- `at` is the message `event_at`, at most 5 minutes ahead of HQ's receive time (the bound of Section 4.1), and never earlier than the previous change of the same key or `history_from`. Ordering one key's changes by `at` therefore keeps the order in which they were applied.
+- The state at a time T is the baseline overlaid with the latest change of each key at or before T; changes with the same `at` apply in recording order. At the current time it equals the current state.
+- `history_from`: a new database starts its history at the receive time of its first message. A database written by 0.1.0 starts it at the first start of 0.2.0: the current state is copied into the baseline then, and no earlier history exists.
+- Pruning (Section 4) uses the same cutoff as messages. For each key, the latest change before the cutoff replaces or removes its baseline entry; those changes are deleted and `history_from` moves to the cutoff.
+- Reachability at a past time comes from `messages`, not from `changes`: a Branch is observed at T when the last message received at or before T arrived within three heartbeat intervals before T (the interval of the latest `heartbeat` received by then; 30 s before the first). A gap between received messages longer than that is unobserved. The live rule that a Branch not heard since HQ started is unreachable (Section 4.1) does not apply to past times. Messages discarded when a Branch lost its sequence state (Section 4.1) shorten this record.
+
+### 4.5 Work Log
+
+`GET /api/v1/worklog` sums, for each Employee `(branch_id, project_id, agent_id)`, the time within the period:
+
+| Field | Content |
+|---|---|
+| `seconds.on_duty` | Presence `on_duty` while the Branch is observed. |
+| `seconds.<state>` | Each of `working`, `thinking`, `waiting`, `idle`, `completed`, `error`, `limited`, `unknown` while on duty and observed; on duty without an activity counts as `unknown`. Together they equal `on_duty`. |
+| `seconds.unobserved` | Branch gaps (Section 4.4) while the Employee's last known presence is `on_duty`. |
+| `waits`, `errors`, `limits` | Entries into `waiting`, `error`, and `limited` at a time within the period: a change to that state, or a new `state_since` in it. |
+| `longest_wait` | The longest single wait: observed seconds of one `waiting` `state_since`. A wait across a Branch gap stays one wait without the unobserved time. |
+
+- Total waiting time is `seconds.waiting`.
+- Intervals are clipped to the period; a wait that began before it counts its time within the period but no entry.
+- Rows are listed only for Employees with on-duty or unobserved time, or an entry, in the period. Each row carries the Employee's last agent payload fields `project_alias`, `provider`, `seat`, and `alias`.
+- Contractors are not included.
 
 ## 5. Transport
 

@@ -19,4 +19,4 @@ AgentVille sends only state, never content. The lists below are exact.
   - Contractor: id, parent instance id, provider, origin, status, state and its start time, tool name.
   - For a repository without a remote, the project alias is the repository directory's base name and `project_id` is a hash of the host id and repository path; the path itself is not sent.
 - Never sent to HQ: tool arguments, prompts, file paths, local paths of repositories without a remote, account details beyond `account_alias`, command lines, environment variables, details of waiting requests, errors, and usage limits (only the reset time is sent), provider subagent ids.
-- HQ keeps received messages for 30 days (`--retention-days`) and the current state of each Branch.
+- HQ keeps received messages and the history of state changes built from them for 30 days (`--retention-days`), the state as of the start of that period, and the current state of each Branch. The history holds the same fields as the messages; the work log and replay views are computed from it.

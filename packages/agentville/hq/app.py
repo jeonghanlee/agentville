@@ -10,19 +10,19 @@ import logging
 import math
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from importlib import resources
 from typing import Any
 from urllib.parse import urlsplit
 
 import jsonschema
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from agentville import version
-from agentville.common.protocol import load_schema
+from agentville.common.protocol import iso, load_schema
 from agentville.hq.store import Store, now_utc
 
 log = logging.getLogger(__name__)
@@ -34,6 +34,8 @@ MAX_BODY = 4 * 1024 * 1024
 LIVE_REFRESH = 10.0
 SEND_TIMEOUT = 5.0
 AUTH_TIMEOUT = 5.0
+# Longest period one changes or work log request may cover.
+MAX_RANGE = timedelta(days=31)
 
 
 def _bearer_matches(request: Request, token: str) -> bool:
@@ -64,6 +66,28 @@ _FORMATS = jsonschema.FormatChecker(formats=())
 @_FORMATS.checks("date-time", raises=ValueError)
 def _date_time(value: object) -> bool:
     return not isinstance(value, str) or datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is not None
+
+
+def _time(value: str | None, name: str) -> datetime:
+    """An ISO 8601 query time with an explicit offset, as UTC."""
+    if not value:
+        raise HTTPException(status_code=400, detail=f"{name} is required")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{name} must be an ISO 8601 time") from None
+    if parsed.tzinfo is None:
+        raise HTTPException(status_code=400, detail=f"{name} must include a time zone")
+    return parsed.astimezone(UTC)
+
+
+def _period(start: str | None, end: str | None) -> tuple[datetime, datetime]:
+    first, last = _time(start, "from"), _time(end, "to")
+    if last <= first:
+        raise HTTPException(status_code=400, detail="to must be later than from")
+    if last - first > MAX_RANGE:
+        raise HTTPException(status_code=400, detail=f"the period must not exceed {MAX_RANGE.days} days")
+    return first, last
 
 
 def _encode_state(state: dict[str, Any]) -> str:
@@ -280,8 +304,31 @@ def create_app(
                 await asyncio.wait_for(socket.close(), 1.0)
 
     @app.get("/api/v1/state", dependencies=[Depends(authorize_viewer)])
-    def state() -> dict[str, Any]:
-        return store.state(clock())
+    def state(at: str | None = None) -> dict[str, Any]:
+        if at is None:
+            return store.state(clock())
+        when = _time(at, "at")
+        start, now = store.history_range(clock())
+        if start is None or not start <= when <= now:
+            raise HTTPException(status_code=400, detail="at is outside the kept history")
+        return store.state_at(when)
+
+    @app.get("/api/v1/history", dependencies=[Depends(authorize_viewer)])
+    def history() -> dict[str, Any]:
+        start, now = store.history_range(clock())
+        return {"from": iso(start) if start else None, "to": iso(now)}
+
+    @app.get("/api/v1/changes", dependencies=[Depends(authorize_viewer)])
+    def changes(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to"),
+                branch_id: str | None = None) -> dict[str, Any]:
+        first, last = _period(start, end)
+        return store.changes(first, last, clock(), branch_id)
+
+    @app.get("/api/v1/worklog", dependencies=[Depends(authorize_viewer)])
+    def worklog(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to"),
+                branch_id: str | None = None) -> dict[str, Any]:
+        first, last = _period(start, end)
+        return store.worklog(first, last, clock(), branch_id)
 
     @app.get("/api/v1/branches", dependencies=[Depends(authorize_viewer)])
     def branches() -> list[dict[str, Any]]:
