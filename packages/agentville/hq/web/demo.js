@@ -160,6 +160,15 @@ export function demoHistory(now = Date.now()) {
   }
   // An activity's state and state_since; a transition or an entry is a mark other than the last known one.
   const mark = (p) => p ? p.state + "@" + p.state_since : null;
+  // The mark of a colleague's latest activity at or before a time, also one removed since.
+  function prior(at, branchId, key) {
+    let found = null;
+    for (const r of records) {
+      if (r.at > at) break;
+      if (r.kind === "activity" && r.payload && r.branch_id === branchId && r.key === key) found = mark(r.payload);
+    }
+    return found;
+  }
   function changes(start, end, branchId) {
     [start, end] = clip(start, end);
     // A period entirely outside the kept history, or after now, is empty (Section 4.2).
@@ -178,6 +187,7 @@ export function demoHistory(now = Date.now()) {
         }
         presence.set(r.key, r.payload?.presence);
       } else if (r.kind === "activity") {
+        if (!marks.has(r.key)) marks.set(r.key, prior(start, r.branch_id, r.key));
         if (r.payload && mark(r.payload) !== marks.get(r.key)) {
           out.push({ at: iso(r.at), kind: "activity", branch_id: r.branch_id, agent_id: r.key,
             state: r.payload.state, state_since: r.payload.state_since });
@@ -222,7 +232,7 @@ export function demoHistory(now = Date.now()) {
     };
     for (const r of latest(start, branchId).values()) {
       if (r.kind === "agent") { const p = person(r); p.agent = p.last = r.payload; }
-      if (r.kind === "activity") { const p = person(r); p.activity = r.payload; p.mark = mark(r.payload); }
+      if (r.kind === "activity") { const p = person(r); p.activity = r.payload; p.mark = mark(r.payload); p.settled = true; }
     }
     for (const r of between(start, end, branchId)) {
       if (r.kind !== "agent" && r.kind !== "activity") continue;
@@ -231,6 +241,7 @@ export function demoHistory(now = Date.now()) {
       if (r.kind === "agent") { p.agent = r.payload; p.last = r.payload || p.last; continue; }
       const state = r.payload?.state;
       // An entry is a state or state_since other than the last known one, also after the activity was removed.
+      if (!p.settled) { p.mark = prior(start, r.branch_id, r.key); p.settled = true; }
       if (ENTRIES[state] && mark(r.payload) !== p.mark) p[ENTRIES[state]]++;
       p.activity = r.payload;
       p.mark = mark(r.payload) || p.mark;

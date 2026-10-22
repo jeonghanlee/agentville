@@ -553,10 +553,12 @@ class Store:
 
     def _period(self, start: datetime, end: datetime, branch_id: str | None, now: datetime,
                 compute: Callable[[datetime, datetime, history.StateRows, Iterator[history.Change],
-                                   dict[str, list[history.Interval]]], Any]) -> tuple[datetime, datetime, Any, history.StateRows] | None:
+                                   dict[str, list[history.Interval]], history.Prior], Any],
+                ) -> tuple[datetime, datetime, Any, history.StateRows] | None:
         """Run ``compute`` over the part of [start, end] inside the kept history: its initial state, its changes (read
-        while ``compute`` consumes them), and the observed times of each Branch. Returns the clipped period, the
-        result, and the last payload of each key, which removed keys keep; None when no part is inside.
+        while ``compute`` consumes them), the observed times of each Branch, and the lookup of an Employee's last
+        activity mark at or before the start. Returns the clipped period, the result, and the last payload of each
+        key, which removed keys keep; None when no part is inside.
         """
         with self._reading() as db:
             row = db.execute("SELECT value FROM meta WHERE name = 'history_from'").fetchone()
@@ -576,7 +578,20 @@ class Store:
                         known[(change[0], change[2], change[3])] = change[4]
                     yield change
 
-            result = compute(start, end, initial, changes(), observed)
+            def prior(branch: str, key: str) -> history.Mark | None:
+                row = db.execute(
+                    "SELECT json_extract(payload, '$.state'), json_extract(payload, '$.state_since') FROM changes "
+                    "WHERE branch_id = ? AND kind = 'activity' AND key = ? AND at <= ? AND payload IS NOT NULL "
+                    "ORDER BY at DESC, id DESC LIMIT 1", (branch, key, iso(start))).fetchone()
+                if row is not None:
+                    return row[0], row[1]
+                # Before any kept change the baseline holds it, unless it was removed before the kept history.
+                base = db.execute(
+                    "SELECT json_extract(payload, '$.state'), json_extract(payload, '$.state_since') FROM baseline "
+                    "WHERE branch_id = ? AND kind = 'activity' AND key = ?", (branch, key)).fetchone()
+                return (base[0], base[1]) if base is not None else None
+
+            result = compute(start, end, initial, changes(), observed, prior)
         return start, end, result, known
 
     def changes(self, start: datetime, end: datetime, now: datetime, branch_id: str | None = None,
@@ -586,7 +601,8 @@ class Store:
         A period entirely outside the kept history, or after now, gives null ``from`` and ``to`` and empty lists.
         """
         period = self._period(start, end, branch_id, now,
-                              lambda s, e, initial, changes, observed: history.transitions(initial, changes, observed, s, e, limit))
+                              lambda s, e, initial, changes, observed, prior: history.transitions(
+                                  initial, changes, observed, s, e, limit, prior))
         if period is None:
             return {"from": None, "to": None, "changes": [], "truncated": False, "agents": [], "branches": []}
         start, end, (items, truncated), known = period
@@ -600,7 +616,8 @@ class Store:
     def worklog(self, start: datetime, end: datetime, now: datetime, branch_id: str | None = None) -> dict[str, Any]:
         """Seconds per presence and activity state of each Employee within [start, end]; empty as ``changes``."""
         period = self._period(start, end, branch_id, now,
-                              lambda s, e, initial, changes, observed: history.work_log(initial, changes, observed, s, e))
+                              lambda s, e, initial, changes, observed, prior: history.work_log(
+                                  initial, changes, observed, s, e, prior))
         if period is None:
             return {"from": None, "to": None, "rows": [], "branches": []}
         start, end, rows, known = period

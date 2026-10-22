@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from itertools import islice
 from datetime import UTC, datetime, timedelta
@@ -25,6 +25,10 @@ StateRows = dict[tuple[str, str, str], dict[str, Any]]
 # its state and state_since, which is all these computations read of it.
 Change = tuple[str, datetime, str, str, dict[str, Any] | None]
 Interval = tuple[datetime, datetime]
+# (state, state_since) of an activity.
+Mark = tuple[Any, Any]
+# The mark of an Employee's latest activity at or before the start of the period, also one removed since.
+Prior = Callable[[str, str], Mark | None]
 # (received_at in microseconds since the epoch, window in seconds), in received order.
 Receipt = tuple[int, float]
 
@@ -88,17 +92,22 @@ def _activity_state(activity: dict[str, Any] | None) -> str:
     return state if state in STATES else "unknown"
 
 
-def _mark(activity: dict[str, Any] | None) -> tuple[Any, Any] | None:
+def _no_prior(_branch_id: str, _key: str) -> Mark | None:
+    return None
+
+
+def _mark(activity: dict[str, Any] | None) -> Mark | None:
     return (activity.get("state"), activity.get("state_since")) if activity else None
 
 
 def transitions(initial: StateRows, changes: Iterable[Change], observed_by_branch: dict[str, list[Interval]],
-                start: datetime, end: datetime, limit: int) -> tuple[list[dict[str, Any]], bool]:
+                start: datetime, end: datetime, limit: int, prior: Prior = _no_prior) -> tuple[list[dict[str, Any]], bool]:
     """The latest ``limit`` activity, presence, and Branch reachability transitions in (start, end], in time order,
     and whether there were more.
 
     An activity transition is a new state or a new ``state_since``; changes of tool or workload alone are not. Both
-    are compared with the last known activity of the Employee, so an activity removed and restored is not new.
+    are compared with the last known activity of the Employee, so an activity removed and restored is not new;
+    ``prior`` gives it for an Employee without an activity at the start.
     """
     presence = {(b, key): p.get("presence") for (b, kind, key), p in initial.items() if kind == "agent"}
     marks = {(b, key): _mark(p) for (b, kind, key), p in initial.items() if kind == "activity"}
@@ -110,7 +119,9 @@ def transitions(initial: StateRows, changes: Iterable[Change], observed_by_branc
             out.append({"at": at, "kind": "presence", "branch_id": branch_id, "agent_id": key,
                         "presence": payload.get("presence")})
             total += 1
-        if kind == "activity" and payload is not None and _mark(payload) != marks.get((branch_id, key)):
+        if kind == "activity" and (branch_id, key) not in marks:
+            marks[(branch_id, key)] = prior(branch_id, key)
+        if kind == "activity" and payload is not None and _mark(payload) != marks[(branch_id, key)]:
             out.append({"at": at, "kind": "activity", "branch_id": branch_id, "agent_id": key,
                         "state": payload.get("state"), "state_since": payload.get("state_since")})
             total += 1
@@ -144,7 +155,7 @@ class _Colleague:
     activity: dict[str, Any] | None = None
     last_agent: dict[str, Any] | None = None
     # (state, state_since) of the last known activity, kept while the activity is removed.
-    mark: tuple[Any, Any] | None = None
+    mark: Mark | None = None
     seconds: dict[str, float] = field(default_factory=lambda: defaultdict(float))
     counts: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     # Waited seconds per wait, keyed by its state_since; a wait interrupted by a Branch gap stays one wait.
@@ -163,14 +174,17 @@ class _Colleague:
 
 
 def work_log(initial: StateRows, changes: Iterable[Change], observed_by_branch: dict[str, list[Interval]],
-             start: datetime, end: datetime) -> list[dict[str, Any]]:
+             start: datetime, end: datetime, prior: Prior = _no_prior) -> list[dict[str, Any]]:
     """Seconds per presence and activity state of each Employee within [start, end].
 
     Time in a Branch gap counts as unobserved, not as on duty, for Employees last known on duty.
     Entries into waiting, error, and limited are counted when they occur within the range: a state or
-    ``state_since`` that differs from the Employee's last known activity, also across a removal of the activity.
+    ``state_since`` that differs from the Employee's last known activity, also across a removal of the activity
+    (``prior`` gives it for an Employee without an activity at the start).
     """
     colleagues: dict[tuple[str, str], _Colleague] = {}
+    # Employees whose last known activity is settled: present at the start, or looked up with ``prior``.
+    settled: set[tuple[str, str]] = set()
 
     def colleague(branch_id: str, key: str) -> _Colleague:
         if (branch_id, key) not in colleagues:
@@ -184,6 +198,7 @@ def work_log(initial: StateRows, changes: Iterable[Change], observed_by_branch: 
         elif kind == "activity":
             c = colleague(branch_id, key)
             c.activity, c.mark = payload, _mark(payload)
+            settled.add((branch_id, key))
     for branch_id, at, kind, key, payload in changes:
         if kind not in ("agent", "activity"):
             continue
@@ -193,6 +208,9 @@ def work_log(initial: StateRows, changes: Iterable[Change], observed_by_branch: 
             c.agent = payload
             c.last_agent = payload or c.last_agent
             continue
+        if (branch_id, key) not in settled:
+            c.mark = prior(branch_id, key)
+            settled.add((branch_id, key))
         state = payload.get("state") if payload else None
         if state in ENTRIES and _mark(payload) != c.mark:
             c.counts[ENTRIES[state]] += 1

@@ -448,3 +448,21 @@ def test_a_rejected_batch_leaves_no_checkpoint_behind(tmp_path):
     db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
     assert [row[0] for row in db.execute("SELECT at FROM checkpoints")] == [iso(s(7200))]
     assert _states(store.state_at(s(3600))) == {"a1": "idle"}
+
+
+def test_a_removal_across_the_period_start_keeps_the_last_known_activity(tmp_path):
+    store = _store(tmp_path)
+    branch = Branch(store)
+    branch.send(0, "snapshot", snapshot([agent("a1")], [activity("a1", "idle", 0)]))
+    branch.beats(5, 400)
+    branch.send(100, "activity", activity("a1", "waiting", 100))
+    branch.send(200, "snapshot", snapshot([agent("a1")], []))
+    branch.send(300, "snapshot", snapshot([agent("a1")], [activity("a1", "waiting", 100)]))
+    # Removed before the period and restored in it with the same state and state_since: no entry, no transition.
+    assert store.worklog(s(250), s(400), s(400))["rows"][0]["waits"] == 0
+    assert [c for c in store.changes(s(250), s(400), s(400))["changes"] if c["kind"] == "activity"] == []
+    assert store.worklog(s(0), s(400), s(400))["rows"][0]["waits"] == 1
+    # Restored with a new state_since, it is an entry.
+    branch.send(450, "snapshot", snapshot([agent("a1")], []))
+    branch.send(500, "snapshot", snapshot([agent("a1")], [activity("a1", "waiting", 480)]))
+    assert store.worklog(s(460), s(520), s(520))["rows"][0]["waits"] == 1
