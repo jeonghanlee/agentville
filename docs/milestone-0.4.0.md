@@ -229,6 +229,10 @@ Out of scope: recording a collaboration relationship merely because characters s
 ##### Dependencies And Decisions
 
 - M1 precedes M2 by D1; this is work ordering.
+- Proposed for owner acceptance with this plan:
+  - P1 (artwork): the expanded office is new generated artwork, produced by the owner with the same OpenAI image generation used for the 0.1.0 office, from `docs/design/office-v2-artwork.prompt.txt`. No artwork is drawn in code and no generated image is produced by an agent. Integration starts only after an image meeting the requirements listed in that file is committed; until then only the layout-independent steps 1 and 2 below run.
+  - P2 (participation): a Project meets when at least two of its on-duty colleagues shown on the displayed Branch page are in `working` or `thinking` at the same time for at least 60 s. Members are those colleagues; colleagues of the Project in other states stay where the existing rules put them. A member leaves when its state is anything else for 30 s, or at once for `waiting`, `error`, `limited`, or off duty, and returns to its own desk. The meeting ends when fewer than two members remain. Only one Project meets at a time: the qualifying Project with the most members, ties broken by the earliest qualifying time, then by Project id. Capacity is the number of meeting-room chairs (6); further qualifying colleagues stay at their desks. Members keep their activity presentation (typing gestures at the table, tool label) and their desk stays reserved for them while they meet. Membership is computed in the page from observed state only; no meeting is recorded, sent, or stored, and nothing implies a collaboration relationship.
+  - P3 (seats): every seat (desk chair, meeting chair, Fika seat, bed) is one entry of a data table with its room, position, facing (front, back, left, right), and approach waypoint. Arrivals in one update are assigned in seat-number order to the lowest free suitable seat of their room; a seat holds at most one colleague; a desk room shows occupants beyond its desks as "+N"; Fika and the wellness room use standing spots only when all their seats are taken. Each seated sprite uses the frame and mirroring of its seat's facing.
 
 ##### Implementation Plan
 
@@ -237,17 +241,20 @@ Plan Acceptance: none
 Implementation Authorization: none
 Superseded Plan Artifacts: none
 
-1. Define participation, the 20-colleague office layout, one meeting room, seat orientation, and artwork requirements.
-2. Implement the accepted layout, available-seat assignment, and transition behavior.
-3. Verify 20 simultaneous arrivals, departure and seat reuse, Fika seating and direction, meeting-room capacity, and reduced motion.
+1. Seat table (layout-independent). Move the current desk, Fika, and bed positions, facings, and approach waypoints of `office.png` into one seat table in `hq/web/floor.js` (or a new `seats.js`), and make `app.js` assign and render seats only from that table. With the current artwork the observable office is unchanged; this is checked by the existing browser tests and by before/after screenshots at 1440 px and 720 px.
+2. Meeting membership (layout-independent). Implement P2 as a pure function over the displayed state and time in a new `hq/web/meeting.js`, with unit tests over observed-state sequences (qualifying, hysteresis, priority, capacity, waiting/error/limited/off-duty exits, Branch page change, replay). In demo mode, demo data includes one meeting.
+3. Artwork intake (after the owner commits the new `office.png`). Check the image against the requirements in the prompt file; record its provenance in `docs/design/artwork.md`; measure furniture footprints, the floor outline, waypoints, and every seat of the new image; extend the seat table with 20 desks, 6 meeting chairs, 5 Fika seats, and 2 beds; re-measure decoration anchors (frames, flower spots, windows) and screen-glass areas.
+4. Rooms. Map Project rooms to the three studios (two or more Projects per floor page as space allows) and the shared nook to the Common Office; route members to the meeting room and back through the floor graph; keep the foot-box clearance check passing for every new link and seat step.
+5. Documentation. Update architecture Sections 6.2 and 9.1 and using.md (meeting room, capacities, seat facing), replace the manual screenshots, and add the 0.4.0 CHANGELOG entry.
 
 ##### Test Plan
 
 | Label | Layer | Method | Environment | Expected Result |
 | --- | --- | --- | --- | --- |
-| T1 | UI | Render simultaneous same-Project colleagues and change their activity | Browser | Correct membership and transitions without changing observed data |
-| T2 | UI | Use the real office renderer for 20 working colleagues, simultaneous arrivals, departures, and new arrivals | Browser | Distinct suitable desks are used and released without overlap |
-| T3 | UI | Move colleagues into Fika and the meeting room through actual activity updates | Browser | Available seats are used, directions agree with furniture, and full rooms follow the accepted capacity rule |
+| T1 | Unit and UI | Feed observed-state sequences to the membership function, then render the same sequences through real HQ ingest and WebSocket | Node or browser module test; Chromium with real HQ | Membership, priority, capacity, and exits follow P2; selection, identity, accessible names, and reduced motion are preserved; HQ state and history are unchanged by meetings |
+| T2 | UI | Ingest 20 on-duty colleagues arriving in one batch and in several batches, then departures and new arrivals | Chromium with real HQ, new artwork | Each colleague gets a distinct suitable desk without overlap; freed desks are reused; "+N" appears only when desks are exhausted |
+| T3 | UI | Move colleagues into Fika, the wellness room, and the meeting room through real activity updates | Chromium with real HQ, new artwork | Seats are used before standing spots; every seated sprite faces its furniture; capacity rules hold |
+| T4 | Regression | Route clearance test over every link and seat step; whole test suite; mdBook | Repository | No route crosses a footprint; existing behaviour passes |
 
 ##### Verification Results
 
@@ -256,6 +263,7 @@ Superseded Plan Artifacts: none
 | T1 | Not run | Browser | Pending | none |
 | T2 | Not run | Browser | Pending | none |
 | T3 | Not run | Browser | Pending | none |
+| T4 | Not run | Repository | Pending | none |
 
 ##### Closure Evidence
 
