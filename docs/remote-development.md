@@ -29,20 +29,38 @@ Out of scope: installing an SSH server, configuring Docker itself, controlling a
    docker volume create <state_volume>
    ```
 
-   In its Docker launch options, mount the first volume at `/config` and the second at `/state`, and set these environment variables:
+   Mount them at the Collector's own directories in the home directory of the container user that runs the Collector, `<home>`:
 
    ```text
-   XDG_CONFIG_HOME=/config
-   XDG_STATE_HOME=/state
+   --mount type=volume,source=<config_volume>,target=<home>/.config/agentville
+   --mount type=volume,source=<state_volume>,target=<home>/.local/state/agentville
    ```
 
-   Fresh named volumes can belong to root. On the Docker host, assign these dedicated volumes to the Collector's UID and GID before starting it:
+   In `devcontainer.json`, the same mounts are:
+
+   ```json
+   "mounts": [
+     "source=<config_volume>,target=<home>/.config/agentville,type=volume",
+     "source=<state_volume>,target=<home>/.local/state/agentville,type=volume"
+   ]
+   ```
+
+   Mount only these two directories. Other programs keep their configuration and state outside the Collector volumes. Do not set `XDG_CONFIG_HOME` or `XDG_STATE_HOME` to move the Collector directories; they apply to every program in the container. If the image already sets them, mount at `$XDG_CONFIG_HOME/agentville` and `$XDG_STATE_HOME/agentville` instead.
+
+   When a mount path is absent in the image, Docker creates it and its missing parent directories as root, and a fresh named volume mounted there belongs to root. The Collector cannot then create its config or state. Before the first Collector start, assign the two mount points and the parent directories to the Collector's UID and GID. Run these commands as that container user:
 
    ```bash
-   docker exec --user 0 <container> chown -R <uid>:<gid> /config /state
+   sudo chown -R "$(id -u):$(id -g)" ~/.config/agentville ~/.local/state/agentville
+   sudo chown "$(id -u):$(id -g)" ~/.config ~/.local ~/.local/state
    ```
 
-   Replace `<uid>` and `<gid>` with the values inside the container, not the workstation's values. Keep both volumes when recreating the container. Run the Collector as that user.
+   The second command changes only the parent directories, not their content. In a development container, run both commands from `postCreateCommand`:
+
+   ```json
+   "postCreateCommand": "sudo chown -R \"$(id -u):$(id -g)\" ~/.config/agentville ~/.local/state/agentville && sudo chown \"$(id -u):$(id -g)\" ~/.config ~/.local ~/.local/state"
+   ```
+
+   Without `sudo` in the container, run the same `chown` commands from the Docker host with `docker exec --user 0 <container>`, using absolute paths under `<home>` and the UID and GID inside the container, not the workstation's values. Keep both volumes when recreating the container; repeating the commands on a recreated container is harmless. Run the Collector as that user.
 
 3. On the HQ workstation, forward an unused port on the development host back to HQ:
 

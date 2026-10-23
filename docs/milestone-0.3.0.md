@@ -245,6 +245,14 @@ Superseded Plan Artifacts: none
 
 - HTTP, Docker, SSH, browser, and mdBook checks ran against the working tree. `packages/` and `pyproject.toml` match `/tmp/agentville-030-system-liatpmu9/context/` byte for byte, excluding Python caches. Test containers are stopped; generated images, volumes, and private evidence remain. Self-review is accepted. Observed 2026-10-22 23:11:34 UTC: implementation commit `cc8168af4eae02ce05c921c9ccf191a9b0e62723` is an ancestor of fetched `origin/feature/0.3.0` at `42236e561ed5614a6c6e9da7d8cee6cccad4a981`. A Git comparison found no differences in packages, tests, pyproject.toml, architecture, or remote procedures. The 60 package and version files match the retained Docker context. GitHub test run [39864177993](https://github.com/jeonghanlee/agentville/actions/runs/39864177993) completed successfully for Python 3.12, Python 3.13, and the actual install.sh path. Required local checks and accepted self-review are recorded above; no external tracker issue exists.
 
+##### Post-release Review
+
+Review target: three findings from an earlier review of 0.3.0, rechecked on 2026-10-23 against master at a0fd7ff. The base suite recorded 317 passed before any change.
+
+- P1, shared host.id with coincident seq state: already handled by M3 plan item 1. A two-Collector simulation from the same seq state reported the warning for every conflicting message (60 of 60 and 120 of 120); an independent seq state reported none. With the content comparison in `hq/store.py` disabled, `tests/integration/test_remote_identity.py` fails. No change.
+- P2, completed child `codex exec` rollout after a Collector restart: already handled by M1 plan item 5 and architecture Section 3.4. With the attach-time file-version rule in `adapters/codex.py` disabled, both S05 restart cases in `tests/integration/test_child_process.py` and three Codex Adapter unit cases fail. No change.
+- P3, container procedures: tunnel boundaries (Step 3) and nohup start, stop, and restart (Steps 6-7) were already documented. Volume layout was corrected in [Run a remote Collector](remote-development.md) Step 2: volumes now mount at `~/.config/agentville` and `~/.local/state/agentville` without container-wide XDG variables, and the ownership step includes the root-owned parent directories that Docker creates, with a `postCreateCommand` form. This is a documentation change only; no Docker daemon was available, so the revised mounts were not executed. `tests/system/remote_environment.py` still exercises the earlier `/config` and `/state` layout; T2 with the revised layout remains pending.
+
 #### G1 - Late Parent Observation Policy
 
 Origin: 0.3.0 / G1
