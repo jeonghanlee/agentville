@@ -4,7 +4,9 @@ import re
 
 import pytest
 
-playwright = pytest.importorskip("playwright.sync_api")
+from tests.browser_support import playwright_sync
+
+playwright = playwright_sync()
 
 from playwright.async_api import async_playwright, expect as async_expect
 
