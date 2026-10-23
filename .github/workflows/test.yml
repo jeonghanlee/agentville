@@ -15,7 +15,10 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
+      # The 0.3.0 upgrade check archives the published 0.3.0 writer by commit, so it needs the full history.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
