@@ -18,14 +18,13 @@ function observedState(agent, activity) {
   return activity && KNOWN.has(activity.state) ? activity.state : "unknown";
 }
 
-// Observation tracker. `observations` is { epoch, colleagues }, where colleagues maps each colleague key to its
-// last observed state, the start of its current continuous run in `working` or `thinking` (qualifiedSince), and
-// the start of its current run in any other state (otherSince). Returns the next observations; the input is not
-// changed. A load starts from createObservations(); a reconnect passes restart, which starts a new epoch and
-// restarts every clock from this state, so no colleague qualifies until observed for the full entry time again.
-// A Branch or page change does not touch the observations.
+// Observation tracker. `observations` is { colleagues }, which maps each colleague key to its last observed state,
+// the start of its current continuous run in `working` or `thinking` (qualifiedSince), and the start of its current
+// run in any other state (otherSince). Returns the next observations; the input is not changed. A load starts from
+// createObservations(); a reconnect passes restart, which restarts every clock from this state, so no colleague
+// qualifies until observed for the full entry time again. A Branch or page change does not touch the observations.
 export function createObservations() {
-  return { epoch: 0, colleagues: {} };
+  return { colleagues: {} };
 }
 
 export function observe(observations, state, now, { restart = false } = {}) {
@@ -40,7 +39,7 @@ export function observe(observations, state, now, { restart = false } = {}) {
       ? { state: value, qualifiedSince: last?.qualifiedSince ?? now, otherSince: null }
       : { state: value, qualifiedSince: null, otherSince: last?.otherSince ?? now };
   }
-  return { epoch: observations.epoch + (restart ? 1 : 0), colleagues };
+  return { colleagues };
 }
 
 function closedRecord(closed, kind, id) {
@@ -68,9 +67,10 @@ function member(candidate, chair) {
   return { key: candidate.key, branch_id: candidate.agent.branch_id, agent_id: candidate.agent.agent_id, chair };
 }
 
-// The meeting of every Branch in `state`, keyed by branch_id: null, or { project_id, epoch, members } with members
+// The meeting of every Branch in `state`, keyed by branch_id: null, or { project_id, members } with members
 // { key, branch_id, agent_id, chair } in chair order.
-// - previous: the result of the last call (meetings of another observation epoch are ignored).
+// - previous: the result of the last call. A meeting in progress survives a reconnect: its members stay until an
+//   exit condition is observed, counted on the restarted clocks, and nobody joins until qualified again.
 // - mode: "live" forms meetings; "replay" forms none (the replayed state is sampled once per minute), and "demo"
 //   forms none either, since the demo receives a single state and lists its fixed meeting as data.
 // - closed: the lifecycle records of the state ({ kind, id, closed }).
@@ -89,7 +89,7 @@ export function meetings(state, observations, previous, now, mode, closed, capac
     const byKey = new Map(candidates.map((c) => [c.key, c]));
     let meeting = null;
     const last = previous?.[branchId];
-    if (last && last.epoch === observations.epoch) {
+    if (last) {
       // Members leave at once on waiting, error, limited, off duty, or loss of eligibility (including a change of
       // Project), and after EXIT_MS in any other non-qualifying state.
       const stay = last.members.filter(({ key }) => {
@@ -108,7 +108,7 @@ export function meetings(state, observations, previous, now, mode, closed, capac
       }
       // The meeting ends when fewer than two members remain.
       if (members.length >= 2) {
-        meeting = { project_id: last.project_id, epoch: observations.epoch, members: members.sort((a, b) => a.chair - b.chair) };
+        meeting = { project_id: last.project_id, members: members.sort((a, b) => a.chair - b.chair) };
       }
     }
     if (!meeting) {
@@ -124,7 +124,7 @@ export function meetings(state, observations, previous, now, mode, closed, capac
         return { id, list, qualified: list[1].since + ENTRY_MS };
       }).sort((a, b) => b.list.length - a.list.length || a.qualified - b.qualified || a.id.localeCompare(b.id));
       if (ranked.length) {
-        meeting = { project_id: ranked[0].id, epoch: observations.epoch,
+        meeting = { project_id: ranked[0].id,
           members: ranked[0].list.slice(0, capacity).map((c, chair) => member(c, chair)) };
       }
     }

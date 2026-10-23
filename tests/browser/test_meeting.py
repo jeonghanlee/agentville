@@ -179,12 +179,24 @@ def test_common_office_closed_records_and_remote_colleagues(page):
 
 
 def test_reload_reconnect_branch_and_page_change_and_replay(page):
-    # A reload or reconnect restarts every clock: nobody qualifies until observed again for the full entry time,
-    # and a meeting in progress before a reconnect is not carried over.
+    # A reload is a new page: nobody qualifies until observed again for the full entry time.
     reload = [{"at": 0, "rows": pair()}, {"at": 60}, {"at": 100, "reload": True}, {"at": 159}, {"at": 160}]
     assert run(page, reload) == [None, "p:a@0,b@1", None, None, "p:a@0,b@1"]
+    # A reconnect restarts every clock but is no exit: a meeting in progress keeps its members.
     reconnect = [{"at": 0, "rows": pair()}, {"at": 60}, {"at": 100, "restart": True}, {"at": 159}, {"at": 160}]
-    assert run(page, reconnect) == [None, "p:a@0,b@1", None, None, "p:a@0,b@1"]
+    assert run(page, reconnect) == [None, "p:a@0,b@1", "p:a@0,b@1", "p:a@0,b@1", "p:a@0,b@1"]
+    # A member's 30 s in another state counts from its observation after the reconnect.
+    trio = [["b1", n, "p", "working"] for n in "abc"]
+    idle_b = [["b1", n, "p", "idle" if n == "b" else "working"] for n in "abc"]
+    steps = [{"at": 0, "rows": trio}, {"at": 60}, {"at": 80, "rows": idle_b}, {"at": 100, "restart": True},
+             {"at": 110}, {"at": 129.9}, {"at": 130}]
+    assert run(page, steps)[1:] == ["p:a@0,b@1,c@2"] * 5 + ["p:a@0,c@2"]
+    # Nobody joins until qualified again: d qualified before the reconnect but must be observed 60 s after it.
+    four = [["b1", n, "p", "working"] for n in "abcd"]
+    leave_a = [["b1", n, "p", "waiting" if n == "a" else "working"] for n in "abcd"]
+    steps = [{"at": 0, "rows": four, "capacity": 3}, {"at": 60, "capacity": 3}, {"at": 100, "restart": True, "capacity": 3},
+             {"at": 101, "rows": leave_a, "capacity": 3}, {"at": 159, "capacity": 3}, {"at": 160, "capacity": 3}]
+    assert run(page, steps)[1:] == ["p:a@0,b@1,c@2", "p:a@0,b@1,c@2", "p:b@1,c@2", "p:b@1,c@2", "p:d@0,b@1,c@2"]
     # A Branch or page change is no input: states listing Branches and colleagues in another order (as a page with
     # another Branch shown receives them) keep the clocks and the meeting of every Branch.
     two_branches = pair() + [["b2", "c", "q", "working"], ["b2", "d", "q", "working"]]
@@ -219,4 +231,22 @@ def test_observation_tracker_is_pure_and_ignores_state_since(page):
     assert result["first"][key] == {"state": "working", "qualifiedSince": 1000, "otherSince": None}
     assert result["second"][key] == {"state": "thinking", "qualifiedSince": 1000, "otherSince": None}
     assert result["fourth"][key] == {"state": "completed", "qualifiedSince": None, "otherSince": 9000}
-    assert result["restarted"] == {"epoch": 1, "colleagues": {key: {"state": "working", "qualifiedSince": 20000, "otherSince": None}}}
+    assert result["restarted"] == {"colleagues": {key: {"state": "working", "qualifiedSince": 20000, "otherSince": None}}}
+
+
+def test_implementation_clarifications_of_d6(page):
+    # (a) A freed chair is refilled before the two-member check: c takes a's chair and b keeps chair 1, instead of
+    # the meeting ending and restarting as b@0, c@1.
+    trio = [["b1", n, "p", "working"] for n in "abc"]
+    leave_a = [["b1", n, "p", "waiting" if n == "a" else "working"] for n in "abc"]
+    steps = [{"at": 0, "rows": trio, "capacity": 2}, {"at": 60, "capacity": 2}, {"at": 61, "rows": leave_a, "capacity": 2}]
+    assert run(page, steps)[1:] == ["p:a@0,b@1", "p:c@0,b@1"]
+    # (b) A closed evaluated Branch excludes every colleague evaluated on it, remote colleagues from an open Branch too.
+    remote = [["b1", "local", "p", "idle", "off_duty"], ["b2", "r1", "p", "working"], ["b2", "r2", "p", "working"]]
+    closed = [{"kind": "branch", "id": "b1", "closed": True}]
+    result = page.evaluate("(steps) => runMeetings(steps)", [{"at": 0, "rows": remote}, {"at": 60, "closed": closed}])[-1]
+    assert result == {"b1": None, "b2": "p:r1@0,r2@1"}
+    # (c) Colleagues with the same agent id and the same qualification start are ordered by Branch id.
+    same = [["b1", "local", "p", "idle", "off_duty"], ["b3", "x", "p", "working"], ["b2", "x", "p", "working"]]
+    result = page.evaluate("(steps) => runMeetings(steps)", [{"at": 0, "rows": same}, {"at": 60}])[-1]
+    assert result["b1"] == "p:b2/x@0,b3/x@1"
