@@ -7,7 +7,7 @@ Canonical branch or ref: none
 Git upstream: none
 Remote tracker: none
 
-Next session entry point: Read M1 and `docs/architecture.md` Section 1.8 to define Branch and Project closure behavior after 0.3.0.
+Next session entry point: Plan M1 against docs/architecture.md Section 1.8 and the current HQ authorization, persistence, history, and notification code. AgentVille 0.3.0 is published and released-tag installation passed; M1 dependencies are complete. Resolve who may close records and which new observation reopens them before accepting the detailed implementation and real-path test plan. Office capacity, seating, Fika direction, and one meeting room remain in M2.
 
 ## Scope
 
@@ -21,7 +21,7 @@ Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
 
 | ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| M1 | Branch and Project lifecycle | Milestone | Not started | No | [0.3.0 M3](milestone-0.3.0.md#m3---remote-development-environments), D1 | Closure and observed automatic reopening work at HQ; [detail](#m1---branch-and-project-lifecycle) |
+| M1 | Branch and Project lifecycle | Milestone | Not started | Yes | [0.3.0 M3](milestone-0.3.0.md#m3---remote-development-environments), D1 | Closure and observed automatic reopening work at HQ; [detail](#m1---branch-and-project-lifecycle) |
 | M2 | Meeting rooms | Milestone | Not started | No | M1, D1 | Concurrent colleagues of one Project share the intended presentation; [detail](#m2---meeting-rooms) |
 | M3 | Town map | Milestone | Not started | No | M2, D1 | Multiple Branches are navigable on the map; [detail](#m3---town-map) |
 | M4 | Seasons and weather | Milestone | Not started | No | M3, D1 | Visual settings affect presentation consistently; [detail](#m4---seasons-and-weather) |
