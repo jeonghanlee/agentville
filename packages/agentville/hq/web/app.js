@@ -19,6 +19,7 @@ import { dayOf, dayStart, dayEnd, shiftDay, duration } from "./days.js";
 import { createHistory } from "./history.js";
 import { createReplay, SPEEDS } from "./replay.js";
 import { worklogTable } from "./worklog.js";
+import { createLifecycle } from "./lifecycle.js";
 
 const DEMO = new URLSearchParams(location.search).get("demo") === "1";
 const TOKEN = takeToken();
@@ -82,6 +83,9 @@ const places = new Map();
 const motionAllowed = () => !matchMedia("(prefers-reduced-motion: reduce)").matches && !document.body.classList.contains("reduce-motion");
 let cats = null;
 let notifications = null;
+let lifecycleControls = null;
+const lifecycleOf = (kind, id, data = current) => (data.lifecycles || []).find((v) => v.kind === kind && v.id === id);
+const lifecycleBadge = (kind, id) => lifecycleOf(kind, id)?.closed ? el("span", { class: "closed-badge" }, t("lifecycle.closed")) : null;
 // The first state of each socket is a baseline: it records states without notifying.
 let resync = true;
 let connection = ["connection.connecting", ""];
@@ -604,6 +608,9 @@ function dayEvents() {
   const agents = new Map(dayChanges.agents.map((a) => [keyOf(a.branch_id, a.agent_id), a]));
   const branches = new Map(dayChanges.branches.map((b) => [b.branch_id, b]));
   return dayChanges.changes.map((change) => {
+    if (change.kind === "lifecycle") {
+      return { name: change.alias, project: "", state: "idle", kind: change.closed ? "recordClosed" : "recordReopened", at: change.at };
+    }
     const branch = branchName(branches.get(change.branch_id) || current.branches.find((b) => b.branch_id === change.branch_id));
     if (change.kind === "reachability") {
       return { name: branch, project: "", state: change.reachable ? "idle" : "unknown", kind: change.reachable ? "reachable" : "unreachable", at: change.at };
@@ -673,20 +680,24 @@ function renderData(all) {
   if (view === "timeline") renderTimeline(root);
   if (view === "worklog") renderWorklog(root);
   if (view === "projects") {
-    const projects = [...new Map(all.filter(queryMatches).map((r) => [r.agent.project_id, r.project])).entries()];
-    root.replaceChildren(el("div", { class: "data-grid" }, projects.length ? projects.map(([id,name]) => {
+    const projects = new Map(all.filter(queryMatches).map((r) => [r.agent.project_id, r.project]));
+    const query = $("search").value.trim().toLowerCase();
+    for (const item of current.lifecycles || []) {
+      if (item.kind === "project" && (!query || item.alias.toLowerCase().includes(query))) projects.set(item.id, item.alias);
+    }
+    root.replaceChildren(el("div", { class: "data-grid" }, projects.size ? [...projects].map(([id,name]) => {
       const members = all.filter((r) => r.agent.project_id === id);
-      return el("article", { class: "project-card" }, icon("folder"), el("h2", {}, name),
+      return el("article", { class: "project-card", "data-project-id": id }, icon("folder"), el("h2", {}, name), lifecycleBadge("project", id),
         id === COMMON ? null : el("p", { class: "room-kind" }, t("room.repository")),
         el("p", {}, t("project.counts", { duty: members.filter((r) => r.duty).length, branches: new Set(members.map((r) => r.agent.branch_id)).size })),
         button(t("project.open"), "secondary-button", () => {
-          branchId = members[0].agent.branch_id;
+          branchId = members[0]?.agent.branch_id || lifecycleOf("project", id)?.branch_ids[0] || branchId;
           const ctx = context(all);
           const index = ctx.projects.findIndex((p) => p.id === id);
           floor = Math.max(0, Math.floor(index / 2));
           roomFilter = id === COMMON ? "common" : projectRoom(id); stateFilter = "all";
           setView("office");
-        }));
+        }), lifecycleControls.action("project", id, name, lifecycleOf("project", id)?.closed));
     }) : el("p", { class: "empty-list" }, t("project.none"))));
   }
   if (view === "branches") {
@@ -694,9 +705,10 @@ function renderData(all) {
     const branches = current.branches.filter((b) => !query || (b.branch?.alias || "").toLowerCase().includes(query));
     root.replaceChildren(el("div", { class: "data-grid" }, branches.length ? branches.map((b) =>
       el("article", { class: "branch-card" }, icon("house"), el("h2", {}, branchName(b)),
-        el("p", {}, t("branch." + branchWording(b))),
+        lifecycleBadge("branch", b.branch_id), el("p", {}, t("branch." + branchWording(b))),
         el("p", {}, t("branch.counts", { duty: all.filter((r) => r.agent.branch_id === b.branch_id && r.duty).length, age: age(b.last_seen_at, false) })),
-        button(t("branch.open"), "secondary-button", () => { branchId = b.branch_id; floor = 0; roomFilter = ""; stateFilter = "all"; setView("office"); })))
+        button(t("branch.open"), "secondary-button", () => { branchId = b.branch_id; floor = 0; roomFilter = ""; stateFilter = "all"; setView("office"); }),
+        lifecycleControls.action("branch", b.branch_id, branchName(b), lifecycleOf("branch", b.branch_id)?.closed)))
       : el("p", { class: "empty-list" }, t("branch.noMatch"))));
   }
 }
@@ -721,14 +733,14 @@ function render() {
     selected = onFloor.find((r) => r.state === "working")?.key || onFloor[0]?.key || matching[0]?.key || "";
   }
   $("branch-select").replaceChildren(...(current.branches.length ? current.branches.map((b) =>
-    el("option", { value: b.branch_id }, branchName(b))) : [el("option", { value: "" }, t("branch.none"))]));
+    el("option", { value: b.branch_id }, branchName(b) + (lifecycleOf("branch", b.branch_id)?.closed ? " / " + t("lifecycle.closed") : ""))) : [el("option", { value: "" }, t("branch.none"))]));
   $("branch-select").value = branchId;
   $("branch-select").disabled = !current.branches.length;
   const branch = current.branches.find((b) => b.branch_id === branchId);
   text("branch-subtitle", branch ? (branch.branch?.location || t("branch.noLocation")) : t("branch.waiting"));
   const wording = branch || !hqConnected() ? branchWording(branch) : "noReport";
   $("office-open").classList.toggle("unreachable", wording !== "reporting");
-  $("office-open").replaceChildren(el("i", { class: "status-dot" }), t("branch." + wording));
+  $("office-open").replaceChildren(el("i", { class: "status-dot" }), t("branch." + wording), lifecycleBadge("branch", branchId));
   const projects = new Set(all.filter((r) => r.agent.project_id !== COMMON).map((r) => r.agent.project_id));
   $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "summary.onDuty"],
     ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
@@ -987,7 +999,10 @@ function notificationSubjects(all, data) {
       name: row.name, provider: providerInitials(row.agent.provider), project: row.project, branch: row.branchName,
       target: { kind: "colleague", key: row.key, branchId: row.agent.branch_id } })),
     ...data.branches.map((b) => ({ id: "branch:" + b.branch_id, kind: "branch", reachable: Boolean(b.reachable),
-      branch: branchName(b), target: { kind: "branch", branchId: b.branch_id } }))];
+      branch: branchName(b), target: { kind: "branch", branchId: b.branch_id } })),
+    ...(data.lifecycles || []).map((v) => ({ id: "lifecycle:" + v.kind + ":" + v.id, kind: "reopened",
+      count: v.reopen_count, closed: v.closed, name: v.alias, targetKind: v.kind,
+      target: { kind: v.kind, branchId: v.branch_ids[0] } }))];
 }
 // A notification click shows the colleague in their Branch office, or the Branches view for a Branch.
 function openNotified(target) {
@@ -995,6 +1010,7 @@ function openNotified(target) {
   $("search").value = ""; stateFilter = "all"; roomFilter = "";
   if (replay?.active) replay.stop();
   if (target.kind === "branch") { setView("branches"); return; }
+  if (target.kind === "project") { setView("projects"); return; }
   if (current.branches.some((b) => b.branch_id === target.branchId)) { branchId = target.branchId; floor = 0; }
   selectEmployee(target.key);
   setView("office");
@@ -1110,6 +1126,16 @@ lounge = createLounge($("characters"), { motionAllowed });
 walkers = createWalkers($("characters"), { motionAllowed, changed: render });
 coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
+lifecycleControls = createLifecycle({ canClose: () => !DEMO && connected && !replay?.active,
+  refresh: async () => {
+    const previous = live;
+    const response = await fetch("/api/v1/state", { cache: "no-store", headers: TOKEN ? { Authorization: "Bearer " + TOKEN } : {} });
+    if (response.ok) {
+      const state = await response.json();
+      // A live update or disconnection during the request takes precedence over this HTTP snapshot.
+      if (connected && live === previous) acceptState(state);
+    }
+  } });
 const demoNow = Date.now();
 records = createHistory({ demo: DEMO, token: TOKEN, now: demoNow });
 replay = createReplay({ history: records, shown: showReplay, moved: updateReplay });

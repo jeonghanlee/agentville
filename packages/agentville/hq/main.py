@@ -123,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", help="SQLite path (default: $XDG_DATA_HOME/agentville/hq.sqlite3)")
     parser.add_argument("--tokens", help="YAML file mapping branch_id to bearer token")
     parser.add_argument("--viewer-token-file", help="file holding the bearer token required on read endpoints")
+    parser.add_argument("--admin-token-file", help="private file holding a distinct token for HQ closure actions")
     parser.add_argument("--allow-remote", action="store_true", help="permit binding to a non-loopback address")
     parser.add_argument("--no-trust-loopback", action="store_true", help="require tokens from loopback Branches too (reverse proxy)")
     parser.add_argument("--server-name", action="append", default=[],
@@ -142,6 +143,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.server_name and not (args.no_trust_loopback and viewer_token):
         parser.error("--server-name requires --no-trust-loopback and --viewer-token-file")
     tokens = load_tokens(args.tokens)
+    admin_token = _read_private(args.admin_token_file).strip() if args.admin_token_file else None
+    if admin_token is not None and (
+        not admin_token.isascii() or len(admin_token) < MIN_TOKEN or any(c.isspace() for c in admin_token)
+        or admin_token == viewer_token or admin_token in tokens.values()
+    ):
+        parser.error("administrator token must be distinct, ASCII, without whitespace, and at least 16 characters")
     if args.tls_cert:
         check_tls(args.tls_cert, args.tls_key)
     notify_config = load_notify_config(args.notify_config) if args.notify_config else None
@@ -161,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         retention=timedelta(days=args.retention_days),
         trust_loopback=not (remote or args.no_trust_loopback),
         viewer_token=viewer_token,
+        admin_token=admin_token,
         # A remote bind requires tokens on every path, so the Host guard applies to loopback binds only.
         hosts=None if remote else LOCAL_HOSTS | {args.host},
         server_names=frozenset(args.server_name),

@@ -111,10 +111,19 @@ def transitions(initial: StateRows, changes: Iterable[Change], observed_by_branc
     """
     presence = {(b, key): p.get("presence") for (b, kind, key), p in initial.items() if kind == "agent"}
     marks = {(b, key): _mark(p) for (b, kind, key), p in initial.items() if kind == "activity"}
+    lifecycles = {(b, key): p for (b, kind, key), p in initial.items() if kind == "lifecycle"}
     # Changes come in time order, so only the latest ``limit`` of them can be among the latest overall.
     out: deque[dict[str, Any]] = deque(maxlen=limit)
     total = 0
     for branch_id, at, kind, key, payload in changes:
+        if kind == "lifecycle" and payload is not None:
+            previous = lifecycles.get((branch_id, key))
+            lifecycles[(branch_id, key)] = payload
+            if previous is not None and previous.get("revision") != payload.get("revision"):
+                out.append({"at": at, "kind": "lifecycle", "branch_id": branch_id,
+                            "target_kind": payload["kind"], "target_id": payload["id"],
+                            "alias": payload["alias"], "closed": payload["closed"]})
+                total += 1
         if kind == "agent" and payload is not None and payload.get("presence") != presence.get((branch_id, key)):
             out.append({"at": at, "kind": "presence", "branch_id": branch_id, "agent_id": key,
                         "presence": payload.get("presence")})

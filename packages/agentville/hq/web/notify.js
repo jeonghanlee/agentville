@@ -61,10 +61,12 @@ export function createNotifications({ toggle, status, demo, open }) {
     refresh();
   }
   function marker(subject) {
+    if (subject.kind === "reopened") return (subject.closed ? "closed@" : "open@") + subject.count;
     if (subject.kind === "branch") return subject.reachable ? "reachable" : "unreachable";
     return ALERT_STATES.includes(subject.state) ? subject.state + "@" + subject.since : subject.state;
   }
   function content(subject) {
+    if (subject.kind === "reopened") return { title: t("notify.reopened." + subject.targetKind, { name: subject.name }), body: t("notify.reopenedBody") };
     if (subject.kind === "branch") {
       const key = subject.reachable ? "reachable" : "unreachable";
       return { title: t("notify.branch." + key, { branch: subject.branch }), body: t("notify.branch." + key + "Body") };
@@ -122,7 +124,7 @@ export function createNotifications({ toggle, status, demo, open }) {
       const previous = seen.get(subject.id), mark = marker(subject);
       seen.set(subject.id, mark);
       if (baseline || previous === undefined || previous === mark) continue;
-      if (subject.kind === "branch" || ALERT_STATES.includes(subject.state)) changes.push(subject);
+      if (subject.kind === "branch" || (subject.kind === "reopened" && !subject.closed && subject.count > 0) || ALERT_STATES.includes(subject.state)) changes.push(subject);
     }
     for (const id of seen.keys()) if (!present.has(id)) seen.delete(id);
     if (changes.length && enabled()) deliver(changes);

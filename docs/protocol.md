@@ -18,7 +18,7 @@
 - `event_at` is the time of the fact and is not ordered; message order is `seq`.
 - On a gap in `seq`, HQ requests a new `snapshot`.
 - Changes during disconnection are not queued. The `snapshot` on reconnect supersedes them.
-- On receiving a `snapshot`, HQ replaces all stored state for that Branch.
+- On receiving a `snapshot`, HQ replaces Collector-owned state for that Branch. HQ-owned lifecycle survives replacement.
 - HQ marks a Branch `unreachable` when no message arrives within a multiple of the last `heartbeat.interval`, and when no message has arrived since HQ started.
 - A `snapshot` that is not newer than HQ's state by `seq` and `sent_at` is answered with `need_snapshot`; a second such snapshot in answer is applied as a reset of a Branch whose clock moved back ([architecture.md](architecture.md) Section 4.1).
 
@@ -129,3 +129,28 @@ The following are never sent to HQ:
 - Details of `waiting` requests and `error` causes, including provider error and usage-limit fields (Claude `error`, `apiError`, `errorDetails`, `quotaLimits` other than the reset time; Codex `task_complete.error`). A usage-limit reset time is sent only as `reset_at`.
 
 The Employee `alias` is sent only when the Branch configuration sets one for that `agent_id`.
+
+## 6. HQ lifecycle API
+
+Lifecycle is HQ metadata; Collector schema version 1 and its payloads remain unchanged. A Project has one lifecycle shared across Branches. Closing a Branch does not close its Projects or alter observed presence, activity, or work-log measurements.
+
+`POST /api/v1/lifecycle/close` requires `Content-Type: application/json` and `Authorization: Bearer <administrator_token>`. Its body has exactly `kind` (`branch` or `project`) and `id` (an existing identity). The response is the lifecycle record; repeating closure returns the existing revision.
+
+| Status | Meaning |
+|---|---|
+| 200 | Known target is closed, or was already closed |
+| 400 | Invalid JSON, target kind, identity, or body fields |
+| 401 | Missing or incorrect administrator token |
+| 403 | Supplied Origin does not match the current host or a configured server name |
+| 404 | Unknown target |
+| 413 | Body exceeds 4096 bytes |
+| 415 | Content type is not application/json |
+| 503 | HQ has no administrator token configured |
+
+Viewer and Branch credentials do not authorize closure, even on loopback. [Installation](install.md#68-close-a-branch-or-project) defines the private administrator-token file.
+
+Live state, WebSocket state, and state-at-time include `lifecycles`. Each record contains `branch_id`, `kind`, `id`, `alias`, `branch_ids`, `closed`, `changed_at`, `closed_at`, `reopened_at`, `revision`, and `reopen_count`. Global Projects use an empty `branch_id`; `branch_ids` retains known membership. Timestamps are HQ UTC times; closure/reopening counters change only on actual transitions.
+
+A newly accepted on-duty agent report, matching current-instance activity, or snapshot containing an on-duty agent reopens its Branch and Project. Idle qualifies. Qualification follows HQ receipt/transaction order, regardless of old `event_at` or skewed `sent_at`. Heartbeat, Branch metadata, off-duty, duplicate, stale, and rejected messages do not reopen records. A repeated unchanged idle Collector poll sends only a heartbeat.
+
+History changes include `{"at", "kind": "lifecycle", "branch_id", "target_kind", "target_id", "alias", "closed"}` for closure/reopening, with HQ timestamps in transaction order. Checkpoints and retention preserve lifecycle; a Branch-filtered query includes global Project transitions for its known membership. [Architecture](architecture.md#18-branch-and-project-lifecycle) defines these rules.

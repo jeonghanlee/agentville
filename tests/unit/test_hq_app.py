@@ -105,7 +105,7 @@ def test_hq_refuses_remote_bind_without_viewer_token(tmp_path):
 
 def test_live_socket_sends_state_on_connect_and_after_ingest(tmp_path):
     with _client(tmp_path) as client, client.websocket_connect("/ws/v1/live") as ws:
-        assert ws.receive_json() == {"type": "state", "state": {"branches": [], "agents": [], "activities": [], "contractors": []}}
+        assert ws.receive_json() == {"type": "state", "state": {"branches": [], "agents": [], "activities": [], "contractors": [], "lifecycles": []}}
         client.post("/api/v1/ingest/messages", json={"messages": [_snapshot()]})
         update = ws.receive_json()
         assert update["state"]["branches"][0]["branch_id"] == "b1"

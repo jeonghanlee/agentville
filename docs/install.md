@@ -307,16 +307,45 @@ In form (b), a browser on the HQ host can also open `http://127.0.0.1:8470/#toke
 
 ### 6.7 Rotate tokens
 
-HQ reads `tokens.yaml` and `viewer.token` only at start.
+HQ reads Branch, viewer, and administrator token files only at start.
 
 - Branch token: replace its line in `tokens.yaml` and `systemctl --user restart agentville-hq`; on the Branch, set the new `hq.token` and `systemctl --user restart agentville-collector`. Deleting the line and restarting HQ revokes the Branch.
 - Viewer token: write a new value to `viewer.token`, restart HQ, and open the page with the new `#token=`.
+- Administrator token: replace `admin.token` with a distinct random value, retain mode 0600, and restart HQ. Enter the replacement only in the Close record dialog.
+
+### 6.8 Close a Branch or Project
+
+HQ can close its own Branch and Project records without sending commands to Collectors. Viewing and ingest work without this feature; closure requires a separate administrator token, including on loopback.
+
+1. On the HQ host, create a private token file:
+
+   ```bash
+   install -m600 /dev/null ~/.config/agentville/admin.token
+   python3 -c 'import secrets; print(secrets.token_hex(24))' > ~/.config/agentville/admin.token
+   ```
+
+   Keep the value distinct from the viewer token and every Branch token. HQ requires ASCII, no whitespace within the token, and at least 16 characters. The terminating newline in the file is allowed.
+
+2. In `~/.config/systemd/user/agentville-hq.service`, append `--admin-token-file %h/.config/agentville/admin.token` to the existing `ExecStart` command, preserving every existing option. Reload the unit and restart HQ:
+
+   ```bash
+   systemctl --user daemon-reload
+   systemctl --user restart agentville-hq
+   ```
+
+   Without systemd, append `--admin-token-file "$HOME/.config/agentville/admin.token"` to your existing foreground HQ command and restart it.
+
+3. In Branches or Projects, select Close record, enter the administrator token in the password field, and submit Close record. The page sends it only in an Authorization header and clears the input before sending. It does not save this token in URLs or browser storage. Never use it in the viewer's `#token=` fragment or the Collector configuration.
+
+Verification: the card shows Closed, while observed Employees and history remain available. Repeating closure does not create another transition. A newly accepted on-duty report reopens the Branch and Project, including an idle report or a reconnect snapshot. Heartbeats and duplicate reports do not reopen them; an unchanged idle Collector can remain closed until it reports a change or reconnects. Closing a Branch does not close its Projects. Replay and demo disable closure.
+
+A missing or incorrect token leaves the record open and shows an error. Without `--admin-token-file`, HQ returns 503 and the dialog says administrator closure is disabled. HQ rejects unsafe or conflicting token files at startup. Use the token only over HTTPS or a trusted loopback connection.
 
 ## 7. External notifications
 
 HQ can post notifications to an [ntfy](https://ntfy.sh) topic, so a phone or desktop subscribed to the topic is notified without an open browser tab. They are off by default.
 
-The rules are those of browser notifications ([Using the Office](using.md), Settings): a colleague starts waiting or has an error, and a Branch stops or resumes reporting. Nothing is sent when HQ starts, for a colleague or Branch seen for the first time, or for changes that arrive with a Branch snapshot, for example after a Collector restart. Each colleague and Branch is notified at most once per 30 s; a change within that time is sent at its end if it still holds. More than three at once become one summary. [Data and Security](data.md) lists what is sent.
+The rules are those of browser notifications ([Using the Office](using.md), Settings): a colleague starts waiting or has an error, a Branch stops or resumes reporting, and a closed Branch or Project reopens. Nothing is sent when HQ starts, for a colleague or Branch seen for the first time, or for colleague changes that arrive with a Branch snapshot. An actual reopening caused by an accepted snapshot can notify. Persisted lifecycle is seeded at HQ startup, so restart alone does not notify. Each colleague, Branch reachability subject, and lifecycle subject is notified at most once per 30 s; a change within that time is sent at its end if it still holds. More than three at once become one summary. [Data and Security](data.md) lists what is sent.
 
 Create the file with mode 0600:
 
@@ -327,7 +356,7 @@ install -m600 /dev/null ~/.config/agentville/notify.yaml
 ```yaml
 url: https://ntfy.sh/<topic>                     # https unless the host is loopback
 token_file: ~/.config/agentville/ntfy.token       # optional; mode 0600
-events: [waiting, error, branch]                 # optional; default all three
+events: [waiting, error, branch, reopened]       # optional; default all four
 language: en                                     # optional; en or ko
 ```
 
@@ -335,7 +364,7 @@ language: en                                     # optional; en or ko
 |---|---|
 | `url` | The topic URL. Subscribe to the same topic in the ntfy app. |
 | `token_file` | A file holding an ntfy access token, for a server with access control. Mode 0600: `install -m600 /dev/null ~/.config/agentville/ntfy.token`, then write the token into it. |
-| `events` | `waiting`: a colleague starts waiting. `error`: a colleague has an error. `branch`: a Branch stops or resumes reporting. |
+| `events` | `waiting`: a colleague starts waiting. `error`: a colleague has an error. `branch`: a Branch stops or resumes reporting. `reopened`: a closed Branch or Project reopens. Explicit lists enable only the listed events. |
 | `language` | Language of the texts: `en` or `ko`. |
 
 On a public server such as ntfy.sh, anyone who knows a topic name can read it. Use a long random name, for example from `python3 -c 'import secrets; print("agentville-" + secrets.token_hex(12))'`, or a server with access control and a token.

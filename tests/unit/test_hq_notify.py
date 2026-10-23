@@ -145,7 +145,7 @@ def test_invalid_configuration_is_rejected(document, text):
 
 def test_configuration_defaults_and_loopback_http():
     config = parse_config({"url": "http://127.0.0.1:8080/alerts"})
-    assert (config.events, config.language, config.token_file) == (frozenset({"waiting", "error", "branch"}), "en", None)
+    assert (config.events, config.language, config.token_file) == (frozenset({"waiting", "error", "branch", "reopened"}), "en", None)
 
 
 def test_configuration_files_must_be_private_and_valid(tmp_path):

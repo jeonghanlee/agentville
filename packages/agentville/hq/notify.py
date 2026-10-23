@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from importlib import resources
 from typing import Any
 
-EVENTS = ("waiting", "error", "branch")
+EVENTS = ("waiting", "error", "branch", "reopened")
 LANGUAGES = ("en", "ko")
 ALERT_STATES = ("waiting", "error")
 SUBJECT_INTERVAL = timedelta(seconds=30)
@@ -34,7 +34,7 @@ LOG_INTERVAL = 60.0
 # Dictionary keys used for notifications; the texts are those of the Web UI (web/i18n.js).
 KEYS = ("notify.waiting", "notify.error", "notify.branch.unreachable", "notify.branch.unreachableBody",
         "notify.branch.reachable", "notify.branch.reachableBody", "notify.summary", "notify.summaryMixed",
-        "branch.unnamed", "project.unnamed")
+        "branch.unnamed", "project.unnamed", "notify.reopened.branch", "notify.reopened.project", "notify.reopenedBody")
 
 
 @dataclass(frozen=True)
@@ -128,9 +128,12 @@ class Subject:
     provider: str = ""
     project: str = ""
     branch: str = ""
+    target_kind: str = ""
 
     @property
     def marker(self) -> str:
+        if self.kind == "reopened":
+            return self.state + "@" + self.since
         if self.kind == "branch":
             return "reachable" if self.reachable else "unreachable"
         return f"{self.state}@{self.since}" if self.state in ALERT_STATES else self.state
@@ -268,9 +271,15 @@ class Notifier:
             if branch_id in heard:
                 out.append(Subject(id="branch:" + branch_id, kind="branch", branch_id=branch_id,
                                    reachable=bool(branch.get("reachable")), branch=branch_name(branch_id)))
+        for value in state.get("lifecycles", []):
+            out.append(Subject(id="lifecycle:" + value["kind"] + ":" + value["id"], kind="reopened",
+                               branch_id=value["branch_id"], since=str(value["reopen_count"]), name=value["alias"],
+                               target_kind=value["kind"], state="closed" if value["closed"] else "open"))
         return out
 
     def wanted(self, subject: Subject) -> bool:
+        if subject.kind == "reopened":
+            return "reopened" in self.config.events and subject.since != "0" and subject.state == "open"
         if subject.kind == "branch":
             return "branch" in self.config.events
         return subject.state in ALERT_STATES and subject.state in self.config.events
@@ -332,6 +341,9 @@ class Notifier:
         return "high" if subject.state == "error" else "default"
 
     def message(self, subject: Subject) -> Message:
+        if subject.kind == "reopened":
+            return Message(self.t("notify.reopened." + subject.target_kind, name=subject.name),
+                           self.t("notify.reopenedBody"), "agentville,reopened", "default")
         if subject.kind == "branch":
             key = "reachable" if subject.reachable else "unreachable"
             return Message(self.t("notify.branch." + key, branch=subject.branch), self.t(f"notify.branch.{key}Body"),

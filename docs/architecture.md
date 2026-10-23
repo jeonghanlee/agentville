@@ -128,8 +128,14 @@ conditions:
 |---|---|
 | Host heartbeat lost | Branch unreachable. Employee states are retained and marked unverifiable. |
 | Host heartbeat restored | Branch reachable. Observation resumes. |
-| Owner closes a Branch or Project at HQ | HQ record is closed. No command is sent to any Branch. Not implemented (Section 9). |
-| Agent observed in a closed Branch or Project | Automatically reopened. HQ raises a notification. Not implemented (Section 9). |
+| Owner closes a Branch or Project at HQ | HQ record is closed. No command is sent to any Branch; observed Employees keep their presence and activity. |
+| Agent observed in a closed Branch or Project | A newly accepted on-duty report reopens the Branch and Project. HQ publishes the transition and can notify viewers. |
+
+HQ owns lifecycle independently of Collector snapshots. A Project has one lifecycle across all Branches. Existing records start open; closing a Branch does not close its Projects. Repeated closure is idempotent, and unknown targets are rejected.
+
+Reopening qualifies in HQ acceptance order after closure: an on-duty `agent`, an `activity` matching its current on-duty instance, or an accepted `snapshot` containing an on-duty agent. Idle agents qualify. Heartbeats, Branch metadata, off-duty reports, duplicates, stale messages, and rejected batches do not qualify. An unchanged idle Collector poll emits only a heartbeat and leaves closure intact.
+
+HQ records closure and reopening at its receive time. Old `event_at` or skewed `sent_at` values do not prevent a newly accepted report from reopening a record. Activity facts retain their existing timestamps. Lifecycle persists across restart, checkpoints, and retention; closure does not change work-log measurements. [The lifecycle decision](decisions/ADR-20261022-hq-lifecycle.md) defines ownership and access.
 
 ## 2. State Model
 
@@ -405,6 +411,7 @@ aliases: {}
 | `messages` | Every accepted message, keyed by `(branch_id, seq)` |
 | `branches` | Branch payload, last `seq`, last seen time, heartbeat interval |
 | `agents`, `activities`, `contractors` | Current state, keyed by `(branch_id, id)` |
+| `lifecycles` | HQ-owned Branch and Project records; Branch key `(branch_id, "branch:" + id)`, global Project key `("", "project:" + id)` |
 | `changes` | Every change HQ applies to current state: `(branch_id, at, kind, key, payload)`, `payload` NULL for a removal (Section 4.4) |
 | `baseline` | State as of the start of the kept history, keyed by `(branch_id, kind, key)` |
 | `checkpoints`, `checkpoint_keys` | State at whole hours (UTC): each key with the id of its latest change, or NULL for its `baseline` payload (Section 4.4) |
@@ -426,7 +433,7 @@ Messages of one batch are applied in `seq` order:
 | `snapshot` with `seq` not above the last applied and `sent_at` earlier than the latest applied `sent_at` | Stale, not applied; response asks for a snapshot |
 | Such a stale `snapshot` again, after HQ asked for one following a stale snapshot and applied no message from the Branch since | The Branch's clock moved back: applied as a reset like the next row, and the latest applied `sent_at` is set to its `sent_at` |
 | Other `snapshot` with `seq` not above the last applied (Branch lost its sequence state) | Stored messages from that `seq` on are discarded; the snapshot is stored and applied and restarts the numbering |
-| `snapshot` | Replaces all current state of the Branch |
+| `snapshot` | Replaces Collector-owned current state of the Branch; preserves HQ lifecycle |
 | `seq` lower than the last applied | Stale; stored, not applied |
 | `seq` not equal to last + 1, or no state for the Branch | Applied; response asks for a snapshot |
 | `agent` with no instance | Employee updated; its activity removed |
@@ -444,10 +451,11 @@ A Branch is reported unreachable when no message arrived within three heartbeat 
 |---|---|---|
 | `GET` | `/health` | Liveness |
 | `POST` | `/api/v1/ingest/messages` | Branch ingest, body `{"messages": [...]}`, one Branch per batch, at most 1000 messages (more: 413) |
-| `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors |
+| `POST` | `/api/v1/lifecycle/close` | Administrator-only closure with JSON `{"kind": "branch" or "project", "id": "<identity>"}` |
+| `GET` | `/api/v1/state` | Branches (with `reachable`), agents, activities, contractors, lifecycles |
 | `GET` | `/api/v1/state?at=<time>` | The same for a past time within the kept history (Section 4.4) |
 | `GET` | `/api/v1/history` | The kept history: `{"from", "to"}` |
-| `GET` | `/api/v1/changes?from=&to=[&branch_id=]` | Activity, presence, and reachability transitions in a period |
+| `GET` | `/api/v1/changes?from=&to=[&branch_id=]` | Activity, presence, reachability, and lifecycle transitions in a period |
 | `GET` | `/api/v1/worklog?from=&to=[&branch_id=]` | Seconds per state of each Employee in a period (Section 4.5) |
 | `GET` | `/api/v1/branches` | Branches |
 | `GET` | `/api/v1/agents` | Agents |
@@ -457,16 +465,17 @@ Ingest response: `{"accepted", "duplicates", "stale", "need_snapshot"}`.
 
 If a stored `(branch_id, seq)` has different `kind`, `event_at`, `sent_at`, or decoded payload, the response includes `"warnings": ["shared_host_id"]`. Exact retries do not warn. Sequence and clock resets retain their existing behavior; lost sequence state can also trigger this diagnostic. The Collector logs the shared-identity warning at most once per minute. The warning does not establish that two Collectors exist and cannot distinguish identical messages.
 
+- `lifecycles` contains `branch_id`, `kind`, `id`, `alias`, `branch_ids`, `closed`, `changed_at`, `closed_at`, `reopened_at`, `revision`, and `reopen_count`. A global Project has an empty `branch_id` and retains its known Branch membership.
 - Every `GET` under `/api/v1/` is a read endpoint and requires the viewer token when one is set (Section 4.3).
 - Times in query parameters are ISO 8601 with an offset (`Z` or `+hh:mm`). A missing, malformed, or offset-less time is answered with 400.
 - A time whose UTC form falls outside the representable range (years 1 to 9999) is answered with 400; in ingest such a `date-time` fails schema validation (422).
 - `state?at=` answers 400 for a time before `history_from` or after now, and before the first message (`from` null). `reachable` is the value derived for that time (Section 4.4); `last_seq` and `last_seen_at` are those of the last message received by then.
 - `history`: `from` is `history_from`, or null before the first message; `to` is HQ's current time.
 - `changes` and `worklog` take a period of at most 31 days (`to` after `from`; otherwise 400). The period is clipped to the kept history and to now; the response `from` and `to` are the clipped period. When no part of the period lies within the kept history and before now (or before the first message), `from` and `to` are null and the lists empty.
-- `changes` and `worklog` responses are shared: a request with the same `from`, `to`, and `branch_id` as one answered within the last 30 s gets that answer, and identical requests in progress share one computation (at most 32 distinct requests kept). At most two such computations run at once; further requests wait for a slot without holding a worker thread.
-- `changes` returns `{"from", "to", "changes", "truncated", "agents", "branches"}`. Each entry of `changes` is one of `{"at", "kind": "activity", "branch_id", "agent_id", "state", "state_since"}` (a new state or a new `state_since`; tool and workload changes alone are not listed), `{"at", "kind": "presence", "branch_id", "agent_id", "presence"}`, or `{"at", "kind": "reachability", "branch_id", "reachable"}`, in time order, after `from` and up to `to`. At most 5000 entries are returned, the latest ones; `truncated` is true when more exist. `agents` holds the last agent payload (as in `state`) of each Employee listed; `branches` the last Branch payloads (`{"branch_id", "branch"}`).
+- `changes` and `worklog` responses are shared: a request with the same `from`, `to`, and `branch_id` as one answered within the last 30 s gets that answer, and identical requests in progress share one computation (at most 32 distinct requests kept). Closure and reopening invalidate cached responses. At most two such computations run at once; further requests wait for a slot without holding a worker thread.
+- `changes` returns `{"from", "to", "changes", "truncated", "agents", "branches"}`. Each entry of `changes` is one of `{"at", "kind": "activity", "branch_id", "agent_id", "state", "state_since"}` (a new state or a new `state_since`; tool and workload changes alone are not listed), `{"at", "kind": "presence", "branch_id", "agent_id", "presence"}`, `{"at", "kind": "reachability", "branch_id", "reachable"}`, or `{"at", "kind": "lifecycle", "branch_id", "target_kind", "target_id", "alias", "closed"}`, in time order, after `from` and up to `to`. At most 5000 entries are returned, the latest ones; `truncated` is true when more exist. `agents` holds the last agent payload (as in `state`) of each Employee listed; `branches` the last Branch payloads (`{"branch_id", "branch"}`).
 - `worklog` returns `{"from", "to", "rows", "branches"}`; each row is `{"branch_id", "agent_id", "project_id", "project_alias", "provider", "seat", "alias", "seconds", "waits", "longest_wait", "errors", "limits"}`, where `seconds` holds `on_duty`, the eight activity states, and `unobserved`.
-- Neither response carries fields beyond those of `state`.
+- Lifecycle events identify their Branch or global Project; a Branch filter includes global Projects whose known membership includes that Branch. Work-log measurements continue to depend only on observed Employees and reachability.
 - An activity transition in `changes` follows the entry rule of Section 4.5: a `state` or `state_since` other than the Employee's last known activity, also across a removal of the activity.
 
 ### 4.3 Authorization
@@ -475,7 +484,10 @@ If a stored `(branch_id, seq)` has different `kind`, `event_at`, `sent_at`, or d
 - Any other Branch needs a bearer token listed for its `branch_id` in the HQ token file (`--tokens`, YAML mapping of `branch_id` to token, mode 0600, each token a string of at least 16 characters). The Branch sets the same value as `hq.token` in its configuration.
 - A caller that is neither trusted loopback nor holding any configured token is rejected before the body is read.
 - Ingest rejections: 401 `token required` when a caller that needs a token sends no `Authorization` header; 401 `invalid token` when the token does not match, or when a Branch listed in the token file sends none from trusted loopback. Read endpoints answer 401 `viewer token required`.
-- The token file and the viewer token file are read at start only; HQ is restarted after editing them.
+- Branch, viewer, and administrator token files are read at start only; HQ is restarted after editing them.
+- `--admin-token-file` supplies a mode-0600 token for closure only. It must be ASCII, contain no whitespace, have at least 16 characters, and differ from the viewer token and every Branch token. HQ validates it before opening the database or listening.
+- Without an administrator token, closure returns 503 even on loopback. Missing or incorrect administrator authorization returns 401; viewer and Branch tokens cannot close records. An administrator token alone cannot read viewer-protected state or ingest for a protected Branch.
+- Closure requires JSON, a body no larger than 4096 bytes, and exactly `kind` and `id`. Invalid content type returns 415, oversized content 413, malformed input 400, and unknown targets 404. A supplied cross-origin `Origin` returns 403 unless it matches the current host or a configured server name.
 - Binding to a non-loopback address requires `--allow-remote` and `--viewer-token-file`; read endpoints then require the viewer token, and loopback Branches need tokens too.
 - Messages are schema-validated after authorization, including `date-time` formats. Non-finite numbers (`NaN`, `Infinity`) and excessive nesting are rejected. Request bodies are limited to 4 MiB, counted while reading.
 - Ingest accepts only `Content-Type: application/json` and rejects requests carrying an `Origin` header, so a web page cannot submit messages through the trusted loopback path.
@@ -488,9 +500,9 @@ If a stored `(branch_id, seq)` has different `kind`, `event_at`, `sent_at`, or d
 
 ### 4.4 State History
 
-- Every change HQ applies to current state is recorded in `changes`: a key whose payload is set to a different value, or a key removed (`payload` NULL). Kinds and keys: `branch` (key empty), `agent` and `activity` (`agent_id`), `contractor` (`contractor_id`). Heartbeats, and messages that are duplicates or stale, record nothing.
+- Every change HQ applies to current state is recorded in `changes`: a key whose payload is set to a different value, or a key removed (`payload` NULL). Kinds and keys: `branch` (key empty), `agent` and `activity` (`agent_id`), `contractor` (`contractor_id`), and `lifecycle` (prefixed Branch or global Project id). Lifecycle revisions record closure and reopening; catalog updates retain aliases and Branch membership. Heartbeats, and messages that are duplicates or stale, record nothing.
 - A `snapshot` records only the keys it changes or removes. An `agent` without instance records the removal of its activity; a `contractor` with status `ended` records its removal.
-- `at` is the message `event_at`, or HQ's receive time when `event_at` is later (a Branch clock ahead of HQ's), and never earlier than the previous change of the same key or `history_from`. Ordering one key's changes by `at` therefore keeps the order in which they were applied, and no change is later than its receipt.
+- For lifecycle, `at` is HQ receive time, ordered with prior changes of that key. Other kinds use the message `event_at`, or HQ's receive time when `event_at` is later (a Branch clock ahead of HQ's), and never earlier than the previous change of the same key or `history_from`. Ordering one key's changes by `at` therefore keeps the order in which they were applied, and no change is later than its receipt.
 - The state at a time T is the baseline overlaid with the latest change of each key at or before T; changes with the same `at` apply in recording order. At the current time it equals the current state.
 - Checkpoints: ingest records the state at whole hours (UTC) in `checkpoints` and `checkpoint_keys`: for each key, the id of its latest change at or before the hour, or NULL when that is its `baseline` payload. Each ingest walks the changes after the latest checkpoint in time order; before a change past the next whole hour, it records a checkpoint at the last whole hour before that change. It then records one at the last whole hour at or before the ingest time. Other whole hours get no checkpoint: after a checkpoint at 00:00, changes at 01:10 and 03:05 and an ingest at 05:05 give checkpoints at 01:00, 03:00, and 05:00. A change recorded later with an `at` at or before a checkpoint (a late fact) is the latest of its key there, so it updates every checkpoint from its `at` on. The state at T is computed from the latest checkpoint at or before T (the baseline when there is none) and the latest change of each key after it up to T, so a read costs the changes of at most about one hour plus those of the requested period. A database without checkpoints gets them when HQ opens it.
 - `history_from`: a new database starts its history at the receive time of its first message. A database written by 0.1.0 starts it at the first start of 0.2.0: the current state is copied into the baseline then, and no earlier history exists.
@@ -524,15 +536,16 @@ Configuration file (YAML, mode 0600 required, read at start only):
 |---|---|
 | `url` | ntfy topic URL. `https` required unless the host is loopback; the path names the topic. |
 | `token_file` | Optional. File holding an access token (mode 0600), sent as `Authorization: Bearer <token>`. `~` is expanded. |
-| `events` | Optional list of `waiting`, `error`, `branch`; default all. |
+| `events` | Optional list of `waiting`, `error`, `branch`, `reopened`; default all four. An explicit list enables only its listed events. |
 | `language` | Optional, `en` (default) or `ko`. |
 
 - Other keys, a wrong value, an unreadable or group- or other-accessible file, or an empty token file stop HQ at start with one line `agentville-hq: <file>: <reason>`.
 - Rules, as in the browser (Section 6.4): a colleague entering `waiting` or `error` (a new `state_since` in the same state counts as a new entry), and a Branch becoming unreachable or reachable again. Nothing is sent for the first evaluation after HQ starts, for a colleague or Branch seen for the first time, or for colleagues of a Branch whose ingest applied a snapshot (a resync). A Branch takes part only once it has been heard since HQ started, so Branches reporting again after an HQ restart are not announced.
+- `reopened` notifies actual Branch or Project reopening, including reopening caused by an accepted Collector snapshot. HQ seeds persisted lifecycle counters before ingest starts, so restart itself does not notify and the first qualifying report can notify. Snapshot suppression of colleague alerts does not suppress reopening.
 - Evaluation runs after each ingest and every 5 s, since reachability changes with time alone. Evaluations run one at a time; each reads the current state together with the Branches whose snapshot was applied since the previous evaluation, which ingest records in the same locked step that applies the snapshot. Whichever evaluation first sees a snapshot's state therefore treats it as a resync.
 - Rate limit: at most one message per subject per 30 s; a change inside that window is held and sent at the first evaluation after it ends, only if the subject is still in that state and it differs from what was last sent. When more than three subjects qualify in one evaluation, one summary is sent instead.
 - Texts are the browser notification texts, read from the Web UI dictionary (`web/i18n.js`) in the configured language.
-- Request: `POST` to `url`, body the text (`text/plain; charset=utf-8`), headers `Title`, `Tags` (`agentville,<event>` with event `waiting`, `error`, `unreachable`, `reachable`, or `summary`), and `Priority` (`default` for waiting and reporting again; `high` for error and unreachable; a summary takes `high` when it includes either). A non-ASCII title is sent as an RFC 2047 encoded word (`=?UTF-8?B?...?=`); control characters become spaces. Redirects are not followed; a loopback server is contacted without environment proxies.
+- Request: `POST` to `url`, body the text (`text/plain; charset=utf-8`), headers `Title`, `Tags` (`agentville,<event>` with event `waiting`, `error`, `unreachable`, `reachable`, `reopened`, or `summary`), and `Priority` (`default` for waiting, reporting again, and reopening; `high` for error and unreachable; a summary takes `high` when it includes either). A non-ASCII title is sent as an RFC 2047 encoded word (`=?UTF-8?B?...?=`); control characters become spaces. Redirects are not followed; a loopback server is contacted without environment proxies.
 - Sending runs in one background thread with a queue of 100 messages and a 10 s timeout per request. A message that does not fit is dropped. Failures are logged to standard error as `agentville-hq: notification failed: <reason>`, at most once per minute. Ingest never waits for sending.
 
 ## 5. Transport
@@ -548,7 +561,7 @@ Configuration file (YAML, mode 0600 required, read at start only):
 - Navigation: Virtual office, Dashboard, Colleagues, Projects, Timeline, Work log, Branches, and display settings.
 - Remote Employees of the same Project appear in the same Room with a Branch `alias` badge.
 - Interface terms. The domain model keeps its names; only the visible labels differ. Employee is shown as "Colleague" (동료) everywhere in visible text, including headings, navigation, search, table headers, empty states, and accessible names; internal names and payload fields (`agent`, `agent_id`) are unchanged. Other labels: Branch (지점), HQ (본사), Room (방; each Project room carries a small "repository" / "저장소" sublabel, since one repository is one room; the Common Office carries none), Common Office (공용 사무실), Lounge (Fika) (휴게실 (Fika)), Infirmary (양호실), Contractor (외주), Seat (자리), Work log (근무 일지), Replay (되감기), waiting time (대기 시간).
-- Presence labels: On duty (출근), Off duty (퇴근), On leave (휴가). Activity labels: Working (작업 중), Thinking (생각 중), Waiting (대기), Idle (유휴), Closed (닫힘) for `completed`, Error (오류), Limited (한도), Not measured (재지 못함) for `unknown`. Connection labels: Unverified (확인 안 됨), Waiting for Branch report (지점 보고 대기), Not connected to HQ (HQ 연결 끊김). The label Closed (폐쇄) is reserved for a closed Branch or Project (Section 1.8; not implemented), distinct from the `completed` activity label. Idle details: At desk (자리에서), Phone (휴대폰), Dozing (조는 중), Fika (휴게실). Conditions: Normal (보통), study-mode (집중), extra-coffee (커피 추가), Light (가볍게); the legacy value `lazy` is shown as Light and keeps the same pose.
+- Presence labels: On duty (출근), Off duty (퇴근), On leave (휴가). Activity labels: Working (작업 중), Thinking (생각 중), Waiting (대기), Idle (유휴), Closed (닫힘) for `completed`, Error (오류), Limited (한도), Not measured (재지 못함) for `unknown`. Connection labels: Unverified (확인 안 됨), Waiting for Branch report (지점 보고 대기), Not connected to HQ (HQ 연결 끊김). The label Closed (폐쇄) is reserved for a closed Branch or Project (Section 1.8), distinct from the `completed` activity label. Idle details: At desk (자리에서), Phone (휴대폰), Dozing (조는 중), Fika (휴게실). Conditions: Normal (보통), study-mode (집중), extra-coffee (커피 추가), Light (가볍게); the legacy value `lazy` is shown as Light and keeps the same pose.
 - Copy is plain and factual: interface text states what is shown or what to do, without slogans, decorative captions, or exclamations. Labels use noun phrases; Korean sentences use 합니다체.
 - Language: English and Korean. Every visible string, including accessible names, titles, and alternative text, comes from one dictionary in `i18n.js` through a `t(key, params)` helper. The display settings offer English / 한국어. The default follows the browser language (Korean when it starts with `ko`, otherwise English); the choice is kept in local storage when available. Switching re-renders the page in place and sets `<html lang>`. Dates and times use the matching locale (`en-US` or `ko-KR`) with the Branch time-zone rules below. Branch-provided text (Branch, Project, and Employee aliases, locations, tool names) is never translated.
 - Employee name: the `alias` when set, otherwise the provider name and seat ("Codex 2"); seats are unique per provider on a Branch (Section 1.4). The same name is used in the office, lists, tables, the Timeline, the Work log, and notifications.
@@ -600,6 +613,8 @@ The `/?demo=1` URL loads fictional Employees from `demo.js` and displays a Demo 
 
 `demo.js` also generates three days of history ending at page load: shifts with rests of 1 to 13 hours and activity drawn from a fixed mix, from a random generator seeded by each `agent_id`, so the same structure appears on every load; the Home Branch stops reporting for 36 minutes a day earlier and the Night Branch 14 minutes before load. The Timeline, replay, Work log, and waiting times read this history through the same calls as live data, computed in the page with the rules of Sections 4.4 and 4.5.
 
+Closed Branches and Projects retain their cards, office access, history, and a Closed badge. A previously observed Project remains listed when no Employee remains in a snapshot. Close record opens a keyboard-accessible password dialog. The token is cleared before submission and sent only in the closure request's Authorization header; it is never put in a URL, browser storage, DOM text, or logs. Replay, demo, and disconnected views disable closure. [Installation](install.md#68-close-a-branch-or-project) describes administrator setup.
+
 ### 6.4 Browser notifications
 
 The page raises notifications through the Web Notification API (`notify.js`). A browser notification exists only while a page with the setting turned on is open. HQ sends the same notifications to an ntfy topic when configured (Section 4.6).
@@ -607,11 +622,13 @@ The page raises notifications through the Web Notification API (`notify.js`). A 
 - Setting: "Browser notifications" (브라우저 알림) in display settings, off by default. Turning it on requests the browser permission from that click. The choice is kept in local storage (`agentville-notifications`) when available. The setting shows its state: On (켜짐), Off (꺼짐), blocked by the browser, or not supported. A page that is not a secure context (plain HTTP other than localhost) cannot use notifications; the control is disabled with a note that HTTPS or localhost is required. Demo mode disables the control and never notifies.
 - Triggers, only for transitions the page observes:
   - an Employee enters `waiting` or `error` (a new `state_since` in the same state counts as a new entry);
-  - a Branch becomes unreachable (`reachable` true to false) or reachable again.
+  - a Branch becomes unreachable (`reachable` true to false) or reachable again;
+  - a known Branch or Project has a higher `reopen_count`, including from an accepted Collector snapshot.
 - Not notified: `limited`, `completed`, idle progression, Contractors, unverified marks, the first state after load, the first state after a reconnect (resync), and the first state of a newly appearing Employee or Branch. While replaying (Section 6.5) live states are recorded as a baseline and nothing is notified; changes that happened during the replay are not notified afterwards.
+- Reopening alerts use the title "Branch {alias} reopened" or "Project {alias} reopened". Branch and Project counters have separate notification subjects and follow the same opt-in, baseline, replay, and rate-limit rules.
 - Content is text only, in the interface language at the time of sending. Employee: title "{name} is waiting" / "{name} has an error" ("{name} 대기" / "{name} 오류"), body provider initials, Project alias, and Branch alias ("CL · alpha · Home"). Branch: "{alias} is unreachable" / "{alias} is reporting again" with a fixed explanatory body. Notifications never include tool names, tool arguments, prompts, paths, or account details. The icon is `favicon.svg`. Each Employee and each Branch has its own `tag`, so a newer notification replaces an older one for the same subject.
 - Rate limit: at most one notification per subject per 30 s. A change inside that window is held until the window ends and is sent only if the subject is still in that state and it differs from what was last notified. When more than three subjects qualify in one update, a single summary is sent instead: "{n} colleagues need attention" (동료 {n}명 확인 필요), or "{n} colleagues and branches need attention" (동료·지점 {n}건 확인 필요) when Branches are included.
-- Click: focuses the window, clears search and filters, opens the virtual office of the Employee's Branch with that Employee selected (a summary selects its first Employee), or the Branches view for a Branch notification, then closes the notification.
+- Click: focuses the window, clears search and filters, opens the virtual office of the Employee's Branch with that Employee selected (a summary selects its first Employee), or the Branches view for a Branch notification, then closes the notification. A Project reopening opens the Projects view.
 - A missing or throwing `Notification`, a refused permission, or unavailable local storage leaves the rest of the page unaffected.
 
 ### 6.5 Timeline and Replay
@@ -660,7 +677,6 @@ Release work records: [0.3.0](milestone-0.3.0.md) and [0.4.0](milestone-0.4.0.md
 
 - Fork or mirror grouping, and Project `alias`, in Branch configuration (Section 1.3).
 - History of account and model changes per Employee (Section 1.4). The `account.changed` observation is defined but not emitted.
-- Closing a Branch or Project at HQ, automatic reopening, and its notification (Section 1.8).
 - Monitor count by workload, and a per-Branch workload window and mapping (Section 2.5). The window is fixed at 5 minutes.
 - Precomputed daily totals: each work log request is computed from the recorded changes (Section 4.5).
 - Contractors in the work log, and a Branch filter in the Timeline.

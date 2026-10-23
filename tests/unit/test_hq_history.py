@@ -79,7 +79,7 @@ def test_snapshot_records_only_the_keys_it_changes(tmp_path):
     branch.send(0, "snapshot", snapshot([agent("a1"), agent("a2")], [activity("a1"), activity("a2")]))
     db = sqlite3.connect(str(tmp_path / "hq.sqlite3"))
     before = db.execute("SELECT COUNT(*) FROM changes").fetchone()[0]
-    assert before == 5
+    assert before == 7
     branch.send(10, "snapshot", snapshot([agent("a1")], [activity("a1", "working", 10)]))
     rows = db.execute("SELECT kind, key, payload IS NULL FROM changes ORDER BY id").fetchall()[before:]
     assert sorted(rows) == [("activity", "a1", 0), ("activity", "a2", 1), ("agent", "a2", 1)]

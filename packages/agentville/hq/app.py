@@ -35,6 +35,8 @@ LOOPBACK = frozenset({"127.0.0.1", "::1"})
 LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 MAX_BATCH = 1000
 MAX_BODY = 4 * 1024 * 1024
+MAX_CLOSE_BODY = 4096
+MIN_ADMIN_TOKEN = 16
 LIVE_REFRESH = 10.0
 SEND_TIMEOUT = 5.0
 AUTH_TIMEOUT = 5.0
@@ -50,7 +52,7 @@ HISTORY_WORKERS = 2
 
 
 def _bearer_matches(request: Request, token: str) -> bool:
-    return hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}")
+    return hmac.compare_digest(request.headers.get("authorization", "").encode(), f"Bearer {token}".encode())
 
 
 def _hostname(netloc: str) -> str | None:
@@ -142,6 +144,9 @@ class _Results:
                 del self._entries[key]
             raise
 
+    def invalidate(self) -> None:
+        self._entries.clear()
+
 
 class _Viewer:
     """One live socket with a single-slot mailbox holding the latest state."""
@@ -171,6 +176,7 @@ def create_app(
     auth_timeout: float = AUTH_TIMEOUT,
     notifier: Notifier | None = None,
     notify_interval: float = NOTIFY_INTERVAL,
+    admin_token: str | None = None,
 ) -> FastAPI:
     """Build the HQ app.
 
@@ -183,6 +189,11 @@ def create_app(
     ``notifier``, when set, is evaluated after each ingest and every ``notify_interval`` seconds.
     """
     tokens = tokens or {}
+    if admin_token is not None and (
+        not admin_token.isascii() or len(admin_token) < MIN_ADMIN_TOKEN or any(c.isspace() for c in admin_token)
+        or admin_token == viewer_token or admin_token in tokens.values()
+    ):
+        raise ValueError("administrator token must be distinct, ASCII, without whitespace, and at least 16 characters")
     validator = jsonschema.Draft202012Validator(load_schema(), format_checker=_FORMATS)
     last_prune: list[datetime] = []
 
@@ -252,6 +263,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        if notifier is not None:
+            await run_in_threadpool(evaluate)
         tasks = [asyncio.create_task(broadcast_loop())]
         if notifier is not None:
             tasks.append(asyncio.create_task(notify_loop()))
@@ -268,8 +281,11 @@ def create_app(
         return hosts is None or _hostname(netloc) in hosts | server_names
 
     def origin_allowed(origin: str, host: str) -> bool:
-        parts = urlsplit(origin)
-        return parts.netloc.lower() == host.lower() or parts.hostname in server_names
+        try:
+            parts = urlsplit(origin)
+            return parts.netloc.lower() == host.lower() or parts.hostname in server_names
+        except ValueError:
+            return False
 
     @app.middleware("http")
     async def check_host(request: Request, call_next: Callable[[Request], Any]) -> Any:
@@ -291,7 +307,42 @@ def create_app(
         if viewer_token is not None and not _bearer_matches(request, viewer_token):
             raise HTTPException(status_code=401, detail="viewer token required")
 
-    def ingest_batch(branch_id: str, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    def authorize_admin(request: Request) -> None:
+        if admin_token is None:
+            raise HTTPException(status_code=503, detail="administrator token is not configured")
+        if not _bearer_matches(request, admin_token):
+            raise HTTPException(status_code=401, detail="administrator token required")
+
+    @app.post("/api/v1/lifecycle/close", dependencies=[Depends(authorize_admin)])
+    async def close_record(request: Request) -> dict[str, Any]:
+        origin = request.headers.get("origin")
+        if origin is not None and not origin_allowed(origin, request.headers.get("host", "")):
+            raise HTTPException(status_code=403, detail="invalid origin")
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+            raise HTTPException(status_code=415, detail="application/json required")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > MAX_CLOSE_BODY:
+                raise HTTPException(status_code=413, detail="body too large")
+        try:
+            body = json.loads(raw)
+        except (ValueError, RecursionError):
+            raise HTTPException(status_code=400, detail="invalid JSON") from None
+        if (not isinstance(body, dict) or set(body) != {"kind", "id"}
+                or body["kind"] not in ("branch", "project") or not isinstance(body["id"], str) or not body["id"]):
+            raise HTTPException(status_code=400, detail="kind and id are required")
+        try:
+            value = await run_in_threadpool(store.close_record, body["kind"], body["id"], clock())
+        except KeyError:
+            raise HTTPException(status_code=404, detail="unknown lifecycle target") from None
+        changed.set()
+        results.invalidate()
+        if notifier is not None:
+            await run_in_threadpool(evaluate)
+        return value
+
+    def ingest_batch(branch_id: str, messages: list[dict[str, Any]]) -> tuple[dict[str, Any], bool]:
         for message in messages:
             error = next(validator.iter_errors(message), None)
             if error is not None:
@@ -305,7 +356,7 @@ def create_app(
             # Changes revealed by a snapshot are a resync, not transitions; the store hands the resync to
             # whichever evaluation first reads the snapshot's state.
             evaluate()
-        return result.as_dict()
+        return result.as_dict(), result.lifecycle_changed
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -344,7 +395,9 @@ def create_app(
             raise HTTPException(status_code=400, detail="one branch per batch")
         branch_id = ids[0]
         authorize_branch(request, branch_id)
-        result = await run_in_threadpool(ingest_batch, branch_id, messages)
+        result, lifecycle_changed = await run_in_threadpool(ingest_batch, branch_id, messages)
+        if lifecycle_changed:
+            results.invalidate()
         changed.set()
         return result
 

@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS contractors (
     payload TEXT NOT NULL,
     PRIMARY KEY (branch_id, contractor_id)
 );
+CREATE TABLE IF NOT EXISTS lifecycles (
+    branch_id TEXT NOT NULL,
+    lifecycle_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (branch_id, lifecycle_id)
+);
 CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY,
     branch_id TEXT NOT NULL,
@@ -103,7 +109,8 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 # Current-state table and key column of each change kind; a Branch payload lives in ``branches``.
-_TABLES = {"agent": ("agents", "agent_id"), "activity": ("activities", "agent_id"), "contractor": ("contractors", "contractor_id")}
+_TABLES = {"agent": ("agents", "agent_id"), "activity": ("activities", "agent_id"),
+           "contractor": ("contractors", "contractor_id"), "lifecycle": ("lifecycles", "lifecycle_id")}
 # The latest change of each key after a time (lower bound "at > ?" or none) and before (op "<") or at or before
 # (op "<=") another; equal times keep recording order.
 _LATEST = """
@@ -130,6 +137,7 @@ class IngestResult:
     stale: int = 0
     need_snapshot: bool = False
     shared_host_id: bool = False
+    lifecycle_changed: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         result = {
@@ -205,6 +213,17 @@ class Store:
         self._heard: set[str] = set()
         # Branches whose snapshot was applied since the last ``observe``.
         self._resynced: set[str] = set()
+        # Existing observations acquire independent HQ lifecycle records without rewriting their history.
+        self._db.execute("BEGIN IMMEDIATE")
+        try:
+            for branch_id, payload in self._db.execute("SELECT branch_id, payload FROM branches").fetchall():
+                self._catalog(branch_id, json.loads(payload) if payload else {}, [], now or now_utc())
+            for branch_id, payload in self._db.execute("SELECT branch_id, payload FROM agents").fetchall():
+                self._catalog(branch_id, {}, [json.loads(payload)], now or now_utc())
+            self._db.execute("COMMIT")
+        except Exception:
+            self._db.execute("ROLLBACK")
+            raise
 
     def _seed_baseline(self, now: datetime) -> None:
         """A database written before history was kept starts its history from the current state."""
@@ -416,9 +435,80 @@ class Store:
                 self._remove("contractor", branch_id, payload["contractor_id"], at)
             else:
                 self._set("contractor", branch_id, payload["contractor_id"], payload, at)
+        branch = self._db.execute("SELECT payload FROM branches WHERE branch_id = ?", (branch_id,)).fetchone()
+        branch_payload = json.loads(branch[0]) if branch and branch[0] else {}
+        agents = payload["agents"] if kind == "snapshot" else [payload] if kind == "agent" else []
+        self._catalog(branch_id, branch_payload, agents, now)
+        if kind == "activity":
+            row = self._db.execute("SELECT payload FROM agents WHERE branch_id = ? AND agent_id = ?",
+                                   (branch_id, payload["agent_id"])).fetchone()
+            candidate = json.loads(row[0]) if row else {}
+            if (candidate.get("instance") or {}).get("instance_id") == payload["instance_id"]:
+                agents = [candidate]
+        for agent in agents:
+            if agent.get("presence") == "on_duty":
+                result.lifecycle_changed = self._reopen("branch", branch_id, now) or result.lifecycle_changed
+                result.lifecycle_changed = self._reopen("project", agent["project_id"], now) or result.lifecycle_changed
         self._snapshot_requested.discard(branch_id)
         result.accepted += 1
         return kind == "snapshot"
+
+    @staticmethod
+    def _lifecycle_key(kind: str, identity: str) -> tuple[str, str]:
+        return (identity if kind == "branch" else "", kind + ":" + identity)
+
+    def _lifecycle(self, kind: str, identity: str) -> dict[str, Any] | None:
+        row = self._db.execute("SELECT payload FROM lifecycles WHERE branch_id = ? AND lifecycle_id = ?",
+                               self._lifecycle_key(kind, identity)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def _catalog(self, branch_id: str, branch: dict[str, Any], agents: list[dict[str, Any]], now: datetime) -> None:
+        targets = [("branch", branch_id, branch.get("alias"))]
+        targets.extend(("project", a["project_id"], a.get("project_alias")) for a in agents)
+        for kind, identity, alias in targets:
+            storage_branch, key = self._lifecycle_key(kind, identity)
+            value = self._lifecycle(kind, identity) or {
+                "kind": kind, "id": identity, "alias": alias or identity, "branch_ids": [],
+                "closed": False, "changed_at": iso(now), "closed_at": None, "reopened_at": None,
+                "revision": 0, "reopen_count": 0,
+            }
+            if alias:
+                value["alias"] = alias
+            value["branch_ids"] = sorted(set(value["branch_ids"]) | {branch_id})
+            self._set("lifecycle", storage_branch, key, value, now)
+
+    def _reopen(self, kind: str, identity: str, now: datetime) -> bool:
+        value = self._lifecycle(kind, identity)
+        if value is None or not value["closed"]:
+            return False
+        value.update(closed=False, changed_at=iso(now), reopened_at=iso(now),
+                     revision=value["revision"] + 1, reopen_count=value["reopen_count"] + 1)
+        self._set("lifecycle", *self._lifecycle_key(kind, identity), value, now)
+        return True
+
+    def close_record(self, kind: str, identity: str, now: datetime) -> dict[str, Any]:
+        """Close a known HQ record atomically; repeated closure leaves its history unchanged."""
+        if kind not in ("branch", "project"):
+            raise ValueError("invalid lifecycle kind")
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            kept = (self._from, self._checkpoint)
+            try:
+                value = self._lifecycle(kind, identity)
+                if value is None:
+                    raise KeyError(identity)
+                if not value["closed"]:
+                    if self._from is None:
+                        self._start_history(iso(now))
+                    self._write_checkpoints(now)
+                    value.update(closed=True, changed_at=iso(now), closed_at=iso(now), revision=value["revision"] + 1)
+                    self._set("lifecycle", *self._lifecycle_key(kind, identity), value, now)
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                self._from, self._checkpoint = kept
+                raise
+            return value
 
     def _touch(self, branch_id: str, now: datetime, seq: int) -> None:
         self._db.execute(
@@ -566,6 +656,7 @@ class Store:
             "agents": self._rows("agents"),
             "activities": self._rows("activities"),
             "contractors": self._rows("contractors"),
+            "lifecycles": sorted(self._rows("lifecycles"), key=lambda v: (v["branch_id"], v["kind"], v["id"])),
         }
 
     def _rows(self, table: str) -> list[dict[str, Any]]:
@@ -638,7 +729,8 @@ class Store:
         def of(kind: str) -> list[dict[str, Any]]:
             return [{**payload, "branch_id": b} for (b, k, _key), payload in sorted(rows.items()) if k == kind]
 
-        return {"branches": branches, "agents": of("agent"), "activities": of("activity"), "contractors": of("contractor")}
+        return {"branches": branches, "agents": of("agent"), "activities": of("activity"),
+                "contractors": of("contractor"), "lifecycles": of("lifecycle")}
 
     def _period(self, start: datetime, end: datetime, branch_id: str | None, now: datetime,
                 compute: Callable[[datetime, datetime, history.StateRows, Iterator[history.Change],
@@ -738,7 +830,9 @@ def _state_text(db: sqlite3.Connection, at: str, op: str = "<=") -> dict[tuple[s
 
 
 def _state_rows(db: sqlite3.Connection, at: datetime, branch_id: str | None = None) -> history.StateRows:
-    return {k: json.loads(v) for k, v in _state_text(db, iso(at)).items() if branch_id is None or k[0] == branch_id}
+    rows = {k: json.loads(v) for k, v in _state_text(db, iso(at)).items()}
+    return {k: v for k, v in rows.items() if branch_id is None or k[0] == branch_id
+            or (k[1] == "lifecycle" and branch_id in v.get("branch_ids", []))}
 
 
 def _receipts(db: sqlite3.Connection, branch_id: str, start: datetime, end: datetime) -> list[history.Receipt]:
@@ -783,10 +877,10 @@ def _changes(db: sqlite3.Connection, start: datetime, end: datetime, branch_id: 
     query = ("SELECT branch_id, at, kind, key, CASE WHEN kind = 'activity' THEN NULL ELSE payload END, payload IS NULL, "
              "CASE WHEN kind = 'activity' THEN json_extract(payload, '$.state') END, "
              "CASE WHEN kind = 'activity' THEN json_extract(payload, '$.state_since') END "
-             "FROM changes WHERE at > ? AND at <= ? AND kind IN ('branch', 'agent', 'activity')")
+             "FROM changes WHERE at > ? AND at <= ? AND kind IN ('branch', 'agent', 'activity', 'lifecycle')")
     params: list[Any] = [iso(start), iso(end)]
     if branch_id is not None:
-        query += " AND branch_id = ?"
+        query += " AND (branch_id = ? OR (kind = 'lifecycle' AND branch_id = ''))"
         params.append(branch_id)
     for b, at, kind, key, payload, removed, state, since in db.execute(query + " ORDER BY at, id", params):
         if removed:
@@ -794,7 +888,10 @@ def _changes(db: sqlite3.Connection, start: datetime, end: datetime, branch_id: 
         elif kind == "activity":
             yield b, _parse(at), kind, key, {"state": state, "state_since": since}
         else:
-            yield b, _parse(at), kind, key, json.loads(payload)
+            value = json.loads(payload)
+            if kind == "lifecycle" and branch_id is not None and branch_id not in value.get("branch_ids", []):
+                continue
+            yield b, _parse(at), kind, key, value
 
 
 def now_utc() -> datetime:
