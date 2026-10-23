@@ -8,6 +8,7 @@ playwright = pytest.importorskip("playwright.sync_api")
 
 from playwright.async_api import async_playwright, expect as async_expect
 
+from tests.browser_support import launch_options
 from agentville.collector.sender import HttpSender
 from tests.lifecycle_support import ADMIN, PROJECT, VIEWER, HQ
 
@@ -29,7 +30,7 @@ def test_real_browser_closure_notifications_history_and_credentials(tmp_path, wi
     with HQ(tmp_path / "hq.sqlite3") as hq:
         hq.send(); hq.send(branch="b2")
         with playwright.sync_playwright() as driver:
-            browser = driver.chromium.launch(headless=True)
+            browser = driver.chromium.launch(**launch_options())
             page = browser.new_page(viewport={"width": width, "height": 1000}, reduced_motion="reduce", locale="en-US")
             page.add_init_script(NOTIFICATION_BOUNDARY)
             page.clock.install()
@@ -127,7 +128,7 @@ def test_branch_keyboard_closure_bad_credentials_and_missing_configuration(tmp_p
                 admin_token=ADMIN if configured else None) as hq:
             hq.send()
             with playwright.sync_playwright() as driver:
-                browser = driver.chromium.launch(headless=True)
+                browser = driver.chromium.launch(**launch_options())
                 page = browser.new_page(viewport={"width": width, "height": 1000}, reduced_motion="reduce", locale="en-US")
                 page.add_init_script(NOTIFICATION_BOUNDARY)
                 page.goto(hq.url)
@@ -175,7 +176,7 @@ async def check_refresh_order(hq, evidence, width, kind, intervening):
     identity = "b1" if kind == "branch" else PROJECT
     facts = {"kind": kind, "width": width, "intervening": intervening, "frames": []}
     async with async_playwright() as driver:
-        browser = await driver.chromium.launch(headless=True)
+        browser = await driver.chromium.launch(**launch_options())
         page = await browser.new_page(viewport={"width": width, "height": 1000}, reduced_motion="reduce", locale="en-US")
         await page.add_init_script(NOTIFICATION_BOUNDARY)
         errors = []

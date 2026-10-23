@@ -46,7 +46,8 @@ def test_s05_real_processes_through_collector(tmp_path, private):
         table.refresh()
         child = table.processes[identities["child"]]
         assert child.started_at is not None
-        if private:
+        # Root reads the descriptors of a non-dumpable process anyway; the Collector then takes its normal path.
+        if private and os.geteuid() != 0:
             with pytest.raises(PermissionError):
                 list(Path(f"/proc/{child.pid}/fd").iterdir())
         at = datetime.fromtimestamp(child.started_at + 0.1, tz=UTC).isoformat()

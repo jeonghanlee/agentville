@@ -8,6 +8,7 @@ import uvicorn
 
 playwright = pytest.importorskip("playwright.sync_api")
 
+from tests.browser_support import launch_options
 from agentville.collector.sender import HttpSender
 from agentville.common.protocol import Envelope, iso
 from agentville.hq.app import create_app
@@ -42,7 +43,7 @@ def test_duplicate_branch_aliases_and_antigravity_in_real_browser(tmp_path, widt
                        "agents": [agent], "activities": [activity], "contractors": []}
             assert HttpSender(url)([Envelope(branch).wrap("snapshot", at, payload, at)]).ok
         with playwright.sync_playwright() as driver:
-            browser = driver.chromium.launch(headless=True)
+            browser = driver.chromium.launch(**launch_options())
             page = browser.new_page(viewport={"width": width, "height": 1000}, reduced_motion="reduce", locale="en-US")
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))

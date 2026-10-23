@@ -62,7 +62,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[hq,test]'
 .venv/bin/python -m pytest -q
 ```
 
-Test data is synthetic, produced by `tests/fixtures/*/generate.py`; real logs are never committed. The manual is built with `mdbook build` (output in `build/book`).
+Test data is synthetic, produced by `tests/fixtures/*/generate.py`; real logs are never committed. Browser tests use the Chromium build of the installed Playwright; `AGENTVILLE_CHROMIUM=<path>` selects another build. The manual is built with `mdbook build` (output in `build/book`).
 
 ## License
 
