@@ -246,6 +246,22 @@ Out of scope: recording a collaboration relationship merely because characters s
     - Replay, demo, reduced motion, hidden views: no meeting is formed during replay (the replayed state is sampled once per minute); the default demo data (`/?demo=1`) shows one fixed meeting, listed in `demo.js` as data rather than formed by the timing rules, because demo mode receives a single state; on every display, including after a page or Branch change, its members take their desks in the usual order first and hold them reserved, as members that held a desk when joining; with reduced motion members are placed directly; hidden views pause walking only.
   - P3 (seats). Every seat (desk chair, meeting chair, Fika seat, bed) is one entry of a seat table holding: id (room and index, e.g. `studio0.2`), scene (`main` or `annex`), position, depth, facing, approach waypoint, its own footprints (the names of its chair, sofa, or bed footprint and, at a desk, the desk footprint), and for desks the workstation points (keyboard, mouse) and screen glass. What changes on the page: nothing in the main office; the annex seats use the same table. Facing values are those the sprites support: `front` (seated front frame), `back` (seated rear frame), their mirrors `front-right` and `back-left`, and `lying` for the bed. Arrival, overflow, and standing behaviour stays as architecture Section 6.2 states it: arrivals take the lowest free suitable seat of their room in seat-number order; a seat holds one colleague; desk rooms show further occupants as "+N"; Fika and the infirmary use standing spots only when all their seats are taken.
 
+##### Plan Review
+
+Observed At: 2026-10-23
+Target: this M2 section and `docs/design/office-annex-artwork.prompt.txt`, final revision 839f036.
+Workflow: alternating delegated third-person and second-person passes (owner and implementer seats), one revision after each pair.
+
+| Passes | Person | Must-Fix | Minor | Main subjects |
+| --- | --- | --- | --- | --- |
+| 1-2 | 3rd, 2nd | 7 | 11 | single enlarged image: scale versus canvas, hand-over, undefined P2 timing, sprite facings; replaced by the annex design |
+| 3-8 | 3rd, 2nd | 4 | 18 | annex scene, per-Branch meetings, chair order, hand-over branch and landing, test ownership |
+| 9-16 | 3rd, 2nd | 4 | 15 | seat-step exemption, desk definition and scale band, demo meeting, T1 baseline, step completion |
+| 17-21 | 3rd, 2nd | 0 | 5 | artwork.md completion, annex tab colours |
+| 22 | 3rd | 0 | 0 | colour distances recomputed; whole-plan read |
+
+Review state: the loop ended at review 22 with no finding above the floor; the last second-person pass (20) also reported none, and the later revisions changed only tab colours checked in pass 22. 22 reviews of this target, all delegated. Owner decision on P1, P2, and P3 is pending.
+
 ##### Implementation Plan
 
 Plan Status: draft
