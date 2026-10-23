@@ -20,10 +20,13 @@ DEMO_ACTORS = 11
 
 # Each drawn colleague: room and seat index, facing and sprite pose, atlas frame, mirror, stacking depth, and boxes,
 # plus the working arms and switched-off screen glass, which follow the workstation points and screens of the seat.
+# Boxes are CSS pixels relative to the office artwork (#world), so the page layout above the office, which differs
+# between browser builds and fonts, plays no part; the artwork's own size is recorded with them.
 RECORD_SCRIPT = """() => {
   const round = (value) => Math.round(value * 100) / 100;
-  const box = (node) => { const r = node.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(round); };
-  return [...document.querySelectorAll("#characters .agent")].map((node) => {
+  const world = document.getElementById("world").getBoundingClientRect();
+  const box = (node) => { const r = node.getBoundingClientRect(); return [r.x - world.x, r.y - world.y, r.width, r.height].map(round); };
+  return { world: [world.width, world.height].map(round), colleagues: [...document.querySelectorAll("#characters .agent")].map((node) => {
     const svg = node.querySelector(":scope > .character");
     return {
       key: node.dataset.employeeKey, room: node.dataset.room, seat: node.dataset.seatIndex, facing: node.dataset.seatFacing,
@@ -32,9 +35,25 @@ RECORD_SCRIPT = """() => {
       arms: [...svg.querySelectorAll('path[stroke-width="2.3"]')].map((arm) => arm.getAttribute("d")),
       reach: [...svg.querySelectorAll(".keyboard-reach")].map((reach) => reach.getAttribute("transform")),
     };
-  }).sort((a, b) => a.key.localeCompare(b.key)).concat([...document.querySelectorAll(".screen-off-glass polygon")]
-    .map((glass) => ({ glass: glass.getAttribute("points"), depth: glass.parentElement.style.zIndex })));
+  }).sort((a, b) => a.key.localeCompare(b.key)), glass: [...document.querySelectorAll(".screen-off-glass polygon")]
+    .map((glass) => ({ points: glass.getAttribute("points"), depth: glass.parentElement.style.zIndex })) };
 }"""
+# Geometry tolerance in CSS pixels. Browser builds round sub-pixel layout differently by a fraction of a pixel; the
+# smallest seat change the table expresses (0.1 % of the artwork) moves a figure by more than 0.5 px in both
+# directions at 1440 px, where the artwork is about 882 x 588 px, so that run still catches every moved seat.
+TOLERANCE = 0.5
+GEOMETRY = ("box", "character")
+
+
+def assert_same(observed, baseline, width):
+    assert all(abs(a - b) <= TOLERANCE for a, b in zip(observed["world"], baseline["world"])), (width, observed["world"])
+    assert observed["glass"] == baseline["glass"], width
+    assert [c["key"] for c in observed["colleagues"]] == [c["key"] for c in baseline["colleagues"]], width
+    for seen, expected in zip(observed["colleagues"], baseline["colleagues"]):
+        # Every field other than the boxes is exact.
+        assert {k: v for k, v in seen.items() if k not in GEOMETRY} == {k: v for k, v in expected.items() if k not in GEOMETRY}, (width, seen)
+        for field in GEOMETRY:
+            assert all(abs(a - b) <= TOLERANCE for a, b in zip(seen[field], expected[field])), (width, field, seen, expected)
 
 
 def open_demo(driver, url, width):
@@ -61,9 +80,10 @@ def test_t1_main_office_matches_baseline(tmp_path):
         BASELINE.parent.mkdir(exist_ok=True)
         BASELINE.write_text(json.dumps(observed, indent=1) + "\n")
     baseline = json.loads(BASELINE.read_text())
+    assert min(observed["1440"]["world"]) * .001 > TOLERANCE
     for width in WIDTHS:
-        assert len([entry for entry in observed[str(width)] if "key" in entry]) == DEMO_ACTORS
-        assert observed[str(width)] == baseline[str(width)], width
+        assert len(observed[str(width)]["colleagues"]) == DEMO_ACTORS
+        assert_same(observed[str(width)], baseline[str(width)], width)
 
 
 # The seat table names footprints, waypoints, and facings that exist, and each seat step from its approach waypoint
