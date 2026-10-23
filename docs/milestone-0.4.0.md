@@ -255,9 +255,9 @@ Workflow: alternating delegated third-person and second-person passes (owner and
 | Passes | Person | Must-Fix | Minor | Main subjects |
 | --- | --- | --- | --- | --- |
 | 1-2 | 3rd, 2nd | 7 | 11 | single enlarged image: scale versus canvas, hand-over, undefined P2 timing, sprite facings; replaced by the annex design |
-| 3-8 | 3rd, 2nd | 4 | 18 | annex scene, per-Branch meetings, chair order, hand-over branch and landing, test ownership |
-| 9-16 | 3rd, 2nd | 4 | 15 | seat-step exemption, desk definition and scale band, demo meeting, T1 baseline, step completion |
-| 17-21 | 3rd, 2nd | 0 | 5 | artwork.md completion, annex tab colours |
+| 3-8 | 3rd, 2nd | 5 | 25 | annex scene, per-Branch meetings, chair order, hand-over branch and landing, test ownership |
+| 9-16 | 3rd, 2nd | 4 | 18 | seat-step exemption, desk definition and scale band, demo meeting, T1 baseline, step completion |
+| 17-21 | 3rd, 2nd | 0 | 4 | artwork.md completion, annex tab colours |
 | 22 | 3rd | 0 | 0 | colour distances recomputed; whole-plan read |
 
 Review state: the loop ended at review 22 with no finding above the floor; the last second-person pass (20) also reported none, and the later revisions changed only tab colours checked in pass 22. 22 reviews of this target, all delegated. Owner decision on P1, P2, and P3 is pending.
