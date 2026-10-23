@@ -4,11 +4,10 @@ import json
 import os
 from pathlib import Path
 
-import pytest
+from tests.browser_support import launch_options, playwright_sync
 
-playwright = pytest.importorskip("playwright.sync_api")
+playwright = playwright_sync()
 
-from tests.browser_support import launch_options
 from tests.lifecycle_support import HQ
 
 BASELINE = Path(__file__).parent / "fixtures" / "m2-t1-baseline.json"
