@@ -4,21 +4,21 @@ Purpose: Original office annex with two project studios and one meeting room; no
 
 How to generate:
 - Attach the 0.1.0 office background packages/agentville/hq/web/office.png as the style and scale reference.
-- Settings: landscape 1536 x 1024, transparent background. Where the tool offers no size setting, any 3:2 landscape size is accepted and scaled in step 3; an opaque background is a miss.
+- Settings: landscape 1536 x 1024, transparent background. Where the tool offers no size setting, ask for a landscape image with a transparent background in the request; the tool's landscape size is 1536 x 1024. Another size or an opaque background is a miss.
 - Paste only the text between "PROMPT START" and "PROMPT END".
 - Hand-over: commit and push the raw output as packages/agentville/hq/web/office-annex.png on branch claude/modest-albattani-dn2ho3. A regenerated image replaces that file with a new commit and push. The implementer converts it in place.
 
-Terms: a desk is one workstation, one computer screen with one chair, also when several workstations share one bench.
+Terms: a desk is one workstation: one chair with the computer in front of it, whatever the number of screens, also when several workstations share one bench.
 
-Required (a miss means a new generation; the owner checks by eye, the scale item by measuring in pixels):
+Required (a miss means a new generation; the owner checks by eye, and the size, scale, and 3 percent clearance items by measuring in pixels):
 - Same pixel-art style, palette, outline weight, lighting, and isometric angle as the reference office.png.
-- Landscape 3:2 image with a transparent background (view it in an editor that shows transparency as a checkerboard).
-- Same furniture scale as the reference: two neighbouring workstations of one row are 8.85 to 10.81 percent of the image width apart horizontally, measured keyboard to keyboard with an image editor that shows the cursor x position (136 to 166 pixels on a 1536-pixel-wide image). In the reference back-left studio the two rear-facing workstations are 151 pixels apart (keyboards at x 397 and 548).
+- Landscape image of exactly 1536 x 1024 pixels with a transparent background (view it in an editor that shows transparency as a checkerboard).
+- Same furniture scale as the reference: two neighbouring workstations of one row are 115 to 166 pixels apart horizontally, measured keyboard to keyboard with an image editor that shows the cursor x position. The reference rows measure 127 to 151 pixels: back-left studio 151 (keyboards at x 397 and 548) and 144 (478 and 622), back-right studio 127 (1148 and 1275), shared nook 133 (196 and 329).
 - Every desk chair and meeting chair faces along one of the two isometric diagonals used in the reference: toward the lower-left (seated person seen from the front) or toward the upper-right (seated person seen from the back); mirrored directions are allowed.
 - Each desk has exactly one chair facing it, with open floor next to the chair (behind it, or beside the desk) where a character can stand before sitting down.
 - A meeting table with chairs on its two long sides only, no computers on the table, in its own room with a door opening.
 - Every room connects to one corridor through a door opening; no furniture stands in a doorway or in the corridor.
-- Open floor at least 3 percent of the canvas width wide between neighbouring desk-and-chair units, around the meeting table, at that standing place of every chair, in every door opening, and along the corridor (a character's feet are 2.7 percent wide).
+- Open floor at least 46 pixels (3 percent of the width) wide between neighbouring desk-and-chair units, around the meeting table, at that standing place of every chair, in every door opening, and along the corridor (a character's feet are 2.7 percent wide).
 - At least two tall windows on the rear walls and three to six framed pictures on the walls, each picture frame fully visible.
 - Floor nearly fills the canvas with about 5 percent transparent margin; no people, animals, text, logos, or watermark.
 
