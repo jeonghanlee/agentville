@@ -7,7 +7,7 @@ Canonical branch or ref: `master`
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: Released-tag installation and all non-documentation release checks passed. Verify this committed closure preparation and docs/milestone-0.4.0.md, then record Release Verification 8 and the final Complete state. The next development task is 0.4.0 M1; its lifecycle and owner-authorization plan remains draft pending owner decisions.
+Next session entry point: RELEASED 2026-10-22: https://github.com/jeonghanlee/agentville/releases/tag/0.3.0. The immutable candidate is 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf and the annotated tag is 9548c089f57b801d2bcf2596d599cc7c26910505. Recheck and publish any local verification-record commits under their own Push authority. Continue with docs/milestone-0.4.0.md M1 planning; resolve owner-authorization and automatic-reopening rules before implementation.
 
 ## Scope
 
@@ -25,7 +25,7 @@ Out of scope: 0.4.0 features, release publication, changes to running services, 
 | M2 | Antigravity Adapter | Milestone | Complete | No | M1, D1 | Live Antigravity sessions report presence and observable activity; [detail](#m2---antigravity-adapter) |
 | M3 | Remote development environments | Milestone | Complete | No | M2, D1 | SSH and container procedures preserve identity and reach HQ securely; [detail](#m3---remote-development-environments) |
 | G1 | Late parent observation policy | External gate | Complete | No | | D2 selects later reclassification while preserving the former Employee record; [detail](#g1---late-parent-observation-policy) |
-| M4 | Release 0.3.0 | Milestone | In progress | No | M1, M2, M3, G2 | Reviewed candidate is tagged, published, installed, and verified; [detail](#m4---release-030) |
+| M4 | Release 0.3.0 | Milestone | Complete | No | M1, M2, M3, G2 | Reviewed candidate is tagged, published, installed, and verified; [detail](#m4---release-030) |
 | G2 | Git execution authority | External gate | Complete | No | | Owner authorizes each exact Git operation before execution; [detail](#g2---git-execution-authority) |
 
 ### Decisions
@@ -274,7 +274,7 @@ The owner selected option 1 on 2026-10-22: reclassify after parent evidence arri
 Origin: 0.3.0 / M4
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -295,7 +295,7 @@ Out of scope: deploying to existing user services, implementing 0.4.0, and chang
 ##### Dependencies And Decisions
 
 - M1-M3 are Complete with local checks, accepted self-review, fetched-origin landing evidence, and successful Python 3.12/3.13 and installer CI. Release publication remains pending.
-- G2 completed on 2026-10-22 after the owner delegated the previewed commit, master Push, Release, and single-tag Push scopes. M4 resumes as In progress.
+- G2 completed on 2026-10-22 after the owner delegated the previewed commit, master Push, Release, and single-tag Push scopes. M4 resumed as In progress; all final checks now pass and it closes as Complete.
 - The owner requested formal release, master integration, and subsequent 0.4.0 work on 2026-10-22, and selected fast-forward integration. Release-plan acceptance and implementation authority are recorded below. The earlier implementation and CHANGELOG commit delegation and initial branch push were bounded and consumed; later Git actions need their matching scopes.
 - Public REST observation on 2026-10-22 found releases 0.1.0 and 0.2.0 and no remote milestones. Git SSH observation found master at `39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b` and no 0.3.0 tag. Local gh authentication returned 401; Git SSH reads succeeded. Recheck live state before execution.
 - `.github/workflows/release.yml` creates the Release when a numeric tag is pushed. Do not also create a duplicate Release manually. The workflow's extraction consumes the prepared CHANGELOG section.
@@ -350,7 +350,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | 4 | Fast-forward master with the retained candidate and verification-only checkpoint | Owner delegated the previewed Release sequence on 2026-10-22 | No history rewrite or unresolved merge | Observed 2026-10-22T23:48:40.533492+00:00: git merge --ff-only a561b5ed5542219af5e430f64bd8d3fe97e86ce3 moved local master from 39f1d0cb3c7c8011ffe05fd5f934db75d5e2131b to that exact commit; no merge commit or source changes. |
 | 5 | Create annotated refs/tags/0.3.0 at the resolved candidate | Owner delegated the previewed Release sequence on 2026-10-22 | Immutable annotated tag | Observed 2026-10-22T23:50:03.284585+00:00: annotated tag object 9548c089f57b801d2bcf2596d599cc7c26910505 peels to retained candidate 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf; title AgentVille 0.3.0. Not yet pushed. |
 | 6 | Push master and the one tag; tag push triggers release.yml | Owner separately delegated master Push and single-tag Push on 2026-10-22 | Remote objects match local accepted objects; Release is created once | Master Push observed 2026-10-22T23:51:39.070757+00:00: fetched origin/master equals ce94b4d87dcf5b8b55f533da16af3abe064ee412 and contains candidate 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. Single-tag Push and Release observation completed: remote tag object 9548c089f57b801d2bcf2596d599cc7c26910505 peels to retained candidate 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf. Release 421311845 is published, non-draft, non-prerelease, and latest; release workflow 39874566624 succeeded. |
-| 7 | Record released checks, M1-M4 closure, and next-line entry point | Commit scope or user execution | Closure evidence is committed after publication | Pending |
+| 7 | Record released checks, M1-M4 closure, and next-line entry point | Owner delegated verification-record Commit scope on 2026-10-22 | Closure evidence is committed after publication | Source-first closure preparation f03cc3bc5bdcb6cdd364303b9c926983cedb9e36 preserves all actual checks and the next-line entry. This separately committed closure record marks all work and execution gates Complete. Remote publication of later verification records requires a fresh Push scope. |
 
 ##### Release Verification Plan
 
@@ -376,7 +376,7 @@ See Release Verification Results. Existing feature checks remain in M1-M3.
 | Release Verification 5 | 2026-10-22T23:35:28.597084+00:00 | Fresh Linux x86_64 container, user 1000, Python 3.13 | Pass | /tmp/agentville-030-install-wngt1l64/receipt.json and commands.jsonl: actual install.sh --hq --no-start --ref b73739a4b3ce5d47177d788945769e3cad38d400 cloned the local candidate Git repository into an absent installation path. Both installed CLIs report 0.3.0; 59 installed package files match; the actual Collector delivered 2 messages to an isolated installed HQ, its Branch is reachable, and the web endpoint returned 200. HQ and the verification container stopped; evidence is retained. Exact retained-candidate installation is additionally confirmed by the successful install.sh job in CI run 39873163675. |
 | Release Verification 6 | 2026-10-22T23:52:48.375886+00:00 | Canonical Git remote and GitHub | Pass | Remote annotated tag object 9548c089f57b801d2bcf2596d599cc7c26910505 and peeled commit 2f9fb6b73224bd1f8612b5be74bce5c87b8f7dcf match the approved local objects. [Release 0.3.0](https://github.com/jeonghanlee/agentville/releases/tag/0.3.0), ID 421311845, is published, non-draft, non-prerelease, and latest. [Release workflow 39874566624](https://github.com/jeonghanlee/agentville/actions/runs/39874566624) succeeded; its notes match the prepared body apart from surrounding blank lines. /tmp/agentville-030-version-iZoOR6/published-release.json retains the observed objects. |
 | Release Verification 7 | 2026-10-22T23:58:06.379532+00:00 | Fresh Linux x86_64 container, Python 3.13, user 1000 | Pass | /tmp/agentville-030-published-8npmd81k/receipt.json and commands.jsonl: canonical HTTPS full clone with no initial checkout; advertised tag object and peeled commit matched approved objects. Both storage gates retained 1 GiB reserve. Object database allocation was 22056960 bytes under the provenance-backed 200048640-byte bound. No exact prior published-tree measurement existed; a conservative 67108864-byte bound from the measured canonical checkout was used, then actual released-tree allocation measured 6983680 bytes. Workspace/evidence bound was 536870912 bytes. Actual install.sh --hq --no-start --ref 0.3.0 installed the published candidate; both CLIs report 0.3.0, 59 files match, Collector delivered 2 messages, the Branch is reachable, and the web endpoint returned 200. HQ and container stopped; evidence retained. |
-| Release Verification 8 | Not run | Committed documents | Pending | none |
+| Release Verification 8 | 2026-10-23T00:02:31.428049+00:00 | Committed canonical preparation and checked closure candidate | Pass | Source-first closure preparation f03cc3bc5bdcb6cdd364303b9c926983cedb9e36 was read back: both canonical files matched committed bytes, rows and details matched, retained release objects and actual results were present, and docs/milestone-0.4.0.md M1 was Not started / Ready Yes with its detailed plan still draft. Product files differ from the published candidate only in the two canonical records. /tmp/agentville-030-version-iZoOR6/closure-document-check.json retains the executed comparison. This final record closes M4 after those checks; its committed bytes are compared with the checked working-tree file after commit. |
 
 Release-preparation review: one standalone second-person self-review of the CHANGELOG, draft release plan, explicit commit paths, staging script, release notes, and unapplied version patch on 2026-10-22; no findings. This is a distinct artifact target from the four implementation review passes recorded under M2. The owner accepted the release plan and selected fast-forward integration on 2026-10-22. Version and verification-record commits plus one candidate-branch push were delegated on 2026-10-22. The owner supplied the separately previewed master integration, master Push, annotated-tag creation, single-tag Push, and verification-record Commit scopes on 2026-10-22.
 
@@ -387,7 +387,7 @@ Release-preparation review: one standalone second-person self-review of the CHAN
 - Published Release: https://github.com/jeonghanlee/agentville/releases/tag/0.3.0, ID 421311845, non-draft, non-prerelease, latest at observation. Release workflow 39874566624 succeeded.
 - Production-equivalent result: actual canonical released-tag install.sh path and real installed Collector/HQ reporting passed; /tmp/agentville-030-published-8npmd81k/receipt.json. Existing user services were outside this isolated verification.
 - No linked GitHub tracker issues exist. The next canonical release line is docs/milestone-0.4.0.md; M1 is the first task.
-- This source-first closure preparation records actual results; final documentation verification and the Complete transition follow as a separate commit.
+- Source-first closure preparation: f03cc3bc5bdcb6cdd364303b9c926983cedb9e36. Actual committed-document verification passed; this separate final closure record marks all M and G rows Complete, with no linked issue or remaining functional check. Subsequent publication of verification-record commits does not change the release tag.
 
 #### G2 - Git Execution Authority
 
