@@ -6,7 +6,7 @@ How to generate:
 - Attach the 0.1.0 office background packages/agentville/hq/web/office.png as the style and scale reference.
 - Settings: landscape 1536 x 1024, transparent background.
 - Paste only the text between "PROMPT START" and "PROMPT END".
-- Hand-over: commit the raw output as work/artwork/office-annex-raw.png on branch claude/modest-albattani-dn2ho3. The implementer converts and removes it; M2 lands on master by squash merge.
+- Hand-over: commit and push the raw output as packages/agentville/hq/web/office-annex.png on branch claude/modest-albattani-dn2ho3. A regenerated image replaces that file with a new commit and push. The implementer converts it in place.
 
 Required (a miss means a new generation):
 - Same pixel-art style, palette, outline weight, lighting, and isometric angle as the reference office.png (checked by eye by the owner).
@@ -16,6 +16,7 @@ Required (a miss means a new generation):
 - A meeting table with chairs on its two long sides only, no computers on the table, in its own room with a door opening.
 - Every room connects to one corridor through a door opening; no furniture stands in a doorway or in the corridor.
 - Open floor of at least 3 percent of the canvas width between neighbouring desk-and-chair units and around the meeting table.
+- At least two tall windows on the rear walls and three to six framed pictures on the walls, each picture frame fully visible.
 - Floor nearly fills the canvas with about 5 percent transparent margin; no people, animals, text, logos, or watermark.
 
 Tolerances (counts may differ; the seat table follows the accepted image and the difference is recorded):
@@ -26,7 +27,7 @@ PROMPT START
 Use case: stylized-concept
 Asset type: production game background for an interactive virtual office app, second floor of the attached office.
 Create a beautiful richly detailed ORIGINAL ISOMETRIC PIXEL ART OFFICE DOLLHOUSE in exactly the style, palette, lighting, outline weight, isometric angle, and furniture scale of the attached reference office. No people: interactive characters will be overlaid by the app.
-A single cutaway office floor with a raised warm oak foundation, rear exterior walls and low interior dividers. Three rooms connected by one open corridor running from left to right between the two back studios and the front meeting room: a large project studio at back-left with six wooden computer desks, each with one sage chair facing its desk; a large project studio at back-right with six wooden computer desks, each with one dusty lavender chair facing its desk; a meeting room at the front, in front of the corridor, with one long oak meeting table, three upholstered chairs on each long side facing the table, a whiteboard with abstract colored shapes, and a potted plant, no computers. Desks are arranged in rows like the reference studios, with open floor between desks and behind every chair. Every chair faces its own desk or the meeting table along the same isometric diagonals as the reference. Door openings connect each room to the corridor and stay clear. Many thoughtful details: potted plants, monstera, mugs, lamps, headphones, books, miniature abstract wall art, tiny glowing screens with abstract pixels, tall windows with sunlight.
+A single cutaway office floor with a raised warm oak foundation, rear exterior walls and low interior dividers. Three rooms connected by one open corridor running from left to right between the two back studios and the front meeting room: a large project studio at back-left with six wooden computer desks, each with one sage chair facing its desk; a large project studio at back-right with six wooden computer desks, each with one dusty lavender chair facing its desk; a meeting room at the front, in front of the corridor, with one long oak meeting table, three upholstered chairs on each long side facing the table, a whiteboard with abstract colored shapes, and a potted plant, no computers. Desks are arranged in rows like the reference studios, with open floor between desks and behind every chair. Every chair faces its own desk or the meeting table along the same isometric diagonals as the reference. Door openings connect each room to the corridor; the corridor and doorways stay completely clear of plants and furniture. Many thoughtful details: potted plants, monstera, mugs, lamps, headphones, books, miniature abstract wall art, tiny glowing screens with abstract pixels, tall windows with sunlight.
 Polished cozy indie game pixel art with deliberate square pixels, crisp 2:1 isometric geometry, detailed wood grain, precise stepped outlines and beautiful warm pixel shadows. Warm butter cream, sage, warm oak, terracotta and dusty lavender palette. Rich and inviting yet organized.
 Landscape 3:2 composition. Entire floor visible and nearly filling the canvas with 5 percent transparent margin. Orthographic isometric view from above, two rear walls visible, front walls cut away.
 True transparent background; no people, no animals, no characters, no writing, no text, no labels, no typography, no logos, no UI, no watermark. High resolution detailed pixel art, not 3D render, not blurry.
