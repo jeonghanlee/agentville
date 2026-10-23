@@ -105,15 +105,6 @@ export const LINKS = [
   ["c3","k3"], ["k3","k2c"], ["k2c","k2b"], ["k2b","k2"], ["k2","k1"], ["k1","k0"], ["c9","i1"], ["i1","i2"], ["i2","i3"],
 ];
 
-// The free side of each seat, where a walker stands before sitting down and after getting up: behind a rear-facing
-// desk chair, behind the desk for a front-facing one, in front of the sofa cushion, in front of the armchair seat.
-export const APPROACH = {
-  studio0: ["s0a", "s0b", "s0g", "s0f"],
-  studio1: ["s1a", "s1b"],
-  common: ["k0", "k1"],
-  fika: ["f0", "f3", "f2"],
-  infirmary: ["i3"],
-};
 export const COFFEE_SPOT = NODES.machine;
 
 const neighbours = new Map(Object.keys(NODES).map((id) => [id, []]));
@@ -167,6 +158,12 @@ function sweep(a, b) {
 // Footprint touched by the feet of a walker standing at point, or "".
 export function blockedBy(point) {
   return AREAS.find((area) => overlaps(feet(point), area))?.name || "";
+}
+
+// Footprints touched by the feet swept along a straight step; a seat step touches only the seat's own (seats.js).
+export function touched(a, b) {
+  const swept = sweep(a, b);
+  return AREAS.filter((area) => overlaps(swept, area)).map((area) => area.name);
 }
 
 // A straight step is clear when the swept feet touch no footprint and the foot point stays on the floor slab.

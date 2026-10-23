@@ -1,4 +1,5 @@
 import { FOOTPRINTS } from "./floor.js";
+import { mirroredFacing } from "./seats.js";
 
 // Furniture and actors share floor depth; foreground pixels match the room exactly.
 // A footprint names the floor contact in floor.js, so moving walkers can be ordered against the piece.
@@ -125,7 +126,7 @@ export function mountFurniture(world) {
       clone.setAttribute("width",bounds.width*1536/floor.width);
       clone.setAttribute("height",bounds.height*1024/floor.height);
       clone.style.removeProperty("transform");
-      if (selected.dataset.seatFacing === "back-left" || selected.dataset.coffeeFacing === "left") {
+      if (mirroredFacing(selected.dataset.seatFacing) || selected.dataset.coffeeFacing === "left") {
         const mirror = document.createElementNS("http://www.w3.org/2000/svg","g");
         mirror.setAttribute("transform","translate(32 0) scale(-1 1)");
         mirror.append(...clone.childNodes); clone.append(mirror);

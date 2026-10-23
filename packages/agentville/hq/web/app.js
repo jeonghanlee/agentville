@@ -10,7 +10,8 @@ import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 import { createLounge } from "./lounge.js";
 import { createWalkers } from "./walk.js";
-import { APPROACH, NODES, route, distance, clear, blockedBy } from "./floor.js";
+import { NODES, route, distance, clear, blockedBy } from "./floor.js";
+import { roomSeats, seatFoot, rearFacing } from "./seats.js";
 import { walkerDepth } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
@@ -31,23 +32,13 @@ const CONDITIONS = ["normal", "extra-coffee", "study-mode", "light", "lazy"];
 // Labels, titles, and descriptions come from the dictionary as nav.<id>, view.<id>.title, and view.<id>.description.
 const VIEWS = [["office", "house"], ["dashboard", "grid"], ["employees", "people"], ["projects", "folder"],
   ["timeline", "clock"], ["worklog", "book"], ["branches", "branches"], ["settings", "settings"]];
+// Room tab colours and "+N" anchors; the seats of each room are in seats.js.
 const ROOM_LAYOUT = {
-  studio0: { color: "#adba88", seats: [[26.5,36.5,"back",38],[36,42,"back",44],[32.4,26.2,"front",25],[42.5,32.2,"front",30]], overflow: [44,47] },
-  studio1: { color: "#b8a4c8", seats: [[75.2,37.8,"back",41],[83.8,43.4,"back",47]], overflow: [76,50] },
-  common: { color: "#c8b994", seats: [[13.3,59.7,"back",62],[21.8,64.4,"back",67]], overflow: [28,63] },
-  fika: { color: "#d1a178", seats: [[49.5,66.9,"front",70],[58.7,80.6,"back-left",82],[56.7,70.6,"front",73]], overflow: [48,85] },
-  infirmary: { color: "#93b7a6", seats: [[85.9,63.5,"lying",74]], overflow: [87,82] },
-};
-const WORKSTATIONS = {
-  studio0: [[[397,325],[417,332],[438,333]], [[548,374],[570,381],[599,387]], [[478,265],[495,271],[515,280]], [[622,316],[641,325],[663,333]]],
-  studio1: [[[1148,341],[1169,350],[1191,353]], [[1275,391],[1296,401],[1320,411]]],
-  common: [[[196,556],[216,566],[241,573]], [[329,607],[351,616],[377,624]]],
-};
-// Visible screen glass of rear-facing desks, in office artwork pixels; front-facing desks hide their screens.
-const SCREENS = {
-  studio0: ["405,257 453,277 453,308 404,290", "555,312 605,327 605,363 555,347"],
-  studio1: ["1147,287 1190,302 1190,333 1147,317", "1270,337 1313,352 1313,385 1270,370"],
-  common: ["202,493 247,511 247,546 202,528", "328,541 378,558 378,592 328,574"],
+  studio0: { color: "#adba88", overflow: [44,47] },
+  studio1: { color: "#b8a4c8", overflow: [76,50] },
+  common: { color: "#c8b994", overflow: [28,63] },
+  fika: { color: "#d1a178", overflow: [48,85] },
+  infirmary: { color: "#93b7a6", overflow: [87,82] },
 };
 // Standing spots on open floor, clear of furniture for a walker's feet (floor.js).
 const WAITING_SPOTS = {
@@ -331,11 +322,11 @@ function seatScope(ctx, room) {
 }
 // Where a colleague stands for a place: in front of a chair, beside the bed, or on a standing spot.
 // Seats also name the free side of the chair, which walkers pass through when sitting down or getting up.
-function placeOf(room, index, home, spot) {
+function placeOf(seat, spot) {
   if (spot) return { foot: spot, approach: null };
-  const side = APPROACH[room]?.[index];
-  if (home[2] === "lying") return { foot: side ? NODES[side] : home.slice(0,2), approach: null };
-  return { foot: [home[0], home[1] + (home[2].startsWith("back") ? 2.2 : 3.6)], approach: side ? NODES[side] : null };
+  const side = seat.approach ? NODES[seat.approach] : null;
+  if (seat.facing === "lying") return { foot: side || seat.position, approach: null };
+  return { foot: seatFoot(seat), approach: side };
 }
 // A changed place starts a walk along the floor routes; the first sighting, another Branch, or reduced motion places directly.
 function moveWalker(key, target) {
@@ -383,7 +374,7 @@ function renderCharacters(ctx) {
     const occupied = new Set([...occupants.values()].filter((index) => index !== null));
     for (const [key,index] of occupants) {
       if (index !== null) continue;
-      const free = ROOM_LAYOUT[room].seats.findIndex((_,i) => !occupied.has(i));
+      const free = roomSeats(room).findIndex((_,i) => !occupied.has(i));
       if (free < 0) break;
       occupants.set(key,free); occupied.add(free);
     }
@@ -391,18 +382,18 @@ function renderCharacters(ctx) {
   for (const id of seatOccupancy.keys()) if (!scopes.has(id) && !JSON.parse(id)[1].startsWith("facility:")) seatOccupancy.delete(id);
   const fika = seatOccupancy.get(seatScope(ctx,"fika"));
   coffee?.sync([...fika].filter(([,index]) => index !== null)
-    .map(([key,index]) => [key,ROOM_LAYOUT.fika.seats[index]]),branchId);
+    .map(([key,index]) => [key,roomSeats("fika")[index]]),branchId);
   lounge?.sync([...fika.keys()].map((key) => [key, JSON.parse(key)[1]]));
   const used = new Set(), hired = new Set(), dark = new Set();
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
-    const layout = ROOM_LAYOUT[room];
+    const layout = ROOM_LAYOUT[room], seats = roomSeats(room);
     const occupants = seatOccupancy.get(seatScope(ctx,room));
     const waiting = WAITING_SPOTS[room] ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
     const shownWaiting = waiting.slice(0,WAITING_SPOTS[room]?.length || 0);
     if (waiting.includes(selected) && !shownWaiting.includes(selected)) shownWaiting[shownWaiting.length-1] = selected;
     const placed = people.map((row) => ({ row, index: occupants.get(row.key) }))
-      .filter(({ row,index }) => index === null ? shownWaiting.includes(row.key) : index < layout.seats.length);
+      .filter(({ row,index }) => index === null ? shownWaiting.includes(row.key) : index < seats.length);
     placed.forEach(({ row,index }) => {
       let node = actors.get(row.key);
       if (!node) {
@@ -424,8 +415,9 @@ function renderCharacters(ctx) {
       const visit = coffee?.get(row.key);
       const waitingIndex = shownWaiting.indexOf(row.key);
       const spot = waitingIndex >= 0 ? WAITING_SPOTS[room][waitingIndex] : null;
-      const home = spot ? [...spot,"standing",Math.floor(spot[1])+1] : layout.seats[index];
-      const walk = moveWalker(row.key, visit?.point ? { foot: visit.point, approach: null } : placeOf(room, index, home, spot));
+      const place = spot ? null : seats[index];
+      const home = spot ? [...spot,"standing",Math.floor(spot[1])+1] : [...place.position, place.facing, place.depth];
+      const walk = moveWalker(row.key, visit?.point ? { foot: visit.point, approach: null } : placeOf(place, spot));
       const counter = !walk && visit?.point;
       const seat = walk ? [walk.x, walk.y, "walking", walk.depth]
         : counter ? [...visit.point, "coffee-back", walkerDepth(...visit.point)] : home;
@@ -444,14 +436,14 @@ function renderCharacters(ctx) {
       node.style.top = seat[1] + "%";
       node.style.zIndex = String(seat[3]);
       // Keep unchanged SVG nodes alive so data refreshes do not restart gestures.
-      const workstation = WORKSTATIONS[room]?.[index] ? { seat, keys: WORKSTATIONS[room][index] } : null;
+      const workstation = place?.workstation ? { seat, keys: place.workstation } : null;
       // Lounge colleagues hold their own drink; a counter visit shows the drink being fetched.
       const drink = row.detail === "fika" && lounge ? lounge.drink(row.key, row.agent.agent_id) : null;
       const cup = visit?.drink || drink || coffee?.cup(row.key);
       const detail = walk ? (walk.carrying ? "coffee-cup" : "coffee-walk")
         : counter ? (visit.phase === "waiting" ? "coffee-wait" : "coffee-walk") : row.detail;
       // Limited Employees switch off the visible desk screen, or show a small dark monitor when none is visible.
-      const glass = row.state === "limited" && !visit && !spot ? SCREENS[room]?.[index] : null;
+      const glass = row.state === "limited" && !visit && !spot ? place.screen : null;
       if (glass) {
         dark.add(row.key);
         let screen = screensOff.get(row.key);
@@ -505,7 +497,7 @@ function renderCharacters(ctx) {
           + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
         companion.tabIndex = visible ? 0 : -1;
         const foot = desk === "lying" ? [seat[0]+4.2,seat[1]+13]
-          : [seat[0]+3.1,seat[1]+(visit || spot ? 0 : desk.startsWith("back") ? 2.2 : 3.6)];
+          : [seat[0]+3.1,seat[1]+(visit || spot ? 0 : rearFacing(desk) ? 2.2 : 3.6)];
         companion.style.left = (foot[0] + i * 2.8) + "%";
         companion.style.top = (foot[1] + i * .9) + "%";
         companion.style.zIndex = String(Math.floor(foot[1] + i * .9)+1);

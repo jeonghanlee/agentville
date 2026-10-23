@@ -1,4 +1,5 @@
 import { drinkArtwork, randomMug, HOT_DRINKS } from "./mugs.js";
+import { rearFacing, frontFacing, mirroredFacing } from "./seats.js";
 
 const NS = "http://www.w3.org/2000/svg";
 export const SEATED_WIDTH = 5;
@@ -66,7 +67,7 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
   if (desk === "lying") return sleepingSprite(look, state);
   if (desk === "coffee-back") return coffeeSprite(look,state,detail,cup);
   if (desk === "walking") return walkingSprite(look,state,detail,cup);
-  const pose = desk.startsWith("back") ? 2 : desk === "front" ? 1 : 0;
+  const pose = rearFacing(desk) ? 2 : frontFacing(desk) ? 1 : 0;
   const frame = PEOPLE[look.style][pose];
   const head = localRect(frame, [frame[0],frame[1],frame[2],HEAD_END[look.style][pose]-frame[1]]);
   const [left,right] = HANDS[look.style][pose].map((region) => localRect(frame, region));
@@ -152,8 +153,10 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
     const width = PEOPLE_SIZE[0] * SEATED_WIDTH / 100;
     const height = width * 43 / 32;
     const origin = [seat[0] * PEOPLE_SIZE[0] / 100 - width / 2,
-      seat[1] * PEOPLE_SIZE[1] / 100 - height * (seat[2].startsWith("back") ? .78 : .64)];
-    const targets = keys.map(([x,y]) => [(x-origin[0])*32/width,(y-origin[1])*43/height]);
+      seat[1] * PEOPLE_SIZE[1] / 100 - height * (rearFacing(seat[2]) ? .78 : .64)];
+    // A mirrored seat draws the whole sprite flipped, so its hands reach the mirrored sprite points of the workstation.
+    const mirror = mirroredFacing(seat[2]);
+    const targets = keys.map(([x,y]) => [(mirror ? width-(x-origin[0]) : x-origin[0])*32/width,(y-origin[1])*43/height]);
     [left,right].forEach((region,index) => {
       const start = [region[0]+region[2]/2,region[1]+region[3]/2];
       const target = targets[index];

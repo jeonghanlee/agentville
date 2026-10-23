@@ -1,4 +1,5 @@
 import { DRINKS, MUGS } from "./mugs.js";
+import { mirroredFacing } from "./seats.js";
 
 // Lounge activities are decorative and never change reported activity or room membership.
 const TICK = 150;
@@ -115,8 +116,8 @@ export function createLounge(root, { motionAllowed }) {
     if (!still && activity === "talk") {
       const partner = nodeOf(talk.a === state.key ? talk.b : talk.a);
       const toward = partner && parseFloat(partner.style.left) < parseFloat(node.style.left) ? "left" : "right";
-      // The rear-facing lounge chair is drawn mirrored, so its head turns the other way.
-      set("turn", node.dataset.seatFacing === "back-left" ? (toward === "left" ? "right" : "left") : toward);
+      // A mirrored seat draws the figure flipped, so its head turns the other way.
+      set("turn", mirroredFacing(node.dataset.seatFacing) ? (toward === "left" ? "right" : "left") : toward);
       if (talk.speaker === state.key && now < talk.turnUntil - 180) { glyph = talk.glyph; side = toward; }
     } else set("turn", "");
     bubble(node, glyph, side);

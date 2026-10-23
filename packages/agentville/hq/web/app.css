@@ -105,8 +105,9 @@ main { padding: 32px 34px 18px; max-width: 1840px; margin: auto; }.page-heading 
 .selection-outline { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 96; pointer-events: none; opacity: .8; }
 .outline-character * { animation: none !important; transition: none !important; }
 .agent.seated { width: 5%; transform: translate(-50%,-64%); }
-.agent.seated[data-seat-facing^="back"] { transform: translate(-50%,-78%); }
-.agent[data-seat-facing="back-left"] > .character { transform: scaleX(-1); }
+.agent.seated:is([data-seat-facing="back"],[data-seat-facing="back-left"]) { transform: translate(-50%,-78%); }
+/* Mirrored seats (seats.js) draw the whole figure flipped, with its arms, props, and books. */
+.agent:is([data-seat-facing="back-left"],[data-seat-facing="front-right"]) > .character { transform: scaleX(-1); }
 .agent.standing { transform: translate(-50%,-100%); }
 .queue-status { position: absolute; top: calc(100% + 7px); left: 50%; transform: translateX(-50%); white-space: nowrap; color: #8d7953; background: #fff7e7; border-radius: 3px; padding: 2px 4px; font-size: 8px; visibility: hidden; }
 .agent:hover .queue-status, .agent:focus-visible .queue-status, .agent.selected .queue-status { visibility: visible; }
@@ -245,10 +246,10 @@ body.replaying .scene { box-shadow: inset 0 0 0 2px #e4cf9c; }
 .character[data-work-gesture="mouse-click"] .hand-right { animation-name: mouse-click; }
 .character[data-work-gesture="mouse-scroll"] .hand-right { animation-name: mouse-scroll; }
 .character[data-work-gesture="mouse-scroll"] .screen-lines { animation-name: screen-scroll; }
-.character[data-pose="back"][data-work-gesture] .hand-left { transform-origin: 5px 12px; }
-.character[data-pose="back"][data-work-gesture] .hand-right { transform-origin: 26px 12px; }
-.character[data-pose="back"][data-work-gesture^="mouse-"] .pointer-hand { transform: translate(4px,-.3px); }
-.character[data-pose="front"][data-work-gesture] .head { transform: translateY(1px); animation-name: work-glance; }
+.character:is([data-pose="back"],[data-pose="back-left"])[data-work-gesture] .hand-left { transform-origin: 5px 12px; }
+.character:is([data-pose="back"],[data-pose="back-left"])[data-work-gesture] .hand-right { transform-origin: 26px 12px; }
+.character:is([data-pose="back"],[data-pose="back-left"])[data-work-gesture^="mouse-"] .pointer-hand { transform: translate(4px,-.3px); }
+.character:is([data-pose="front"],[data-pose="front-right"])[data-work-gesture] .head { transform: translateY(1px); animation-name: work-glance; }
 .character.textured-character .hand-left { transform-origin: var(--left-pivot); }
 .character.textured-character .hand-right { transform-origin: var(--right-pivot); }
 .character.textured-character[data-work-gesture] .hand-left { transform-origin: var(--left-pivot); }
