@@ -13,7 +13,7 @@ Terms: a desk is one workstation, one computer screen with one chair, also when 
 Required (a miss means a new generation; the owner checks by eye, the scale item by measuring in pixels):
 - Same pixel-art style, palette, outline weight, lighting, and isometric angle as the reference office.png.
 - Landscape 3:2 image with a transparent background (view it in an editor that shows transparency as a checkerboard).
-- Same furniture scale as the reference: two neighbouring workstations of one row are 8.9 to 10.8 percent of the image width apart horizontally, measured keyboard to keyboard with an image editor that shows the cursor x position (136 to 166 pixels on a 1536-pixel-wide image). In the reference back-left studio the two rear-facing workstations are 151 pixels apart (keyboards at x 397 and 548).
+- Same furniture scale as the reference: two neighbouring workstations of one row are 8.85 to 10.81 percent of the image width apart horizontally, measured keyboard to keyboard with an image editor that shows the cursor x position (136 to 166 pixels on a 1536-pixel-wide image). In the reference back-left studio the two rear-facing workstations are 151 pixels apart (keyboards at x 397 and 548).
 - Every desk chair and meeting chair faces along one of the two isometric diagonals used in the reference: toward the lower-left (seated person seen from the front) or toward the upper-right (seated person seen from the back); mirrored directions are allowed.
 - Each desk has exactly one chair facing it, with open floor next to the chair (behind it, or beside the desk) where a character can stand before sitting down.
 - A meeting table with chairs on its two long sides only, no computers on the table, in its own room with a door opening.
