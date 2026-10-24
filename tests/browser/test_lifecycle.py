@@ -27,6 +27,37 @@ Object.defineProperty(window, 'Notification', { value: NotificationBoundary });
 """
 
 
+@pytest.mark.parametrize("demo", [False, True])
+@pytest.mark.parametrize("width", [1440, 720])
+def test_office_status_omits_absent_badge_and_preserves_closed_badge(tmp_path, demo, width):
+    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
+        hq.send()
+        browser = driver.chromium.launch(**launch_options())
+        page = browser.new_page(viewport={"width": width, "height": 1000}, reduced_motion="reduce", locale="en-US")
+        page.clock.install()
+        page.add_init_script("""const Native = WebSocket;
+            window.sockets = [];
+            window.WebSocket = class extends Native {
+                constructor(...args) { super(...args); sockets.push(this); }
+            };""")
+        page.goto(hq.url + ("/?demo=1" if demo else "/"))
+        status = page.locator("#office-open")
+        playwright.expect(status).to_have_text("Branch reporting")
+        playwright.expect(status.locator(".status-dot")).to_have_count(1)
+        playwright.expect(status.locator(".closed-badge")).to_have_count(0)
+        if not demo:
+            hq.close()
+            playwright.expect(status.locator(".closed-badge")).to_have_text("Closed")
+            playwright.expect(status).to_have_text("Branch reportingClosed")
+            hq.advance()
+            hq.send()
+            playwright.expect(status).to_have_text("Branch reporting")
+            playwright.expect(status.locator(".closed-badge")).to_have_count(0)
+            page.evaluate("sockets.at(-1).close()")
+            playwright.expect(status).to_have_text("Not connected to HQ")
+        browser.close()
+
+
 @pytest.mark.parametrize("width", [1440, 720])
 def test_real_browser_closure_notifications_history_and_credentials(tmp_path, width):
     with HQ(tmp_path / "hq.sqlite3") as hq:

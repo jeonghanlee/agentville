@@ -746,7 +746,9 @@ function render() {
   text("branch-subtitle", branch ? (branch.branch?.location || t("branch.noLocation")) : t("branch.waiting"));
   const wording = branch || !hqConnected() ? branchWording(branch) : "noReport";
   $("office-open").classList.toggle("unreachable", wording !== "reporting");
-  $("office-open").replaceChildren(el("i", { class: "status-dot" }), t("branch." + wording), lifecycleBadge("branch", branchId));
+  $("office-open").replaceChildren(...[
+    el("i", { class: "status-dot" }), t("branch." + wording), lifecycleBadge("branch", branchId)
+  ].filter((child) => child !== null));
   const projects = new Set(all.filter((r) => r.agent.project_id !== COMMON).map((r) => r.agent.project_id));
   $("summary").replaceChildren(...[["people", all.filter((r) => r.duty).length, "summary.onDuty"],
     ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
