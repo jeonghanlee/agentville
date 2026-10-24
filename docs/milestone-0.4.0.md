@@ -7,7 +7,7 @@ Canonical branch or ref: master
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: M2 implementation review is accepted: third-person rev20261024_170437 and second-person rev20261024_171850 both report zero findings. Owner acceptance of all 30 seats is complete. Fresh independent local verification passed 346 tests, including 43 required Browser cases; the second-person lane separately passed 43 Browser cases and 16 operator checks. Prepare the M2 commit under git-workflow, then observe CI on the separately authorized implemented commit and push. CI, repository landing and formal closure remain pending. Installation and restart retain their separate authorization.
+Next session entry point: M1 and M2 are Complete. Unified office commit 20627e8 and the approved status/manual correction 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33 are on origin/master. All four test jobs passed in run 40121607492; public manual deployment 40121607476 passed and all eight published screenshots match the committed captures. Continue with M3 Town map plan review; its draft plan has no implementation authorization. Version 0.3.0 is unchanged and no 0.4.0 release or tag is claimed.
 
 ## Scope
 
@@ -21,10 +21,12 @@ Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
 
 | ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| M1 | Branch and Project lifecycle | Milestone | In progress | No | [0.3.0 M3](milestone-0.3.0.md#m3---remote-development-environments), D1, D2, D3, D4 | Closure and observed automatic reopening work at HQ; [detail](#m1---branch-and-project-lifecycle) |
-| M2 | Meeting rooms | Milestone | In progress | No | M1, D1 | Concurrent colleagues of one Project share the intended presentation; [detail](#m2---meeting-rooms) |
-| M3 | Town map | Milestone | Not started | No | M2, D1 | Multiple Branches are navigable on the map; [detail](#m3---town-map) |
+| M1 | Branch and Project lifecycle | Milestone | Complete | No | [0.3.0 M3](milestone-0.3.0.md#m3---remote-development-environments), D1, D2, D3, D4 | Closure and observed automatic reopening work at HQ; [detail](#m1---branch-and-project-lifecycle) |
+| M2 | Meeting rooms | Milestone | Complete | No | M1, D1 | Concurrent colleagues of one Project share the intended presentation; [detail](#m2---meeting-rooms) |
+| M3 | Town map | Milestone | Not started | Yes | M2, D1 | Multiple Branches are navigable on the map; [detail](#m3---town-map) |
 | M4 | Seasons and weather | Milestone | Not started | No | M3, D1 | Visual settings affect presentation consistently; [detail](#m4---seasons-and-weather) |
+
+Status totals: Complete 2; Not started 2. Nearest Ready work: M3.
 
 ### Decisions
 
@@ -50,7 +52,7 @@ Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
 Origin: 0.4.0 / M1
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -202,19 +204,23 @@ Evidence: work/review_sessions/20261023_004636_lifecycle/reviews/fup20261023_065
 
 ##### Closure Evidence
 
+- Complete 2026-10-24. Implementation commit 1f7c2f6f2548dee69ec760eb2a4f343c403e53e6 is an ancestor of the fetched origin/master at 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33. The existing independent acceptance above covers the lifecycle implementation and both corrections. The current real-path suite passed 350 tests, including 47 Browser cases, with zero failures/errors/skips; test run [40121607492](https://github.com/jeonghanlee/agentville/actions/runs/40121607492) passed all four jobs on that exact master commit. The dependency on 0.3.0 M3 is Complete.
+
+The following observations describe the pre-commit handoff and its retained evidence:
+
 - Completed response-order regression inputs, raw HTTP bodies, screenshots, databases, and before/after/full XML are copied and SHA-256-checked outside pytest automatic cleanup at work/evidence/m1-refresh-20261023_065026/receipt.json. The actual pre-correction app.js from an earlier installed-source copy matches the preceding frozen manifest and is retained there. Five ended socket paths are recorded as metadata only; no endpoint recreation or replay is claimed.
 
 - Corrected package installation verified at 2026-10-23 02:58:34 UTC in an isolated prefix; actual launcher, malformed-Origin rejection, unchanged state, normal closure, and static asset receipt: work/m1-install-wxv6ec08/receipt.json. Runtime prerequisites came from the existing .venv; no production installation or OS dependency bootstrap is claimed.
-- Implementation verification and independent implementation acceptance passed; git commit and upstream landing remain pending. No commit, push, production installation, or user-service change was performed.
+- At the pre-commit handoff, implementation verification and independent implementation acceptance had passed; commit and upstream landing were pending. No production installation or user-service change occurred during that verification.
 - Failed test attempts are retained. The sandbox run reported 296 passed and 12 Unix-socket permission failures; the unrestricted rerun passed all 308. The reclosure regression exposed extra ntfy/browser alerts before correction (`work/pytest-040-m1-reclose-before.xml`); the final real-path suite passed.
-- M1 remains In progress until the required commit and upstream landing evidence exist. Review acceptance does not close the session or authorize M2.
+- At that handoff, M1 remained In progress until commit and upstream landing evidence existed; review acceptance alone did not authorize M2. The current closure observation above records the subsequent landing and verification.
 
 #### M2 - Meeting Rooms
 
 Origin: 0.4.0 / M2
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -352,9 +358,9 @@ Owner direction: D12 selects the single-floor target; the subsequent instruction
 | T5 | 2026-10-24 09:16:19 UTC | Real HQ/WebSocket, actual membership and UI, outer browser clock | Passed | Real updates exercise 60 s entry, 30 s and immediate exits, six chairs, refill and held desks, off-page/remote identity, Project filters, reconnect/reload, hidden-view observation, Project closure and replay exclusion. Default and full-meeting demos use fixed data and desk-first reservations. hidden-view-probe.json verifies walking pauses while hidden, resumes to two seated members and leaves the complete HQ state unchanged. |
 | T6 | 2026-10-24 09:16:19 UTC | Real HQ/WebSocket and walking UI; both widths for reduced-motion queues | Passed | Three Fika seats and one bed fill before six/four distinct standing places. Waiting colleagues take freed seats without moving others. Actual movement covers desk, Fika, counter, meeting and bed; interruption during a seat step redirects safely. At most one colleague waits for counter preparation. Meeting entry and return walk on the same graph, and actual conversation glyphs appear without typing. The conversation test observes 16 s to include the normal maximum 12 s gap; the earlier 8 s miss is retained in full-unsandboxed.xml. |
 | T7 | 2026-10-24 16:43:42 UTC | Actual page, independent seat annotations, 1440/720 and 100/175 percent zoom | Passed; owner accepted all 30 seat arrangements and poses | visual-final-v2/receipt.json indexes 36 labelled floor/room captures. All 30 anchors/facings are compared with independent annotations; working endpoints, four light periods, eight distinct paintings and absent extra flower overlays pass. Source artwork keeps four flower arrangements. Expanded inspection corrected two rear studio2 anchors and bed foreground coverage without changing artwork or FOOT. Retained new tab colours have CIELAB76 minimum 18.7045899643 against every other room colour. Owner response selected option 1, approving the arrangement and poses of all 30 seats on 2026-10-24. Approval record: visual-final-v2/owner-acceptance.json. The visual gate is complete; implementation review and CI/landing remain separate. |
-| T8 | 2026-10-24 09:16:19 UTC | Python 3.13.5, Chromium 156.0.8078.4, Playwright 1.64.1; real local suite and mdBook | Local checks passed; CI/landing pending | AGENTVILLE_REQUIRE_BROWSER=1 full suite: 346 passed, zero failures/errors/skips, including 43 Browser cases (full-final-verified.xml). The separate required Browser run passed 43 cases (browser-final.xml); the final full run includes the corrected conversation observation window. mdbook build and git diff --check pass. The sandboxed run retained 12 Unix-socket permission failures; the first unrestricted run retained the short conversation-window failure. Existing CI policy is unchanged; no push or CI result is claimed. No version, release or installed service changed. |
+| T8 | 2026-10-24 18:41:49 UTC | Python 3.13.5 and actual Chromium locally; Python 3.12/3.13, required Browser job and installer in CI; pinned mdBook 0.4.40 | Passed; master landing and public manual verified | Latest full suite passed 350 tests in 171.48 s, including 47 Browser cases, with zero failures/errors/skips (status-null-full.xml). The approved absent-badge correction and fresh screenshots are committed at 854be4d; all ten committed blobs match the independently reviewed manifest. Test run 40121607492 passed all four jobs on that commit. Docs run 40121607476 built and deployed the pinned mdBook successfully. All eight public image bodies equal the committed captures, and the introduction/using chapters contain the updated content (publication-854be4d/receipt.json). All eight images also decoded in the locally served built manual. Earlier runs remain retained observations of their own targets; no version bump, tag or formal release is claimed. |
 
-Evidence paths not otherwise rooted above resolve under work/m2-unified-generation/. The immutable planning and original intake records remain in the review session and earlier receipts.
+Evidence paths not otherwise rooted above resolve under work/m2-unified-generation/. Planning and review artifact IDs refer to rs20261024_042903. Formal closure retains that working session in work/evidence/m2-review-20261024_184642.tar.gz before removing its original directory. The companion work/evidence/m2-review-20261024_184642-removal.json records the archive hash, integrity check and local removal observation. Original intake and visual-acceptance receipts remain under work/m2-unified-generation/.
 
 ###### Previous plan and artwork evidence
 
@@ -403,12 +409,17 @@ Both reports pass I1-I5 with no correction requested. Third-person freshly ran a
 
 Both local manual builds passed. Second-person loaded all eight built-manual screenshots and independently checked exact source requests, raw/runtime hashes, original artwork/atlas preservation, actual layout counts and room-colour distance. Local mdBook 0.4.48 is distinct from the pending CI build's pinned 0.4.40. Failed sandbox and probe attempts remain in the reports with their successful runs; contact-strip limits remain explicit.
 
-Convergence: conv20261024_172054. Reports and fresh receipts are under work/review_sessions/20261024_042903_unified-office-plan/. The current remote test run 39941085030 passed only existing HEAD 29f8db9; it is not CI evidence for this uncommitted change. Implementation acceptance and owner visual acceptance are complete. CI on the implemented commit, repository landing and formal closure remain pending; M2 stays In progress. No commit, push, dispatch, release, installation or restart occurred during this review.
+Convergence: conv20261024_172054. Reports and fresh receipts were recorded under work/review_sessions/20261024_042903_unified-office-plan/. At this review boundary, remote run 39941085030 covered only 29f8db9; implemented-commit CI, landing and formal closure were pending. No commit, push, dispatch, release, installation or restart occurred during that review. Subsequent commit, CI, publication and closure observations are recorded below.
 
 ##### Closure Evidence
 
-- Unified runtime, documentation, demos and local verification are implemented under auth20261024_053554. Owner accepted all 30 seat arrangements and poses (T7) on 2026-10-24. Independent implementation review acceptance is complete; CI and repository landing remain pending; M2 stays In progress.
-- Local installed source remains 29f8db9. Both user services are active with the unchanged start time 2026-10-23 09:25:02 PDT. No install or restart occurred during this implementation.
+- Complete 2026-10-24. Unified runtime and documentation are committed in 20627e80b4f86df39f3e16fe32b3fedbcb8f17e5. The owner-approved absent-badge correction and eight fresh fictional captures are committed in 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33. Both are on origin/master after the authorized fast-forward from 1f7c2f6. A fresh fetch at 2026-10-24 18:38 UTC found local HEAD and origin/master identical, with no tree differences.
+- T1-T8 are satisfied. The owner accepted all 30 arrangements and poses at 16:43:42 UTC. Original implementation reviews rev20261024_170437 and rev20261024_171850 reported zero findings. The separate approved manual/status follow-up rev20261024_183606 also reported zero findings, independently passed 16 lifecycle cases, reproduced all four new test failures on the exact old app.js, and checked every new PNG and both built chapters. No artwork, geometry, meeting policy or seat acceptance changed in that follow-up.
+- Test run [40121607492](https://github.com/jeonghanlee/agentville/actions/runs/40121607492) passed install, pytest (3.12), pytest (3.13) and Browser on 854be4d; the last job completed at 18:41:49 UTC. The latest local full run passed 350 tests with 47 Browser cases and zero skips; status-null-full.xml records that execution. Prior failed attempts and successful observations remain retained with their actual targets.
+- Docs run [40121607476](https://github.com/jeonghanlee/agentville/actions/runs/40121607476) built mdBook 0.4.40 and deployed at 18:38:40 UTC. Direct HTTP reads of the [public manual](https://jeonghanlee.github.io/agentville/) confirmed eight of eight PNG bodies equal the committed captures and both updated chapters return HTTP 200. Receipt: work/m2-unified-generation/publication-854be4d/receipt.json. Seven images use built-in demo=1; the unverified image uses the shipped fictional roster with real ingest and native WebSocket loss in a separate HQ. No production observation appears in those images.
+- The separately authorized local installation was applied at 20627e8, with both services restarted at 2026-10-24 10:49:25 PDT. Actual installed HTTP, WebSocket and Chromium verification recorded 20 desks, 30 distinct places, 93 nodes, 92 links, identical served asset bytes and zero page errors at both widths. Receipt: work/m2-unified-generation/deployment-20627e8/receipt.json. The later status-text correction at 854be4d has not been installed locally; publication did not restart services.
+- M1 is Complete, M3 is Ready for plan review and M4 remains Not started. Neither M3 nor M4 implementation is authorized by this closure. Version 0.3.0 remains unchanged; no 0.4.0 tag or GitHub Release was created.
+- Formal review-session closure follows clo20261024_184642: independent acceptance precedes the status-record commit and retention of all session artifacts, and removal of the working session occurs only after the durable output is in git HEAD. The archive and local removal receipt above retain its evidence without changing the original artwork or visual-acceptance files.
 
 #### M3 - Town Map
 
