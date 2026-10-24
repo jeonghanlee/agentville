@@ -6,6 +6,14 @@ This document lists the user-visible changes of each AgentVille release.
 
 **Out of scope:** internal refactoring and test-only changes.
 
+## 0.4.0 - Unreleased
+
+### Web UI
+
+- One enlarged office contains 20 desks across four Project studios and Common Office, a six-chair meeting room, three Fika places, and one infirmary bed. Project navigation pages by four; arrivals use available seats before waiting or overflowing.
+- Same-Project colleagues meet after 60 seconds of observed concurrent work. Participants retain identity, selection, and held desks; meetings follow immediate exits or a 30-second grace period, survive reconnects, and are excluded from replay.
+- Walking, furniture occlusion, gestures, lighting, and decoration follow the unified artwork. The full-seat and meeting demonstrations expose all 30 seat ids.
+
 ## 0.3.0 - Observation Release - 2026-10-22
 
 **Observation Release**

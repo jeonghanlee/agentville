@@ -1,13 +1,25 @@
 import { catArtwork } from "./art.js";
 import { t } from "./i18n.js";
-import { NODES, neighbourIds, distance } from "./floor.js";
+import { NODES, neighbourIds, distance, FLOOR_ASPECT } from "./floor.js";
 import { walkerDepth } from "./furniture.js";
 
+import { CAT_NODES } from "./office-layout.js";
+import { ACTOR_SCALE } from "./layout.js";
+
 // Cats roam the corridor and lounge part of the shared floor graph (floor.js), so they also keep off furniture.
-const ROAM = new Set(["s0c", "c1", "c2", "c2b", "c3", "c4", "l1", "c5", "l2", "c6", "c7", "c7b", "c8a", "c8", "c9", "c10", "f5", "f6", "k3", "i1", "i2"]);
+const ROAM = new Set(CAT_NODES);
+// Connect the measured lounge and corridor destinations through the existing floor graph.
+for (const target of CAT_NODES.slice(1)) {
+  const first = CAT_NODES[0], parents = new Map([[first,null]]), open = [first];
+  while (open.length && !parents.has(target)) {
+    const current = open.shift();
+    for (const next of neighbourIds(current)) if (!parents.has(next)) { parents.set(next,current); open.push(next); }
+  }
+  for (let id = target; id !== null && id !== undefined; id = parents.get(id)) ROAM.add(id);
+}
 const CATS = [
-  { coat: "ginger", name: "Cheese", starts: ["c2", "c3", "c4"] },
-  { coat: "tuxedo", name: "Pepper", starts: ["c8", "c9", "c10"] },
+  { coat: "ginger", name: "Cheese", starts: CAT_NODES.slice(0,3) },
+  { coat: "tuxedo", name: "Pepper", starts: CAT_NODES.slice(3) },
 ];
 const RESTS = [
   { state: "sit", duration: [2200, 4500] },
@@ -17,7 +29,7 @@ const RESTS = [
 const WALK_CHANCE = .55;
 // One gait cycle (both diagonal leg pairs stepping once) moves the body by STRIDE percent of the floor width
 // at the default cat size; speed = stride / cycle period, so paws do not slide.
-const STRIDE = .8;
+const STRIDE = .8 * ACTOR_SCALE;
 const CYCLE = [.46, .62];
 const BLINK_PERIOD = [5, 8];
 const RISE_MS = 420, SETTLE_MS = 520, SETTLE_NAP_MS = 700;
@@ -25,7 +37,6 @@ const RISE_MS = 420, SETTLE_MS = 520, SETTLE_NAP_MS = 700;
 const EASE_IN = .7, EASE_OUT = .9, CORNER = .7, CORNER_SPEED = .35;
 const MAX_FRAME_MS = 80;
 const RETRY_MS = 1600;
-const CAT_WIDTH = 4, CAT_MIN_PX = 20;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const choose = (items) => items[Math.floor(Math.random() * items.length)];
 const between = ([min, max]) => min + Math.random() * (max - min);
@@ -85,10 +96,7 @@ export function createOfficeCats(root) {
     setState(cat, "settle");
     cat.remaining = SETTLE_MS;
   }
-  function stride() {
-    const width = root.getBoundingClientRect().width || 1;
-    return STRIDE * Math.max(CAT_WIDTH, CAT_MIN_PX / width * 100) / CAT_WIDTH;
-  }
+  function stride() { return STRIDE; }
   function choosePath(cat) {
     const options = neighbourIds(cat.point).filter((id) => ROAM.has(id)
       && !cats.some((other) => other !== cat && (other.point === id || other.target === id)));
@@ -109,7 +117,7 @@ export function createOfficeCats(root) {
     if (Math.abs(to[0] - cat.x) > .05) face(cat, to[0] < cat.x ? -1 : 1, slope(cat.from, to));
   }
   function slope(from, to) {
-    const dx = Math.abs(to[0] - from[0]) || .01, dy = (to[1] - from[1]) * (1024 / 1536);
+    const dx = Math.abs(to[0] - from[0]) || .01, dy = (to[1] - from[1]) * FLOOR_ASPECT;
     return Math.max(-8, Math.min(8, Math.atan2(dy, dx) * 180 / Math.PI * .35));
   }
 

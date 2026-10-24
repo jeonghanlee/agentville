@@ -1,8 +1,10 @@
-import { distance } from "./floor.js";
+import { distance, FLOOR_ASPECT } from "./floor.js";
 import { walkerDepth } from "./furniture.js";
 
+import { WALK_SPEED } from "./layout.js";
+
 // Colleagues walk between places along floor.js routes; placement data stays authoritative.
-const SPEED = [5.2, 6.4];
+const SPEED = WALK_SPEED;
 const MAX_FRAME_MS = 80;
 
 export function createWalkers(root, { motionAllowed, changed }) {
@@ -23,7 +25,7 @@ export function createWalkers(root, { motionAllowed, changed }) {
   // Floor points are percent of the 3:2 artwork, so a vertical step counts 2/3 of a horizontal one on screen.
   function view(walk) {
     const from = walk.path[walk.index], to = walk.path[walk.index + 1] || from;
-    const down = (to[1] - from[1]) * 2 / 3, across = Math.abs(to[0] - from[0]);
+    const down = (to[1] - from[1]) * FLOOR_ASPECT, across = Math.abs(to[0] - from[0]);
     return Math.abs(down) < .2 * across || Math.abs(down) < .01 ? walk.view : down > 0 ? "front" : "back";
   }
   function place(walk) {

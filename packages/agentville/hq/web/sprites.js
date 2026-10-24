@@ -1,8 +1,9 @@
 import { drinkArtwork, randomMug, HOT_DRINKS } from "./mugs.js";
 import { rearFacing, frontFacing, mirroredFacing } from "./seats.js";
+import { ARTWORK, ACTOR_VIEW, actorPixels, actorHeightPixels } from "./layout.js";
+export { ACTOR_WIDTH as SEATED_WIDTH } from "./layout.js";
 
 const NS = "http://www.w3.org/2000/svg";
-export const SEATED_WIDTH = 5;
 const PEOPLE_SIZE = [1536, 1024];
 const CATS_SIZE = [1024, 1536];
 const SLEEPING = [[40,60,485,414],[575,88,450,379],[1047,59,464,417],[23,556,506,407],[557,575,473,395],[1043,557,470,412]];
@@ -150,10 +151,9 @@ export function employeeSprite(look, state, detail, condition, contractor, desk,
   if (state === "limited") svg.insertAdjacentHTML("beforeend", '<g class="state-clock"><circle cx="27" cy="5" r="3" fill="#f2e9d0" stroke="#9e8d69" stroke-width=".7"/><path d="M27 3v2l1.5 1" fill="none" stroke="#7c745b" stroke-width=".6"/></g>');
   if (workstation && state === "working") {
     const { seat, keys } = workstation;
-    const width = PEOPLE_SIZE[0] * SEATED_WIDTH / 100;
-    const height = width * 43 / 32;
-    const origin = [seat[0] * PEOPLE_SIZE[0] / 100 - width / 2,
-      seat[1] * PEOPLE_SIZE[1] / 100 - height * (rearFacing(seat[2]) ? .78 : .64)];
+    const width = actorPixels(), height = actorHeightPixels();
+    const origin = [seat[0] * ARTWORK.width / 100 - width / 2,
+      seat[1] * ARTWORK.height / 100 - height * (rearFacing(seat[2]) ? ACTOR_VIEW.back : ACTOR_VIEW.front)];
     // A mirrored seat draws the whole sprite flipped, so its hands reach the mirrored sprite points of the workstation.
     const mirror = mirroredFacing(seat[2]);
     const targets = keys.map(([x,y]) => [(mirror ? width-(x-origin[0]) : x-origin[0])*32/width,(y-origin[1])*43/height]);

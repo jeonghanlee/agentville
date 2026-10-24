@@ -1,5 +1,8 @@
 // Branch-provided strings are rendered through text nodes, never as markup.
 import { icon, character, avatarColor, prepareAppearances } from "./art.js";
+import { applyLayoutMetrics, RECLINING_WIDTH, ACTOR_SCALE, PROJECTS_PER_PAGE, seatedFootOffset } from "./layout.js";
+import { ROOM_LAYOUT, WAITING_SPOTS } from "./office-layout.js";
+import { createObservations, observe, meetings } from "./meeting.js";
 import { demoState } from "./demo.js";
 import { updateWorkGestures, WORK_MOTION_INTERVAL } from "./motion.js";
 import { createOfficeCats } from "./cats.js";
@@ -22,7 +25,8 @@ import { createReplay, SPEEDS } from "./replay.js";
 import { worklogTable } from "./worklog.js";
 import { createLifecycle } from "./lifecycle.js";
 
-const DEMO = new URLSearchParams(location.search).get("demo") === "1";
+const DEMO_MODE = new URLSearchParams(location.search).get("demo");
+const DEMO = ["1", "seats", "meeting"].includes(DEMO_MODE);
 const TOKEN = takeToken();
 const COMMON = "common-office";
 const STATES = ["working", "thinking", "waiting", "idle", "completed", "error", "limited", "unknown"];
@@ -32,19 +36,6 @@ const CONDITIONS = ["normal", "extra-coffee", "study-mode", "light", "lazy"];
 // Labels, titles, and descriptions come from the dictionary as nav.<id>, view.<id>.title, and view.<id>.description.
 const VIEWS = [["office", "house"], ["dashboard", "grid"], ["employees", "people"], ["projects", "folder"],
   ["timeline", "clock"], ["worklog", "book"], ["branches", "branches"], ["settings", "settings"]];
-// Room tab colours and "+N" anchors; the seats of each room are in seats.js.
-const ROOM_LAYOUT = {
-  studio0: { color: "#adba88", overflow: [44,47] },
-  studio1: { color: "#b8a4c8", overflow: [76,50] },
-  common: { color: "#c8b994", overflow: [28,63] },
-  fika: { color: "#d1a178", overflow: [48,85] },
-  infirmary: { color: "#93b7a6", overflow: [87,82] },
-};
-// Standing spots on open floor, clear of furniture for a walker's feet (floor.js).
-const WAITING_SPOTS = {
-  fika: [[38,78.5],[42.5,82.5],[46.5,86.5],[52,89.5],[66.4,80.6],[57.5,88.7]],
-  infirmary: [[78,81],[84,78],[73.5,83.2],[80.5,83.5]],
-};
 const EMPTY = { branches: [], agents: [], activities: [], contractors: [] };
 const MAX_EVENTS = 60;
 // Timeline list length, refresh interval of the shown day's changes, and of today's work log for waiting times.
@@ -67,7 +58,8 @@ let daylight = null;
 let furniture = null;
 let decor = null;
 let coffee = null;
-let lounge = null;
+let lounge = null, meetingLounge = null;
+let observations = createObservations(), branchMeetings = {};
 let walkers = null;
 // Last floor place of each shown colleague, so a change of place becomes a walk.
 const places = new Map();
@@ -214,6 +206,7 @@ function rows(data = current) {
   }).sort((a,b) => a.agent.project_id.localeCompare(b.agent.project_id) || a.agent.seat - b.agent.seat || a.key.localeCompare(b.key));
 }
 function roomOf(row) {
+  if (displayedMeeting()?.members.some((member) => member.key === row.key)) return projectRoom(row.agent.project_id);
   if (row.state === "error") return "infirmary";
   if (row.detail === "fika") return "fika";
   return row.agent.project_id === COMMON ? "common" : projectRoom(row.agent.project_id);
@@ -226,16 +219,26 @@ function queryMatches(row) {
 function passes(row) {
   return queryMatches(row) && (stateFilter === "all" || stateFilter === row.state) && (!roomFilter || roomFilter === roomOf(row));
 }
+function displayedMeeting() {
+  return replay?.active ? null : branchMeetings[branchId];
+}
+function updateMeetings(restart = false) {
+  if (DEMO) { branchMeetings = live.meetings || {}; return; }
+  if (!connected) return;
+  const now = Date.now();
+  observations = observe(observations, live, now, { restart });
+  branchMeetings = meetings(live, observations, branchMeetings, now, "live", live.lifecycles, roomSeats("meeting").length);
+}
 function context(all) {
   const local = all.filter((r) => r.agent.branch_id === branchId);
   const projects = [...new Map(local.filter((r) => r.agent.project_id !== COMMON).map((r) =>
     [r.agent.project_id, { id: r.agent.project_id, name: r.project }])).values()].sort((a,b) => a.name.localeCompare(b.name));
-  floor = Math.min(floor, Math.max(0, Math.ceil(projects.length / 2) - 1));
-  const page = projects.slice(floor * 2, floor * 2 + 2);
+  floor = Math.min(floor, Math.max(0, Math.ceil(projects.length / PROJECTS_PER_PAGE) - 1));
+  const page = projects.slice(floor * PROJECTS_PER_PAGE, (floor + 1) * PROJECTS_PER_PAGE);
   const ids = new Set(projects.map((p) => p.id));
   const present = all.filter((r) => r.duty && (r.agent.branch_id === branchId || ids.has(r.agent.project_id)));
   const pageIds = new Set(page.map((p) => p.id));
-  const office = present.filter((r) => pageIds.has(r.agent.project_id)
+  const office = present.filter((r) => pageIds.has(r.agent.project_id) || displayedMeeting()?.members.some((m) => m.key === r.key)
     || ["common", "fika", "infirmary"].includes(roomOf(r)));
   return { local, projects, page, present, office };
 }
@@ -272,7 +275,7 @@ function selectEmployee(key) {
   const row = all.find((r) => r.key === key);
   if (row && !["common", "fika", "infirmary"].includes(roomOf(row))) {
     const index = context(all).projects.findIndex((p) => p.id === row.agent.project_id);
-    if (index >= 0) floor = Math.floor(index / 2);
+    if (index >= 0) floor = Math.floor(index / PROJECTS_PER_PAGE);
   }
   selected = key;
   render();
@@ -307,7 +310,7 @@ function renderRooms(ctx) {
     countBadge(ctx.present.filter((r) => roomOf(r) === room.id)),
   ], "room-tab", () => { roomFilter = roomFilter === room.id ? "" : room.id; render(); },
   { "aria-pressed": String(roomFilter === room.id), "data-focus-key": "room-" + room.id })));
-  const count = Math.max(1, Math.ceil(ctx.projects.length / 2));
+  const count = Math.max(1, Math.ceil(ctx.projects.length / PROJECTS_PER_PAGE));
   $("floor-controls").hidden = count <= 1;
   text("floor-label", (floor + 1) + " / " + count);
   $("previous-floor").disabled = floor === 0;
@@ -348,6 +351,7 @@ function moveWalker(key, target) {
   return walkers.get(key);
 }
 function renderCharacters(ctx) {
+  const members = new Map((displayedMeeting()?.members || []).map((member) => [member.key, member]));
   const groups = new Map();
   for (const row of ctx.office) {
     let room = roomOf(row);
@@ -368,12 +372,12 @@ function renderCharacters(ctx) {
     if (!seatOccupancy.has(id)) seatOccupancy.set(id,new Map());
     const occupants = seatOccupancy.get(id);
     const people = groups.get(room) || [];
-    const members = new Set(people.map((row) => row.key));
-    for (const key of occupants.keys()) if (!members.has(key)) occupants.delete(key);
+    const residents = new Set(people.map((row) => row.key));
+    for (const key of occupants.keys()) if (!residents.has(key)) occupants.delete(key);
     for (const row of people) if (!occupants.has(row.key)) occupants.set(row.key,null);
     const occupied = new Set([...occupants.values()].filter((index) => index !== null));
     for (const [key,index] of occupants) {
-      if (index !== null) continue;
+      if (index !== null || (!DEMO && members.has(key))) continue;
       const free = roomSeats(room).findIndex((_,i) => !occupied.has(i));
       if (free < 0) break;
       occupants.set(key,free); occupied.add(free);
@@ -384,11 +388,16 @@ function renderCharacters(ctx) {
   coffee?.sync([...fika].filter(([,index]) => index !== null)
     .map(([key,index]) => [key,roomSeats("fika")[index]]),branchId);
   lounge?.sync([...fika.keys()].map((key) => [key, JSON.parse(key)[1]]));
+  meetingLounge?.sync(ctx.present.filter((row) => members.has(row.key)).map((row) => [row.key,row.agent.agent_id]));
+  for (const [room,people] of groups) groups.set(room,people.filter((row) => !members.has(row.key)));
+  const meetingPeople = ctx.present.filter((row) => members.has(row.key));
+  if (meetingPeople.length) groups.set("meeting",meetingPeople);
   const used = new Set(), hired = new Set(), dark = new Set();
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room], seats = roomSeats(room);
-    const occupants = seatOccupancy.get(seatScope(ctx,room));
+    const occupants = room === "meeting" ? new Map([...members].map(([key,member]) => [key,member.chair]))
+      : seatOccupancy.get(seatScope(ctx,room));
     const waiting = WAITING_SPOTS[room] ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
     const shownWaiting = waiting.slice(0,WAITING_SPOTS[room]?.length || 0);
     if (waiting.includes(selected) && !shownWaiting.includes(selected)) shownWaiting[shownWaiting.length-1] = selected;
@@ -431,7 +440,7 @@ function renderCharacters(ctx) {
       node.dataset.walkView = walk?.view || "";
       node.dataset.queuePosition = spot ? String(waiting.indexOf(row.key)+1) : "";
       node.dataset.seatIndex = index === null ? "" : String(index);
-      node.style.width = desk === "lying" ? "8%" : SEATED_WIDTH + "%";
+      node.style.width = desk === "lying" ? RECLINING_WIDTH + "%" : SEATED_WIDTH + "%";
       node.style.left = seat[0] + "%";
       node.style.top = seat[1] + "%";
       node.style.zIndex = String(seat[3]);
@@ -461,14 +470,17 @@ function renderCharacters(ctx) {
         }
         screen.style.zIndex = String(seat[3] - 1);
       }
-      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, node.dataset.queuePosition,
+      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, room, row.activity?.tool, node.dataset.queuePosition,
         row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass)]);
       if (node.dataset.appearance !== appearance) {
         const name = el("span", { class: "agent-name" }, badge(row.agent.provider), row.name,
           row.agent.branch_id === branchId ? null : el("span", { class: "remote-badge" }, row.branchName),
-          reset ? el("span", { class: "reset-time" }, reset) : null);
+          reset ? el("span", { class: "reset-time" }, reset) : null,
+          room === "meeting" ? stateLabel(row) : null,
+          room === "meeting" && row.state === "working" && row.activity?.tool ? el("span", { class: "agent-tool" }, row.activity.tool) : null);
         const children = [character(row.key, row.state, detail, condition, false, desk, workstation, cup),
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
+        if (DEMO_MODE === "seats" || DEMO_MODE === "meeting") children.push(el("span", { class: "agent-seat-id" }, room + "." + index));
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
         if (done) children.push(el("span", { class: "done-check", title: stateName("completed") }, icon("check")));
         if (counter && visit.phase === "waiting") children.push(el("span", { class: "coffee-status" },
@@ -479,6 +491,7 @@ function renderCharacters(ctx) {
         node.dataset.appearance = appearance;
       }
       lounge?.decorate(node, row.key);
+      meetingLounge?.decorate(node, row.key);
       // Each Contractor shows its own activity; further Contractors collapse into "+N".
       const shown = row.contractors.slice(0, MAX_CONTRACTORS);
       shown.forEach((contractor, i) => {
@@ -496,11 +509,11 @@ function renderCharacters(ctx) {
         companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
           + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
         companion.tabIndex = visible ? 0 : -1;
-        const foot = desk === "lying" ? [seat[0]+4.2,seat[1]+13]
-          : [seat[0]+3.1,seat[1]+(visit || spot ? 0 : rearFacing(desk) ? 2.2 : 3.6)];
-        companion.style.left = (foot[0] + i * 2.8) + "%";
-        companion.style.top = (foot[1] + i * .9) + "%";
-        companion.style.zIndex = String(Math.floor(foot[1] + i * .9)+1);
+        const foot = desk === "lying" ? [seat[0]+4.2*ACTOR_SCALE,seat[1]+13*ACTOR_SCALE]
+          : [seat[0]+3.1*ACTOR_SCALE,seat[1]+(walk || visit || spot ? 0 : seatedFootOffset(rearFacing(desk)))];
+        companion.style.left = (foot[0] + i * 2.8 * ACTOR_SCALE) + "%";
+        companion.style.top = (foot[1] + i * .9 * ACTOR_SCALE) + "%";
+        companion.style.zIndex = String(Math.floor(foot[1] + i * .9 * ACTOR_SCALE)+1);
         const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra]);
         if (companion.dataset.appearance !== appearance) {
           companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
@@ -686,7 +699,7 @@ function renderData(all) {
           branchId = members[0]?.agent.branch_id || lifecycleOf("project", id)?.branch_ids[0] || branchId;
           const ctx = context(all);
           const index = ctx.projects.findIndex((p) => p.id === id);
-          floor = Math.max(0, Math.floor(index / 2));
+          floor = Math.max(0, Math.floor(index / PROJECTS_PER_PAGE));
           roomFilter = id === COMMON ? "common" : projectRoom(id); stateFilter = "all";
           setView("office");
         }), lifecycleControls.action("project", id, name, lifecycleOf("project", id)?.closed));
@@ -715,6 +728,7 @@ function updateClock() {
 }
 function render() {
   const focused = focusKey();
+  updateMeetings();
   const all = rows();
   prepareAppearances(all.flatMap((row) => [row.key, ...row.contractors.map((c) => row.key + "helper:" + c.contractor_id)]));
   if (!current.branches.some((b) => b.branch_id === branchId)) { branchId = current.branches[0]?.branch_id || ""; floor = 0; roomFilter = ""; }
@@ -1010,6 +1024,7 @@ function openNotified(target) {
 function acceptState(state) {
   if (!state || !["branches","agents","activities","contractors"].every((key) => Array.isArray(state[key]))) return false;
   live = state; connected = true;
+  updateMeetings(resync);
   const all = rows(live);
   recordEvents(all);
   // While replaying, live states are recorded as a baseline: notifications are suppressed and the page is not repainted.
@@ -1113,8 +1128,10 @@ document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); $("search").focus(); }
 });
 $("settings-dialog").addEventListener("click", (event) => { if (event.target === $("settings-dialog")) $("settings-dialog").close(); });
+applyLayoutMetrics($("world"));
 daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.querySelector(".scene-sun"), $("setting-daylight"));
 lounge = createLounge($("characters"), { motionAllowed });
+meetingLounge = createLounge($("characters"), { motionAllowed, room: "meeting", conversationOnly: true });
 walkers = createWalkers($("characters"), { motionAllowed, changed: render });
 coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
@@ -1132,7 +1149,7 @@ const demoNow = Date.now();
 records = createHistory({ demo: DEMO, token: TOKEN, now: demoNow });
 replay = createReplay({ history: records, shown: showReplay, moved: updateReplay });
 if (DEMO) {
-  acceptState(demoState(demoNow));
+  acceptState(demoState(demoNow, DEMO_MODE));
   connection = ["connection.demo", "demo"];
   $("demo-note").hidden = false;
 }
@@ -1147,6 +1164,11 @@ replay.refreshRange().then(() => { refreshToday(); render(); });
 setInterval(() => replay.refreshRange(), TODAY_REFRESH);
 setInterval(refreshToday, TODAY_REFRESH);
 setInterval(render, 30000);
+setInterval(() => {
+  const previous = JSON.stringify(branchMeetings);
+  updateMeetings();
+  if (JSON.stringify(branchMeetings) !== previous) render();
+}, 1000);
 setInterval(updateClock, 1000);
 setInterval(() => { updateWorkGestures($("characters")); furniture.update(); }, WORK_MOTION_INTERVAL);
 window.addEventListener("pagehide", () => {

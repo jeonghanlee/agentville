@@ -1,0 +1,69 @@
+Unified single-floor office artwork provenance
+
+Tool: OpenAI built-in image generation and editing
+Selected raw source: docs/design/sources/office-unified.png
+Status: preserved raw input; owner permits existing internal alpha; measured layout implemented; owner accepted all 30 seat arrangements and poses on 2026-10-24
+Actual canvas: 1536 x 1024; requested 3072 x 2048 was not produced
+
+Initial reference images:
+packages/agentville/hq/web/office.png: SHA-256 54332cd4b7cbfa4473547557929d65a00bf924c9f3fe6224603eec478d685581
+work/m2-annex-generation/attempt-01-open-entrance.png: SHA-256 9ac3d28bfd1ae1e95515912b4870cef09fe40917757f578a26393decc0e23b2e
+
+Attempt 1: request-unified-01.txt
+Output: unified-office-01.png
+Output SHA-256: 0e9a9ff693d6338684d0d302606f4f1236921f5781ca04aaa23f0155fb749dd4
+Exact request follows:
+
+Use case: stylized-concept
+Asset type: large unified pixel-art game office background.
+Input image 1: STYLE AND FACILITY REFERENCE, the original main office with its coffee lounge and wellness room.
+Input image 2: STYLE AND MEETING ROOM REFERENCE, the annex with six-chair meeting table.
+Primary request: combine their functions into ONE substantially LARGER, SPACIOUS SINGLE-STOREY OFFICE, not two images or separate buildings. Create a new expanded coherent floor plan, not a collage of the two references. Request a large 3072 x 2048 landscape transparent PNG.
+Architecture: ONE single continuous level of oak flooring on ONE thin foundation slab. Every room is at exactly the same elevation. NO upstairs/downstairs, split levels, stairs, steps, mezzanines, terraces, stacked floors or staggered raised platforms. Broad continuous corridors connect every zone. Rear exterior walls, low cutaway interior partitions with clearly OPEN doorways, front walls removed. Show all floor and all furniture, with a little transparent margin.
+EXACT working capacity: TWENTY computer workstations, each one monitor, one keyboard and ONE chair. Four distinct project studios containing SIX, SIX, FOUR and TWO workstations respectively (18), plus a small Common Office nook with TWO workstations (2). Arrange each larger six-desk studio as two rows of three workstations with generous chair access; the four-desk studio as two rows of two. Keep all monitors and all chairs plainly visible and countable. Shared wooden bench tops allowed, but each workstation has exactly its own chair and keyboard. Do not add any unassigned computer desks elsewhere.
+Retain ONE separate meeting room with ONE oak table and exactly SIX upholstered chairs, three on each LONG side, no chairs at the ends and no computers. Its entrance must be a clearly visible broad OPEN GAP in the partition from the same main corridor, without a closed door. Wide unobstructed walking space behind all meeting chairs and around both ends.
+Restore the clearly visible FIKA COFFEE LOUNGE as a generous foreground zone, not hidden behind a wall: a distinct espresso-machine counter with cups, a small fridge, a comfortable terracotta sofa with two separately readable sitting places, one matching armchair, and a low coffee table on a rug. Keep abundant accessible floor BETWEEN the sofa/armchair and coffee table and a clear route from each lounge seat to the espresso counter. Coffee lounge must occupy a substantial visible part of the office, comparable to the original reference, not be reduced to a coffee machine on a desk.
+Retain the small wellness room from image 1, with ONE tidy single bed and mint cabinet. Open entrance connects it to the same corridor. Keep all zones on the same floor.
+Circulation is a priority: enlarge the FLOOR AREA, not just the furniture or camera scale. Broad continuous empty-floor aisles and open doorways, generous space behind chairs; plants, bookshelves, lamps and cabinet feet stay out of all pathways. Furniture should not touch adjoining chair bases. Chair facings follow the two supported isometric directions from references (front-facing lower-left or back-facing upper-right, and their mirrors). Coffee lounge seating should have a readable facing.
+Style: same rich warm deliberate square-pixel art, crisp stepped outlines, 2:1 isometric orthographic camera, cozy oak, cream, sage, dusty lavender, butter yellow, dusty rose and terracotta; warm daylight, tall rear windows and a few fully visible framed abstract wall paintings. Enough small plants and books for warmth, without cluttering aisles. Preserve the characteristic original office atmosphere, not a realistic 3D render.
+True transparent background outside the building silhouette, clean exterior edges, fully opaque interior. No exterior glow, vignette, shadow backdrop or fake checkerboard. No people, animals, text, writing, signage, room labels, numbers, UI, logos or watermark. Entire SINGLE FLOOR visible, not cropped.
+
+Attempt 2: request-unified-02.txt
+Output: unified-office-02.png
+Output SHA-256: 817bdbe5faa2d7c1fe2b391cf250a3d113fcd09d1003b3c63f351f549ea82e2f
+Exact request follows:
+
+Use case: precise-object-edit
+Input image 1 is the EDIT TARGET. It is the new unified single-floor pixel-art office with central six-chair meeting room, foreground coffee lounge and lower-right wellness bed.
+Primary correction: it has ONE EXTRA SIX-DESK STUDIO. REMOVE the ENTIRE LOWER-LEFT / FOREGROUND-LEFT six-workstation studio with the dusty-rose chairs, situated BELOW the small two-workstation green-chair nook and LEFT of the coffee lounge. Remove all six of that lower-left studio's computer workstations and all six of its rose desk chairs, its workstation bench and workstation divider accessories. Restore that zone to clean continuous open oak floor extending the office circulation, with its outer floor slab unchanged. Do not add new furniture, desks or seating there.
+KEEP THESE EXACTLY: upper-left studio six green-chair workstations; upper-middle studio six yellow-chair workstations; upper-right studio four rose-chair workstations; middle-left small nook TWO green-chair workstations; middle-right small nook TWO rose-chair workstations. These 6+6+4+2+2 are the ONLY TWENTY computer workstations in the entire office. Keep their chairs and computers unchanged. Do NOT remove the middle-left small two-seat nook.
+Also make the central meeting room's right-hand corridor entrance an OPEN unobstructed doorway rather than the closed brown door panel beside the whiteboard wall: remove the door leaf and show a clear floor opening through the partition from the corridor to the meeting table. Preserve all SIX meeting chairs, THREE on each long side, and the table.
+Preserve the large visible foreground Fika coffee lounge COMPLETELY: espresso machine counter, fridge, sofa, armchair, rug, low coffee table; preserve the lower-right wellness room with its single bed and cabinet. Preserve all other walls, windows, furniture scale, crisp detailed pixel-art style, warm palette, camera, canvas size and building outline. Keep ONE continuous floor level, no steps/stairs/second storey. Preserve a transparent background outside the building, no exterior glow. No people, text, labels, numbers or watermark.
+
+Attempt 3: request-unified-03-flowers.txt
+Output: unified-office-03-flowers.png
+Output SHA-256: 9a06246c4b08fb4d2db8a0df1d8c8ad95086da2783b806c225581bf090950e82
+Exact request follows:
+
+Use case: precise-object-edit
+Input image 1 is the EDIT TARGET, unified-office-02, a single-floor pixel-art office.
+Primary request: add SOME FLOWERS among the existing greenery to make the office warmer and more colorful. Keep existing trees and leafy plants. Add a restrained scattering of small flowering pots on the rear window sills and existing cabinet/shelf surfaces, a small flower vase on the foreground Fika coffee table, and a little bouquet on a free area of the espresso counter. Replace the small leafy centerpiece on the meeting table with a similarly small flower arrangement. Use clear delicate flowers in soft coral, peach, warm white and muted lavender, such as small daisies and tulips. The flowers must be visibly blossoms, not just more green foliage, and rendered in exactly the same crisp detailed pixel-art style.
+DO NOT change the floor plan or furniture positions. Preserve every workstation: SIX in upper-left, SIX in upper-middle, FOUR in upper-right, TWO in middle-left common nook and TWO in middle-right (20 total); retain each desk chair and monitor. Preserve the central meeting table and all SIX meeting chairs, the open entrance, foreground coffee lounge with espresso machine, fridge, terracotta sofa, armchair, coffee table and rug, and the right wellness room with one bed.
+Place flower containers on EXISTING free surfaces only, never on the floor, in an aisle, in a doorway, on a chair, on a keyboard, or in front of a monitor. Keep blossoms small enough not to hide windows, artworks, screens or chairs. No new stands, cabinets or floor planters. Do not crowd every desk with flowers. The large open floor area stays empty.
+Preserve one continuous floor level, building silhouette, exact camera, canvas size 1536 x 1024, palette, warm lighting, square-pixel outlines, style and scale. Maintain genuine exterior background transparency and clean cutout edges; no opaque background, vignette, glow, crop or zoom. No people, animals, text, labels, UI, logos or watermark. Change ONLY the floral decoration.
+
+Attempt 4: request-unified-04-fewer-pots.txt
+Output: unified-office-04-fewer-pots.png
+Output SHA-256: f52a6e68745e0008c74ea1bf85117e1cac4c4e3a010296e13bf40af96a4864b2
+Exact request follows:
+
+Use case: precise-object-edit
+Input image 1 is the EDIT TARGET, unified-office-03-flowers.png.
+Primary request: there are TOO MANY little plant pots and flowers. Make the decoration noticeably calmer and less cluttered while preserving the office layout.
+Remove the small potted plants and flower vases from ALL COMPUTER DESK TOPS, workstation divider shelves and the shelves above those desks; restore their surfaces naturally with the existing wood texture. Keep computers, keyboards, mice, books, headphones and lamps untouched.
+Retain only FOUR modest flowering arrangements in the whole office: ONE small flower pot in the upper-left rear window area, ONE small flower pot in the upper-middle rear window area, ONE small vase on the Fika coffee table, and ONE small bouquet on a free portion of the espresso counter. Remove the other flowering pots and bouquets from the meeting table, cabinets, bookshelves, wellness room and additional window areas; do not replace removed flowers with additional leafy pots. Retained flowers are soft coral, cream and muted lavender.
+Keep the established large leafy floor plants and hanging greenery, but do not add any new greenery, pots or furniture. The result should clearly have far fewer tiny pots; clean desk surfaces, a few restrained floral accents, and comfortable open space. Existing floor plants stay in their positions and all aisles remain clear.
+Strict invariants: preserve every wall, floor, furniture item and furniture position. Preserve all TWENTY computer workstations and their chairs in groups 6+6+4+2+2; preserve the six-chair meeting table, the open meeting entrance, the full coffee lounge (espresso counter, fridge, terracotta sofa, armchair, rug and coffee table) and single-bed wellness room. Keep the one continuous single-floor plan and empty lower-left open floor unchanged. Do not add or remove desks, chairs or seating.
+Preserve exact 1536 x 1024 canvas, building silhouette, isometric camera, furniture scale, warm palette, crisp square-pixel art and lighting. Maintain genuine transparent background outside the building silhouette, no solid background or fake checkerboard. No people, animals, text, labels, logos or watermark. Change only the small plant-pot and floral decoration.
+
+The raw selected bytes are retained unchanged. Runtime storage conversion and measured acceptance are separate operations. Earlier annex evidence does not validate this image.

@@ -1,5 +1,5 @@
 // Synthetic display data, isolated from the HQ store and real provider sessions.
-export function demoState(now = Date.now()) {
+export function demoState(now = Date.now(), mode = "1") {
   const ago = (seconds) => new Date(now - seconds * 1000).toISOString();
   const branch = (branch_id, alias, reachable, location, time) => ({
     branch_id, reachable, last_seen_at: ago(reachable ? 4 : 840), heartbeat_interval: 30,
@@ -18,6 +18,17 @@ export function demoState(now = Date.now()) {
     ["remy", "Remy", "home", "garden-ui", "claude", "error", 540, "", "normal"],
     ["wren", "Wren", "home", "common-office", "claude", "limited", 900, "", "normal"],
   ];
+  if (mode === "seats" || mode === "meeting") {
+    people.length = 0;
+    for (const [project,count] of [["alpha",6],["bravo",6],["charlie",4],["delta",2],["common-office",2]]) {
+      for (let i=0;i<count;i++) people.push([project+"-"+i, project+" "+(i+1), "home", project,
+        i%2 ? "codex" : "claude", "waiting", 90, "", "normal"]);
+    }
+    for (let i=0;i<6;i++) people.push(["meeting-"+i,"Meeting "+(i+1),"home","zz-meeting",
+      i%2 ? "codex" : "claude", i%2 ? "thinking" : "working", 90, "Read", "normal"]);
+    for (let i=0;i<3;i++) people.push(["fika-"+i,"Fika "+(i+1),"home","alpha","claude","idle",4300,"","normal"]);
+    people.push(["bed","Resting colleague","home","alpha","codex","error",120,"","normal"]);
+  }
   const seats = new Map();
   const agents = people.map(([id, alias, host, project, provider, , , , condition]) => {
     const key = [host, provider].join("/");
@@ -45,9 +56,13 @@ export function demoState(now = Date.now()) {
       branch("garden", "Garden studio", true, "Seoul", "Asia/Seoul"),
       branch("night", "Night studio", false, "Vancouver", "America/Vancouver")],
     agents, activities,
-    contractors: [contractor("milo", "milo", "claude", "working", 240, "Read"),
+    meetings: { home: { project_id: mode === "1" ? "agentville" : "zz-meeting",
+      members: (mode === "1" ? [["home","milo"],["home","theo"],["garden","sage"]]
+        : Array.from({length:6},(_,i)=>["home","meeting-"+i])).map(([branch_id,agent_id],chair) =>
+          ({key:JSON.stringify([branch_id,agent_id]),branch_id,agent_id,chair})) } },
+    contractors: mode === "1" ? [contractor("milo", "milo", "claude", "working", 240, "Read"),
       contractor("sage", "sage-1", "codex", "working", 80, "exec_command"), contractor("sage", "sage-2", "claude", "waiting", 30),
-      contractor("sage", "sage-3", "claude", "idle", 300)],
+      contractor("sage", "sage-3", "claude", "idle", 300)] : [],
   };
 }
 

@@ -6,7 +6,7 @@ This document covers the office page served by HQ: places, states, views, and se
 
 **Out of scope:** how the Collector decides states (docs/architecture.md in the repository).
 
-Open HQ in a browser, for example `http://127.0.0.1:8470/`. With a viewer token, open `.../#token=<viewer token>` once; the page keeps the token for the browser session. `/?demo=1` shows fictional colleagues without connecting to HQ; the screenshots below are taken in that mode.
+Open HQ in a browser, for example `http://127.0.0.1:8470/`. With a viewer token, open `.../#token=<viewer token>` once; the page keeps the token for the browser session. `/?demo=1` shows fictional colleagues without connecting to HQ; the screenshots use that mode or the full-seat demonstration `/?demo=seats`.
 
 ## Virtual office
 
@@ -18,10 +18,15 @@ One floor per Branch. The Branch selector at the top of the office card switches
 |---|---|
 | Project room | Colleagues working in that repository. The room name is the repository; the sublabel reads "repository". |
 | Common Office | Colleagues working outside any repository. |
+| Meeting room | Up to six colleagues of one Project, after 60 seconds of observed concurrent work. |
 | Lounge (Fika) | Colleagues idle for an hour or more, with the default thresholds; each Branch can set its own ([Configuration](configuration.md)). |
 | Infirmary | Colleagues in `Error`. |
 
-A room shows a fixed number of desks; more colleagues than desks appear as "+N". Two project rooms fit on one floor; the arrows beside the room tabs show the next ones.
+The single floor has 20 desks: four Project studios with 6, 6, 4, and 2 places, plus two Common Office places. The arrows beside the room tabs page through four Projects at a time. A full Project room shows extra colleagues as "+N"; another Project's free desks are not reassigned.
+
+Meeting participants appear at the table on every Project page. Their held desks remain reserved and empty, and their Project filters and colleague details continue to work. Waiting, error, limits, or going off duty ends membership immediately; other non-working states have a 30-second grace period. Meetings are presentation only and do not record collaboration.
+
+Fika uses its two sofa places and armchair before placing colleagues in a waiting line. The infirmary has one bed. Colleagues walk between places on the same floor; reduced motion places them directly. `/?demo=seats` and `/?demo=meeting` display all 30 seat ids for inspecting the layout.
 
 Each colleague wears a provider badge (`CL` Claude, `CX` Codex). Contractors (subagents) stand beside their colleague in a yellow hard hat with their own provider badge.
 
@@ -84,6 +89,7 @@ The Timeline lists what HQ recorded on one day, newest first: colleagues startin
 Replay (되감기) shows the office as it was at an earlier time:
 
 - Pick a day, then move the time slider, select an entry in the list, or press play. Speeds are 1x, 10x (a minute in 6 seconds), and 60x (a minute per second). The step buttons jump to the previous or next recorded change.
+- Replay does not show meetings.
 - While replaying, a banner with the replay time appears on every page. The office, lists, details, clock, and window light show that time, so the Virtual office can be watched while it plays. The banner holds the same controls.
 - "Back to live" (or Escape) returns to the current state. Live data keeps arriving during replay; browser notifications are not sent while replaying.
 - HQ keeps 30 days of history by default (Installation Section 4). An HQ upgraded from 0.1.0 has history from the upgrade on.

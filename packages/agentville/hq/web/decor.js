@@ -1,26 +1,11 @@
-// Code-drawn decoration over office.png: paintings inside the existing wall frames and a few flower props.
+import { FRAMES } from "./office-layout.js";
+import { ARTWORK } from "./layout.js";
+// Branch-specific paintings fill the existing frames; the artwork supplies all four flower arrangements.
 // Choices follow the Branch id, so each Branch looks distinct but stable. No text, logos, or Branch data is drawn.
 const NS = "http://www.w3.org/2000/svg";
 const CELL = 4;
-// Inner edge of each wall frame in office.png pixels: top-left, top-right, bottom-right, bottom-left.
-const FRAMES = [
-  { name: "studio-left", quad: [[286,152],[339,127],[339,211],[286,236]] },
-  { name: "studio-back", quad: [[780,166],[850,190],[850,262],[780,238]] },
-  // A plant stands in front of this frame; its leaves are redrawn from office.png above the painting.
-  { name: "common", quad: [[80,485],[124,464],[124,523],[80,544]],
-    front: "60,522 66,519 72,521 80,524 86,521 93,522 100,526 106,531 110,538 113,548 116,560 60,560" },
-  // The lounge wall is redrawn above walkers in the aisle behind it, so its painting sits just above that layer.
-  { name: "lounge", quad: [[749,468],[799,444],[799,516],[749,540]], depth: 59 },
-  { name: "studio-right", quad: [[1247,226],[1313,252],[1313,326],[1247,300]] },
-];
-// Free furniture surfaces in office.png pixels (vase base) and stacking depth; none is a seat or a floor route.
-const FLOWER_SPOTS = [
-  { name: "coffee-table", at: [792,757], depth: 79 },
-  { name: "fridge-top", at: [940,583], depth: 60 },
-  { name: "studio-cabinet", at: [777,276], depth: 33 },
-  { name: "window-sill", at: [1394,630], depth: 62 },
-  { name: "common-desk", at: [140,553], depth: 60 },
-];
+// Inner edge of each wall frame in office-unified.png pixels: top-left, top-right, bottom-right, bottom-left.
+const FLOWER_SPOTS = [];
 const C = {
   cream: "#efe3c8", mat: "#f3ead8", sand: "#e2c9a0", peach: "#eab48a", terracotta: "#c58261", rust: "#a8613f",
   sage: "#a4b792", olive: "#7f9570", moss: "#5f7a4f", sky: "#a9c4c9", mist: "#d4e0dc", lavender: "#b8a4c8",
@@ -225,7 +210,7 @@ export function mountDecor(world) {
         layer.innerHTML = '<g class="painting" data-frame="' + frame.name + '" data-painting="' + order[i] + '">'
           + painting(frame, order[i], seeded("painting:" + key + ":" + i), id)
           + (frame.front ? '<clipPath id="' + id + '-front"><polygon points="' + frame.front + '"/></clipPath>'
-            + '<image href="office.png" width="1536" height="1024" clip-path="url(#' + id + '-front)"/>' : '') + '</g>';
+            + '<image href="' + ARTWORK.file + '" width="1536" height="1024" clip-path="url(#' + id + '-front)"/>' : '') + '</g>';
       });
       for (const { spot, layer } of flowers) layer.innerHTML = flower(spot, seeded("flower:" + key + ":" + spot.name));
     },

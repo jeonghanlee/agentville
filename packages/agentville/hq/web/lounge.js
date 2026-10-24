@@ -51,7 +51,7 @@ export const GLYPH_ART = {
   sun: '<path d="M2 2h3v3H2Z" fill="#f0b44a"/><path d="M3 0h1v1H3Zm0 6h1v1H3ZM0 3h1v1H0Zm6 0h1v1H6Z" fill="#e59b3a"/>',
 };
 
-export function createLounge(root, { motionAllowed }) {
+export function createLounge(root, { motionAllowed, room = "fika", conversationOnly = false }) {
   const profiles = new Map(), drinks = new Map(), states = new Map();
   let members = [], talk = null, lastPair = "", nextTalk = performance.now() + between([1500, 4000]);
   let previous = performance.now();
@@ -75,7 +75,7 @@ export function createLounge(root, { motionAllowed }) {
     return [...root.querySelectorAll(".agent")].find((node) => node.dataset.employeeKey === key);
   }
   function seated(node) {
-    return node && node.dataset.room === "fika" && node.classList.contains("seated") && !node.classList.contains("filtered");
+    return node && node.dataset.room === room && node.classList.contains("seated") && !node.classList.contains("filtered");
   }
   function spell(state, now, random = Math.random) {
     const choices = ["drink", "drink", "sit", ...(state.profile.reads ? ["read", "read"] : [])].filter((name) => name !== state.activity);
@@ -105,7 +105,8 @@ export function createLounge(root, { motionAllowed }) {
     const svg = node.querySelector(":scope > .character");
     if (!svg) return;
     const { profile } = state;
-    const activity = still ? profile.still : talk && (talk.a === state.key || talk.b === state.key) ? "talk" : state.activity;
+    const activity = talk && !still && (talk.a === state.key || talk.b === state.key) ? "talk"
+      : conversationOnly ? "sit" : still ? profile.still : state.activity;
     const set = (name, value) => { if ((svg.dataset[name] || "") !== value) { if (value) svg.dataset[name] = value; else delete svg.dataset[name]; } };
     set("lounge", activity);
     set("sipStyle", profile.sipStyle);
@@ -144,7 +145,7 @@ export function createLounge(root, { motionAllowed }) {
       // Usually the nearest neighbour, sometimes anyone else; the same pair rarely talks twice in a row.
       const choose = () => {
         const [a, node] = pick(present);
-        const others = present.filter(([key]) => key !== a).sort(([, x], [, y]) =>
+        const others = present.filter(([key, other]) => key !== a && other.dataset.room === node.dataset.room).sort(([, x], [, y]) =>
           Math.hypot(parseFloat(x.style.left) - parseFloat(node.style.left), parseFloat(x.style.top) - parseFloat(node.style.top))
           - Math.hypot(parseFloat(y.style.left) - parseFloat(node.style.left), parseFloat(y.style.top) - parseFloat(node.style.top)));
         const [b] = Math.random() < .55 ? others[0] : pick(others);
@@ -161,7 +162,7 @@ export function createLounge(root, { motionAllowed }) {
       talk.turnUntil = now + between(TURN_LENGTH);
     }
     const shown = new Set(present.map(([, node]) => node));
-    root.querySelectorAll(".agent > .talk-bubble").forEach((element) => { if (!shown.has(element.parentElement)) element.remove(); });
+    root.querySelectorAll(".agent > .talk-bubble").forEach((element) => { if (element.parentElement.dataset.room === room && !shown.has(element.parentElement)) element.remove(); });
     for (const [key, node] of present) {
       const state = states.get(key);
       if (!state) continue;
