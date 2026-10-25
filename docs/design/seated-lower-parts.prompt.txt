@@ -1,0 +1,20 @@
+Use case: stylized-concept.
+Asset type: transparent LOWER-BODY sprite parts for an isometric office game.
+Reference image 1 supplies the six clothing identities, trouser colors, shoe colors, paint texture, and seated three-quarter viewing angles. It is NOT the requested output composition.
+
+Generate a NEW atlas with exactly TWELVE lower-body parts: SIX columns, TWO rows. No heads, no faces, no arms, no hands, no torsos, no chairs, no tables, no floor. Each part is cropped just above the trouser waist, showing a tiny matching shirt hem, the entire pelvis, bent thighs, bent knees, hanging calves and complete shoes.
+TOP ROW: front three-quarter seated lower bodies facing toward the lower left.
+BOTTOM ROW: rear three-quarter seated lower bodies facing toward the upper right.
+
+These are seated adult legs for a NORMAL-HEIGHT office chair. IMPORTANT: pelvis supported at seat height; thighs extend forward nearly horizontally; a clear 90-degree knee bend; calves hang vertically downward; shoes plant flat on the floor. Long enough shins to span the full normal chair seat-to-floor distance. Do NOT draw squatting legs, crossed legs, feet tucked up beside the hips, straight standing legs, or knees resting on a seat. Keep shoes a normal compact size, not vertically elongated. Both shoes lie on the same floor plane with only a small isometric depth offset.
+Each isolated lower-body part should be approximately as tall as it is wide, slightly taller: roughly a 200-pixel-wide by 230-pixel-high silhouette. The waist is near the upper fifth of this silhouette. Its waist width is about two-thirds of its full silhouette width; the rest of the width accommodates the forward-bent thighs. Uniform physical size, same anatomical proportions across all twelve parts.
+
+Column identities, exactly the same in both rows:
+1. A narrow burnt-orange sweater hem, olive trousers, light beige sneakers.
+2. A sage-green sweater hem, dark charcoal trousers, dark shoes.
+3. A slate-blue sweater hem, cream trousers, light sneakers.
+4. A lavender sweater hem, dark brown trousers, dark shoes.
+5. A mustard sweater hem, olive trousers, light sneakers.
+6. A teal sweater hem, dark charcoal trousers, light sneakers.
+Use the exact trouser and shoe palette and textured hand-painted chibi game-art finish of the reference. Only the lower-leg pose changes, not wardrobe.
+Landscape atlas, evenly spaced six columns and two rows, large completely transparent gutters between every part. Entire shoes visible, no clipping. No shadows outside the parts, no opaque gradient, no text or labels. Actual transparent background.

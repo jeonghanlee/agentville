@@ -16,17 +16,16 @@ One floor per Branch. The Branch selector at the top of the office card switches
 
 | Place | Who is there |
 |---|---|
-| Project room | Colleagues working in that repository. The room name is the repository; the sublabel reads "repository". |
-| Common Office | Colleagues working outside any repository. |
-| Meeting room | Up to six colleagues of one Project, after 60 seconds of observed concurrent work. |
+| Project area | Colleagues working in that repository, with priority for its desks. The name is the repository; the sublabel reads "repository". |
+| Common Office | Colleagues working outside any repository; they use available desks. |
+| Meeting rooms | Two rooms, each seating up to six colleagues of a different Project after 60 seconds of observed concurrent work. |
 | Lounge (Fika) | Colleagues idle for an hour or more, with the default thresholds; each Branch can set its own ([Configuration](configuration.md)). |
-| Infirmary | Colleagues in `Error`. |
 
-The single floor has 20 desks: four Project studios with 6, 6, 4, and 2 places, plus two Common Office places. The arrows beside the room tabs page through four Projects at a time. A full Project room shows extra colleagues as "+N"; another Project's free desks are not reassigned.
+The single floor has 20 desks: three window areas with four places each and a central area with eight. The arrows beside the room tabs page through four Projects at a time. Colleagues take their Project's available desks first, then share other vacancies with Common Office. Occupants keep their desks until they leave; arrivals do not move existing occupants. Further colleagues appear as "+N" when all desks are reserved.
 
 Meeting participants appear at the table on every Project page. Their held desks remain reserved and empty, and their Project filters and colleague details continue to work. Waiting, error, limits, or going off duty ends membership immediately; other non-working states have a 30-second grace period. Meetings are presentation only and do not record collaboration.
 
-Fika uses its two sofa places and armchair before placing colleagues in a waiting line. The infirmary has one bed. Colleagues walk between places on the same floor; reduced motion places them directly. `/?demo=seats` and `/?demo=meeting` display all 30 seat ids for inspecting the layout.
+Fika has 28 places: 16 around two tables, six on two sofas, and six at three high tables. Colleagues fill these places before joining a waiting line. An Error colleague uses a desk and retains the error status; this floor has no infirmary or bed. Live arrivals enter between the sofas and Fika. Colleagues walk between places on the same floor; reduced motion places them directly. `/?demo=seats` and `/?demo=meeting` display all 60 seat ids, including both six-person meetings.
 
 Each colleague wears a provider badge (`CL` Claude, `CX` Codex). Contractors (subagents) stand beside their colleague in a yellow hard hat with their own provider badge.
 
@@ -39,7 +38,7 @@ Each colleague wears a provider badge (`CL` Claude, `CX` Codex). Contractors (su
 | Waiting | 대기 | Raised hand and "!". The agent waits for a person's answer or approval. |
 | Idle | 유휴 | At the desk; with the default thresholds, after 5 minutes on the phone, after 30 minutes dozing, after an hour in the Lounge. The thresholds are set per Branch ([Configuration](configuration.md)). |
 | Closed | 닫힘 | A short check mark when a turn ends. |
-| Error | 오류 | In the Infirmary. |
+| Error | 오류 | At a desk, with an error mark. |
 | Limited | 한도 | Screen off and a clock; the detail shows when the usage limit resets. |
 | Not measured | 재지 못함 | Dimmed with "?". The state could not be determined. |
 

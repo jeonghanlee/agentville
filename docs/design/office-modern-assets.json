@@ -1,0 +1,48 @@
+{
+  "tool": "OpenAI built-in image generation and editing",
+  "assets": {
+    "office-modern.png": {
+      "sha256": "329fdfd71eeafdb3369d116609ca23d1feb599fa0b689b59531b8efbc6f5bd04",
+      "dimensions": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "prompt": "office-modern-artwork.prompt.txt",
+      "prompt_sha256": "6b89c633adc06b3851abaa3d52c9d5032d0d75c0aa2835306a588d5de24def83"
+    },
+    "seated-lower-parts.png": {
+      "sha256": "16641a40d7e0d14ea706a6e4af58de11877b56b5ea9690304b7b9373c135877c",
+      "dimensions": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "prompt": "seated-lower-parts.prompt.txt",
+      "prompt_sha256": "82fe2f9e0c9a521e858c537931a15c60348cbd04031de095300bb0b4af2875ec"
+    },
+    "high-stool-poses.png": {
+      "sha256": "22cb0884bf962d78ac795dbad5e5bd34b6531bf254ba146e8047dd15666548fb",
+      "dimensions": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "prompt": "high-stool-poses.prompt.txt",
+      "prompt_sha256": "b68c9519f72e85a6b81e705706740b3cd8986df5fc74d7d93de62ecb3dfdcc8f"
+    }
+  },
+  "office_edit_reference_sha256": {
+    "office-c-09-unified-seating.png": "e6aee11447d7c2ce5f21767bb457a3f6f7590f87a1080988f2a186a19915883b",
+    "office-c-11-expanded-meeting-scale.png": "544834d307b72c895caf85c7273fba663b8337f8b028e3a0d1f807dd8b550af9"
+  },
+  "raw_office": "sources/office-modern.png",
+  "raw_runtime_identical": true,
+  "capacity": {
+    "desk": 20,
+    "meeting": 12,
+    "fika_table": 16,
+    "sofa": 6,
+    "high_table": 6
+  }
+}

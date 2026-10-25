@@ -132,3 +132,30 @@ export function meetings(state, observations, previous, now, mode, closed, capac
   }
   return result;
 }
+
+// Rooms retain their meetings independently. A Project occupies at most one room; a free room uses the same
+// qualification and tie rules as a single room, excluding Projects already using another room in that Branch.
+export function meetingsInRooms(state, observations, previous, now, mode, closed, rooms) {
+  const result = {};
+  for (const branch of state.branches || []) {
+    const branchId = branch.branch_id, active = new Map();
+    const last = previous?.[branchId];
+    const prior = Array.isArray(last) ? last : last ? [{ ...last, room: rooms[0]?.id }] : [];
+    for (const room of rooms) {
+      const meeting = prior.find((item) => item.room === room.id);
+      if (!meeting) continue;
+      const sameProject = { ...state, agents: state.agents.filter((agent) => agent.project_id === meeting.project_id) };
+      const kept = meetings(sameProject, observations, { [branchId]: meeting }, now, mode, closed, room.capacity)[branchId];
+      if (kept) active.set(room.id, { ...kept, room: room.id });
+    }
+    const occupied = new Set([...active.values()].map((meeting) => meeting.project_id));
+    for (const room of rooms) {
+      if (active.has(room.id)) continue;
+      const available = { ...state, agents: state.agents.filter((agent) => !occupied.has(agent.project_id)) };
+      const meeting = meetings(available, observations, {}, now, mode, closed, room.capacity)[branchId];
+      if (meeting) { active.set(room.id, { ...meeting, room: room.id }); occupied.add(meeting.project_id); }
+    }
+    result[branchId] = rooms.map((room) => active.get(room.id)).filter(Boolean);
+  }
+  return result;
+}

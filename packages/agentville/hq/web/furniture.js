@@ -1,8 +1,9 @@
 import { FOOTPRINTS } from "./floor.js";
 import { mirroredFacing } from "./seats.js";
 
-import { SURFACES } from "./office-layout.js";
-import { ARTWORK, ACTOR_WIDTH, ACTOR_VIEW } from "./layout.js";
+import { SURFACES, WALK_SURFACES } from "./office-layout.js";
+import { ARTWORK, ACTOR_WIDTH, ACTOR_VIEW, floorDepth, actorPixels, pointPixels } from "./layout.js";
+const NS = "http://www.w3.org/2000/svg";
 
 // Furniture and actors share floor depth; foreground pixels match the source artwork.
 function bounds(polygon, x) {
@@ -39,8 +40,36 @@ export function walkerDepth(x, y) {
     if (y >= span[1] || (y > span[0] && y > (span[0]+span[1]) / 2)) lower = Math.max(lower, depth+1);
     else upper = Math.min(upper, depth-1);
   });
-  const base = Math.floor(y) + 1;
+  const base = floorDepth(y);
   return lower > upper ? lower : Math.min(Math.max(base, lower), upper);
+}
+
+// Foreground source pixels cover only the moving figure's viewport, leaving seated hands above keyboards.
+export function updateWalkerOcclusion(node, x, y) {
+  let layer = node.querySelector(":scope > .walker-occlusion");
+  if (!node.classList.contains("walking")) { layer?.remove(); return; }
+  const pixels = actorPixels() / ACTOR_VIEW.width, foot = pointPixels([x,y]);
+  const origin = [foot[0] - actorPixels() / 2, foot[1] - ACTOR_VIEW.foot * pixels];
+  const local = (polygon) => polygon.map(([u,v]) => [(u-origin[0])/pixels, (v-origin[1])/pixels].join(",")).join(" ");
+  const shapes = WALK_SURFACES.filter(({ footprint, polygon }) => {
+    const xs = polygon.map(([u]) => u), ys = polygon.map(([,v]) => v);
+    if (Math.max(...xs) < origin[0] || Math.min(...xs) > origin[0] + actorPixels()
+      || Math.max(...ys) < origin[1] || Math.min(...ys) > foot[1]) return false;
+    const footprintXs = FOOTPRINTS[footprint].map(([u]) => u);
+    const span = bounds(FOOTPRINTS[footprint], Math.min(Math.max(x, Math.min(...footprintXs)), Math.max(...footprintXs)));
+    return span && y < (span[0] + span[1]) / 2;
+  });
+  if (!shapes.length) { layer?.remove(); return; }
+  if (!layer) {
+    layer = document.createElementNS(NS, "svg");
+    layer.setAttribute("class", "walker-occlusion"); layer.setAttribute("viewBox", "0 0 32 43");
+    layer.setAttribute("aria-hidden", "true"); node.append(layer);
+  }
+  const id = "walking-foreground-" + node.querySelector(":scope > .character").dataset.occlusionId;
+  layer.innerHTML = '<defs><clipPath id="' + id + '">'
+    + shapes.map(({ polygon }) => '<polygon points="' + local(polygon) + '"/>').join("")
+    + '</clipPath></defs><image href="' + ARTWORK.file + '" x="' + (-origin[0]/pixels) + '" y="' + (-origin[1]/pixels)
+    + '" width="' + ARTWORK.width/pixels + '" height="' + ARTWORK.height/pixels + '" clip-path="url(#' + id + ')"/>';
 }
 
 export function mountFurniture(world) {
@@ -100,9 +129,10 @@ export function mountFurniture(world) {
       clone.setAttribute("width",bounds.width*ARTWORK.width/floor.width);
       clone.setAttribute("height",bounds.height*ARTWORK.height/floor.height);
       clone.style.removeProperty("transform");
-      if (mirroredFacing(selected.dataset.seatFacing) || selected.dataset.coffeeFacing === "left") {
+      if (mirroredFacing(selected.dataset.seatFacing) || selected.dataset.seatFacing === "side-left" || selected.dataset.coffeeFacing === "left") {
         const mirror = document.createElementNS("http://www.w3.org/2000/svg","g");
-        mirror.setAttribute("transform","translate(32 0) scale(-1 1)");
+        const width = clone.getAttribute("viewBox").split(/\s+/).map(Number)[2];
+        mirror.setAttribute("transform",`translate(${width} 0) scale(-1 1)`);
         mirror.append(...clone.childNodes); clone.append(mirror);
       }
       const clip = document.createElementNS("http://www.w3.org/2000/svg","g");

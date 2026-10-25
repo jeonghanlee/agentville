@@ -9,7 +9,7 @@ from tests.browser_support import launch_options, playwright_sync
 from tests.lifecycle_support import HQ
 
 playwright = playwright_sync()
-ANNOTATIONS = Path(__file__).parent / "fixtures" / "unified-image-annotations.json"
+ANNOTATIONS = Path(__file__).parent / "fixtures" / "modern-image-annotations.json"
 
 
 @pytest.fixture(scope="module")
@@ -84,11 +84,11 @@ def test_graph_and_every_route_keep_46_pixel_clearance(geometry):
     assert geometry["foot"] == {"half": 1.35, "back": .7, "front": .15}
 
 
-def test_single_floor_has_twenty_desks_and_ten_facility_seats(geometry):
+def test_single_floor_has_twenty_desks_and_forty_facility_seats(geometry):
     seats = geometry["seats"]
-    assert len(seats) == 30
+    assert len(seats) == 60
     assert {seat["scene"] for seat in seats} == {"main"}
-    expected = {"studio0": 6, "studio1": 6, "studio2": 4, "studio3": 2, "common": 2, "meeting": 6, "fika": 3, "infirmary": 1}
+    expected = {"studio0": 4, "studio1": 4, "studio2": 4, "studio3": 8, "meeting": 6, "meeting-east": 6, "fika": 28}
     for room, count in expected.items():
         assert [seat["id"] for seat in seats if seat["id"].startswith(room + ".")] == [f"{room}.{i}" for i in range(count)]
     assert sum(seat["desk"] for seat in seats) == 20

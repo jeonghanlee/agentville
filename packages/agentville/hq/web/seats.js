@@ -16,5 +16,6 @@ export const frontFacing = (facing) => facing === "front" || facing === "front-r
 export const mirroredFacing = (facing) => facing === "back-left" || facing === "front-right";
 // Where the feet of a seated figure rest, in front of the chair or cushion; the step to the approach starts here.
 export function seatFoot(seat) {
+  if (seat.foot) return seat.foot;
   return [seat.position[0], seat.position[1] + seatedFootOffset(rearFacing(seat.facing))];
 }

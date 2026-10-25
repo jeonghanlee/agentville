@@ -1,8 +1,10 @@
 // Branch-provided strings are rendered through text nodes, never as markup.
 import { icon, character, avatarColor, prepareAppearances } from "./art.js";
-import { applyLayoutMetrics, RECLINING_WIDTH, ACTOR_SCALE, PROJECTS_PER_PAGE, seatedFootOffset } from "./layout.js";
-import { ROOM_LAYOUT, WAITING_SPOTS } from "./office-layout.js";
-import { createObservations, observe, meetings } from "./meeting.js";
+import { applyLayoutMetrics, RECLINING_WIDTH, ACTOR_SCALE, PROJECTS_PER_PAGE, floorDepth } from "./layout.js";
+import { ROOM_LAYOUT, WAITING_SPOTS, SEATS, MEETING_ROOMS, ENTRANCE } from "./office-layout.js";
+import { createObservations, observe, meetingsInRooms } from "./meeting.js";
+import { reserveDesks } from "./reservations.js";
+import { seatedCharacter, seatedWorkstation, applySeatedMetrics } from "./seated.js";
 import { demoState } from "./demo.js";
 import { updateWorkGestures, WORK_MOTION_INTERVAL } from "./motion.js";
 import { createOfficeCats } from "./cats.js";
@@ -14,8 +16,8 @@ import { createCoffeeBreaks } from "./coffee.js";
 import { createLounge } from "./lounge.js";
 import { createWalkers } from "./walk.js";
 import { NODES, route, distance, clear, blockedBy } from "./floor.js";
-import { roomSeats, seatFoot, rearFacing } from "./seats.js";
-import { walkerDepth } from "./furniture.js";
+import { roomSeats, roomOfSeat, indexOfSeat, seatFoot } from "./seats.js";
+import { walkerDepth, updateWalkerOcclusion } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
 import { el, button } from "./dom.js";
@@ -52,17 +54,20 @@ const companions = new Map();
 const screensOff = new Map();
 const completions = new Map();
 const lastStates = new Map();
-// Seat reservations per shown room: Map of colleague key to seat index, or null while waiting or overflowing.
+// Desk reservations store seat ids; facility reservations store indices. A null value waits for a vacancy.
 const seatOccupancy = new Map();
 let daylight = null;
 let furniture = null;
 let decor = null;
 let coffee = null;
-let lounge = null, meetingLounge = null;
+let lounge = null;
+const meetingLounges = new Map();
 let observations = createObservations(), branchMeetings = {};
 let walkers = null;
 // Last floor place of each shown colleague, so a change of place becomes a walk.
 const places = new Map();
+let shownBranch = null;
+let actorRevision = 0;
 const motionAllowed = () => !matchMedia("(prefers-reduced-motion: reduce)").matches && !document.body.classList.contains("reduce-motion");
 let cats = null;
 let notifications = null;
@@ -207,7 +212,6 @@ function rows(data = current) {
 }
 function roomOf(row) {
   if (displayedMeeting()?.members.some((member) => member.key === row.key)) return projectRoom(row.agent.project_id);
-  if (row.state === "error") return "infirmary";
   if (row.detail === "fika") return "fika";
   return row.agent.project_id === COMMON ? "common" : projectRoom(row.agent.project_id);
 }
@@ -220,14 +224,17 @@ function passes(row) {
   return queryMatches(row) && (stateFilter === "all" || stateFilter === row.state) && (!roomFilter || roomFilter === roomOf(row));
 }
 function displayedMeeting() {
-  return replay?.active ? null : branchMeetings[branchId];
+  if (replay?.active) return null;
+  const value = branchMeetings[branchId];
+  if (!Array.isArray(value)) return value;
+  return { members: value.flatMap((meeting) => meeting.members.map((member) => ({ ...member, room: meeting.room }))) };
 }
 function updateMeetings(restart = false) {
   if (DEMO) { branchMeetings = live.meetings || {}; return; }
   if (!connected) return;
   const now = Date.now();
   observations = observe(observations, live, now, { restart });
-  branchMeetings = meetings(live, observations, branchMeetings, now, "live", live.lifecycles, roomSeats("meeting").length);
+  branchMeetings = meetingsInRooms(live, observations, branchMeetings, now, "live", live.lifecycles, MEETING_ROOMS);
 }
 function context(all) {
   const local = all.filter((r) => r.agent.branch_id === branchId);
@@ -239,7 +246,7 @@ function context(all) {
   const present = all.filter((r) => r.duty && (r.agent.branch_id === branchId || ids.has(r.agent.project_id)));
   const pageIds = new Set(page.map((p) => p.id));
   const office = present.filter((r) => pageIds.has(r.agent.project_id) || displayedMeeting()?.members.some((m) => m.key === r.key)
-    || ["common", "fika", "infirmary"].includes(roomOf(r)));
+    || ["common", "fika"].includes(roomOf(r)));
   return { local, projects, page, present, office };
 }
 // Unverified has two causes: the page has no HQ connection, or HQ is connected but has no fresh Branch report.
@@ -273,7 +280,7 @@ function avatar(row) {
 function selectEmployee(key) {
   const all = rows();
   const row = all.find((r) => r.key === key);
-  if (row && !["common", "fika", "infirmary"].includes(roomOf(row))) {
+  if (row && !["common", "fika"].includes(roomOf(row))) {
     const index = context(all).projects.findIndex((p) => p.id === row.agent.project_id);
     if (index >= 0) floor = Math.floor(index / PROJECTS_PER_PAGE);
   }
@@ -302,8 +309,7 @@ function renderFilters(ctx) {
 function renderRooms(ctx) {
   const rooms = ctx.page.map((p,i) => ({ ...p, id: projectRoom(p.id), color: ROOM_LAYOUT["studio" + i].color, repository: true }));
   rooms.push({ id: "common", name: t("room.common"), color: ROOM_LAYOUT.common.color },
-    { id: "fika", name: t("room.fika"), color: ROOM_LAYOUT.fika.color },
-    { id: "infirmary", name: t("room.infirmary"), color: ROOM_LAYOUT.infirmary.color });
+    { id: "fika", name: t("room.fika"), color: ROOM_LAYOUT.fika.color });
   $("rooms").replaceChildren(...rooms.map((room) => button([
     el("i", { class: "room-square", style: { "--room-color": room.color } }), room.name,
     room.repository ? el("small", { class: "room-kind" }, t("room.repository")) : null,
@@ -333,7 +339,8 @@ function placeOf(seat, spot) {
 }
 // A changed place starts a walk along the floor routes; the first sighting, another Branch, or reduced motion places directly.
 function moveWalker(key, target) {
-  const last = places.get(key);
+  const last = places.get(key) || (shownBranch === branchId && !DEMO && !replay?.active
+    ? { foot: ENTRANCE, approach: null, scope: branchId } : null);
   places.set(key, { ...target, scope: branchId });
   const current = walkers?.get(key);
   if (!walkers || !last || last.scope !== branchId || !motionAllowed()) { walkers?.stop(key); return null; }
@@ -352,21 +359,32 @@ function moveWalker(key, target) {
 }
 function renderCharacters(ctx) {
   const members = new Map((displayedMeeting()?.members || []).map((member) => [member.key, member]));
+  const desks = SEATS.filter((seat) => seat.workstation);
+  const preferred = new Map();
+  const residents = ctx.office.filter((row) => {
+    if (roomOf(row) === "fika") return false;
+    const index = ctx.page.findIndex((project) => project.id === row.agent.project_id);
+    if (index < 0 && row.agent.project_id !== COMMON) return false;
+    preferred.set(row.key, index < 0 ? "common" : "studio" + index);
+    return true;
+  });
+  const deskScope = keyOf(branchId, "desks:" + floor + ":" + JSON.stringify(ctx.page.map((project) => project.id)));
+  const assignments = reserveDesks(seatOccupancy.get(deskScope) || new Map(), residents, desks, preferred,
+    DEMO ? new Set() : new Set(members.keys()));
+  seatOccupancy.set(deskScope, assignments);
   const groups = new Map();
   for (const row of ctx.office) {
-    let room = roomOf(row);
-    const projectIndex = ctx.page.findIndex((p) => projectRoom(p.id) === room);
-    if (projectIndex !== -1) room = "studio" + projectIndex;
+    const id = assignments.get(row.key), member = members.get(row.key);
+    const room = member ? member.room || "meeting" : roomOf(row) === "fika" ? "fika"
+      : id ? roomOfSeat({ id }) : preferred.get(row.key);
     if (!Object.hasOwn(ROOM_LAYOUT, room)) continue;
     if (!groups.has(room)) groups.set(room, []);
     groups.get(room).push(row);
   }
-  // Every room keeps its seats for the visit: a colleague holds its desk, lounge chair, or bed until it leaves the room,
-  // newcomers take the lowest free seat (people arrive in seat-number order), and the others stay put.
-  // Facilities keep a waiting line in first-arrival order; desk rooms show further people as "+N".
-  // Desk assignments start over when the shown Branch or floor page changes.
-  const scopes = new Set();
-  for (const room of new Set([...groups.keys(), ...Object.keys(WAITING_SPOTS)])) {
+  // Fika keeps arrival order across its table, sofa and stool places. Desks remain held during a meeting;
+  // all visible Projects and Common Office share vacancies after their own areas have been allocated.
+  const scopes = new Set([deskScope]);
+  for (const room of Object.keys(WAITING_SPOTS)) {
     const id = seatScope(ctx, room);
     scopes.add(id);
     if (!seatOccupancy.has(id)) seatOccupancy.set(id,new Map());
@@ -388,16 +406,16 @@ function renderCharacters(ctx) {
   coffee?.sync([...fika].filter(([,index]) => index !== null)
     .map(([key,index]) => [key,roomSeats("fika")[index]]),branchId);
   lounge?.sync([...fika.keys()].map((key) => [key, JSON.parse(key)[1]]));
-  meetingLounge?.sync(ctx.present.filter((row) => members.has(row.key)).map((row) => [row.key,row.agent.agent_id]));
-  for (const [room,people] of groups) groups.set(room,people.filter((row) => !members.has(row.key)));
-  const meetingPeople = ctx.present.filter((row) => members.has(row.key));
-  if (meetingPeople.length) groups.set("meeting",meetingPeople);
+  for (const [room, controller] of meetingLounges) controller.sync(ctx.present
+    .filter((row) => (members.get(row.key)?.room || (members.has(row.key) ? "meeting" : "")) === room)
+    .map((row) => [row.key, row.agent.agent_id]));
   const used = new Set(), hired = new Set(), dark = new Set();
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room], seats = roomSeats(room);
-    const occupants = room === "meeting" ? new Map([...members].map(([key,member]) => [key,member.chair]))
-      : seatOccupancy.get(seatScope(ctx,room));
+    const occupants = room.startsWith("meeting") ? new Map(people.map((row) => [row.key, members.get(row.key).chair]))
+      : room === "fika" ? seatOccupancy.get(seatScope(ctx,room))
+      : new Map(people.map((row) => [row.key, assignments.get(row.key) ? indexOfSeat({ id: assignments.get(row.key) }) : null]));
     const waiting = WAITING_SPOTS[room] ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
     const shownWaiting = waiting.slice(0,WAITING_SPOTS[room]?.length || 0);
     if (waiting.includes(selected) && !shownWaiting.includes(selected)) shownWaiting[shownWaiting.length-1] = selected;
@@ -425,7 +443,7 @@ function renderCharacters(ctx) {
       const waitingIndex = shownWaiting.indexOf(row.key);
       const spot = waitingIndex >= 0 ? WAITING_SPOTS[room][waitingIndex] : null;
       const place = spot ? null : seats[index];
-      const home = spot ? [...spot,"standing",Math.floor(spot[1])+1] : [...place.position, place.facing, place.depth];
+      const home = spot ? [...spot,"standing",floorDepth(spot[1])] : [...place.position, place.facing, place.depth];
       const walk = moveWalker(row.key, visit?.point ? { foot: visit.point, approach: null } : placeOf(place, spot));
       const counter = !walk && visit?.point;
       const seat = walk ? [walk.x, walk.y, "walking", walk.depth]
@@ -445,7 +463,8 @@ function renderCharacters(ctx) {
       node.style.top = seat[1] + "%";
       node.style.zIndex = String(seat[3]);
       // Keep unchanged SVG nodes alive so data refreshes do not restart gestures.
-      const workstation = place?.workstation ? { seat, keys: place.workstation } : null;
+      const seated = !walk && !counter && !spot;
+      const workstation = seated ? seatedWorkstation(place) : null;
       // Lounge colleagues hold their own drink; a counter visit shows the drink being fetched.
       const drink = row.detail === "fika" && lounge ? lounge.drink(row.key, row.agent.agent_id) : null;
       const cup = visit?.drink || drink || coffee?.cup(row.key);
@@ -470,15 +489,17 @@ function renderCharacters(ctx) {
         }
         screen.style.zIndex = String(seat[3] - 1);
       }
-      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, room, row.activity?.tool, node.dataset.queuePosition,
+      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, room, place?.id, row.activity?.tool, node.dataset.queuePosition,
         row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass)]);
       if (node.dataset.appearance !== appearance) {
         const name = el("span", { class: "agent-name" }, badge(row.agent.provider), row.name,
           row.agent.branch_id === branchId ? null : el("span", { class: "remote-badge" }, row.branchName),
           reset ? el("span", { class: "reset-time" }, reset) : null,
-          room === "meeting" ? stateLabel(row) : null,
-          room === "meeting" && row.state === "working" && row.activity?.tool ? el("span", { class: "agent-tool" }, row.activity.tool) : null);
-        const children = [character(row.key, row.state, detail, condition, false, desk, workstation, cup),
+          room.startsWith("meeting") ? stateLabel(row) : null,
+          room.startsWith("meeting") && row.state === "working" && row.activity?.tool ? el("span", { class: "agent-tool" }, row.activity.tool) : null);
+        const native = character(row.key, row.state, detail, condition, false, desk, workstation, cup);
+        native.dataset.occlusionId = String(++actorRevision);
+        const children = [seated ? seatedCharacter(native, place) : native,
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
         if (DEMO_MODE === "seats" || DEMO_MODE === "meeting") children.push(el("span", { class: "agent-seat-id" }, room + "." + index));
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
@@ -490,8 +511,10 @@ function renderCharacters(ctx) {
         node.replaceChildren(...children);
         node.dataset.appearance = appearance;
       }
+      applySeatedMetrics(node, place);
+      updateWalkerOcclusion(node, seat[0], seat[1]);
       lounge?.decorate(node, row.key);
-      meetingLounge?.decorate(node, row.key);
+      for (const controller of meetingLounges.values()) controller.decorate(node, row.key);
       // Each Contractor shows its own activity; further Contractors collapse into "+N".
       const shown = row.contractors.slice(0, MAX_CONTRACTORS);
       shown.forEach((contractor, i) => {
@@ -509,11 +532,11 @@ function renderCharacters(ctx) {
         companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
           + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
         companion.tabIndex = visible ? 0 : -1;
-        const foot = desk === "lying" ? [seat[0]+4.2*ACTOR_SCALE,seat[1]+13*ACTOR_SCALE]
-          : [seat[0]+3.1*ACTOR_SCALE,seat[1]+(walk || visit || spot ? 0 : seatedFootOffset(rearFacing(desk)))];
+        const contact = walk || visit || spot ? [seat[0],seat[1]] : seatFoot(place);
+        const foot = [contact[0]+3.1*ACTOR_SCALE,contact[1]];
         companion.style.left = (foot[0] + i * 2.8 * ACTOR_SCALE) + "%";
         companion.style.top = (foot[1] + i * .9 * ACTOR_SCALE) + "%";
-        companion.style.zIndex = String(Math.floor(foot[1] + i * .9 * ACTOR_SCALE)+1);
+        companion.style.zIndex = String(floorDepth(foot[1] + i * .9 * ACTOR_SCALE));
         const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra]);
         if (companion.dataset.appearance !== appearance) {
           companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
@@ -544,6 +567,7 @@ function renderCharacters(ctx) {
     if (!dark.has(key)) { node.remove(); screensOff.delete(key); }
   }
   updateWorkGestures($("characters"));
+  shownBranch = branchId;
 }
 
 function renderTeam(ctx) {
@@ -1133,7 +1157,8 @@ $("settings-dialog").addEventListener("click", (event) => { if (event.target ===
 applyLayoutMetrics($("world"));
 daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.querySelector(".scene-sun"), $("setting-daylight"));
 lounge = createLounge($("characters"), { motionAllowed });
-meetingLounge = createLounge($("characters"), { motionAllowed, room: "meeting", conversationOnly: true });
+for (const { id } of MEETING_ROOMS) meetingLounges.set(id,
+  createLounge($("characters"), { motionAllowed, room: id, conversationOnly: true }));
 walkers = createWalkers($("characters"), { motionAllowed, changed: render });
 coffee = createCoffeeBreaks($("characters"),render,lounge);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });

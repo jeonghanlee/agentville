@@ -1,5 +1,5 @@
 // Artwork dimensions and actor geometry shared by placement, gestures, occlusion and movement.
-export const ARTWORK = { file: "office-unified.png", width: 1536, height: 1024 };
+export const ARTWORK = { file: "office-modern.png", width: 1536, height: 1024 };
 export const ACTOR_WIDTH = 3.2;
 export const ACTOR_SCALE = ACTOR_WIDTH / 5;
 export const ACTOR_VIEW = { width: 32, height: 43, foot: 42.32, front: .64, back: .78 };
@@ -14,6 +14,7 @@ export const actorPixels = () => ARTWORK.width * ACTOR_WIDTH / 100;
 export const actorHeightPixels = () => actorPixels() * ACTOR_VIEW.height / ACTOR_VIEW.width;
 export const pointPercent = ([x,y]) => [x / ARTWORK.width * 100, y / ARTWORK.height * 100];
 export const pointPixels = ([x,y]) => [x / 100 * ARTWORK.width, y / 100 * ARTWORK.height];
+export const floorDepth = (y) => Math.round(y / 100 * ARTWORK.height * 10) + 1;
 
 // The logical floor point is inside the soles, rather than the bottom of the atlas viewport.
 export function seatedFootOffset(rear) {

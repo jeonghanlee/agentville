@@ -1,5 +1,5 @@
 import { distance, FLOOR_ASPECT } from "./floor.js";
-import { walkerDepth } from "./furniture.js";
+import { walkerDepth, updateWalkerOcclusion } from "./furniture.js";
 
 import { WALK_SPEED } from "./layout.js";
 
@@ -39,6 +39,7 @@ export function createWalkers(root, { motionAllowed, changed }) {
     node.style.zIndex = String(walkerDepth(x, y));
     node.dataset.coffeeFacing = walk.facing;
     node.dataset.walkView = walk.view;
+    updateWalkerOcclusion(node, x, y);
   }
   function finish(walk) {
     walks.delete(walk.key);

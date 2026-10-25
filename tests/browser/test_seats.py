@@ -1,4 +1,4 @@
-"""Unified office capacity, independent image targets and real live meeting transitions."""
+"""Modern office capacity, shared vacancies and real live meeting transitions."""
 
 import copy
 from datetime import timedelta
@@ -13,8 +13,8 @@ from tests.browser_support import launch_options, playwright_sync
 from tests.lifecycle_support import BRANCH, HQ
 
 playwright = playwright_sync()
-ANNOTATIONS = json.loads((Path(__file__).parent / "fixtures/unified-image-annotations.json").read_text())
-DESK_COUNTS = [("alpha", 6), ("bravo", 6), ("charlie", 4), ("delta", 2), ("common-office", 2)]
+ANNOTATIONS = json.loads((Path(__file__).parent / "fixtures/modern-image-annotations.json").read_text())
+DESK_COUNTS = [("alpha", 4), ("bravo", 4), ("charlie", 4), ("delta", 6), ("common-office", 2)]
 
 
 def roster(hq, counts=DESK_COUNTS, state="waiting"):
@@ -54,28 +54,28 @@ def placements(page):
 
 
 @pytest.mark.parametrize("width", [1440, 720])
-def test_all_thirty_seats_match_independent_image_measurements(tmp_path, width):
+def test_all_sixty_seats_match_independent_image_measurements(tmp_path, width):
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
         browser, page, errors = open_page(driver, hq.url + "/?demo=seats", width)
-        playwright.expect(page.locator("#characters .agent")).to_have_count(30)
+        playwright.expect(page.locator("#characters .agent")).to_have_count(60)
         for zoom in [100, 175]:
             if zoom == 175:
                 for _ in range(3):
                     page.locator("#zoom-in").click()
             observed = placements(page)
             by_id = {row["room"] + "." + row["index"]: row for row in observed}
-            assert len(by_id) == 30
+            assert len(by_id) == 60
             for seat in ANNOTATIONS["seats"]:
                 seen = by_id[seat["id"]]
                 assert seen["facing"] == seat["facing"], (seat, seen)
                 assert abs(seen["x"] * 15.36 - seat["anchor"][0]) < .02, (seat, seen)
                 assert abs(seen["y"] * 10.24 - seat["anchor"][1]) < .02, (seat, seen)
                 assert not seen["walking"]
-                if seen["room"] == "meeting":
+                if seen["room"].startswith("meeting"):
                     assert not seen["working"] and not seen["hands"]
             assert page.locator(".flower").count() == 0
-            assert page.locator(".painting").count() == 8
-            assert len(set(page.locator(".painting").evaluate_all("nodes=>nodes.map(n=>n.dataset.painting)"))) == 8
+            assert page.locator(".painting").count() == 4
+            assert len(set(page.locator(".painting").evaluate_all("nodes=>nodes.map(n=>n.dataset.painting)"))) == 4
             for period in ["morning", "day", "evening", "night"]:
                 page.locator("#setting-daylight").select_option(period, force=True)
                 playwright.expect(page.locator("#scene")).to_have_attribute("data-daylight", period)
@@ -128,11 +128,13 @@ def test_live_arrivals_reservations_overflow_and_four_project_pages(tmp_path, st
         page.keyboard.press("Enter")
         playwright.expect(page.locator("#employee-detail")).to_contain_text("alpha-0")
         page.locator("#search").fill("")
-        overflow = roster(hq, [("alpha", 7), ("bravo", 1)])
+        overflow = roster(hq, [("alpha", 21), ("bravo", 1)])
         hq.advance(); hq.send(payload=overflow)
-        playwright.expect(page.locator(".room-overflow")).to_have_text("+1")
-        assert sum(row["room"] == "studio0" for row in placements(page)) == 6
-        assert sum(row["room"] == "studio1" for row in placements(page)) == 1
+        playwright.expect(page.locator(".room-overflow")).to_have_text("+2")
+        seen = placements(page)
+        assert len(seen) == 20
+        assert sum("alpha-" in row["key"] for row in seen) == 19
+        assert len({(row["room"], row["index"]) for row in seen}) == 20
         assert not errors
         browser.close()
 
@@ -142,17 +144,18 @@ def test_live_meeting_entry_refill_exit_reserves_desks_and_keeps_identity(tmp_pa
         payload = roster(hq, [("alpha", 7), ("bravo", 2)], "working")
         hq.send(payload=payload)
         browser, page, errors = open_page(driver, hq.url)
-        playwright.expect(page.locator('#characters .agent[data-room="studio0"]')).to_have_count(6)
+        playwright.expect(page.locator('#characters .agent[data-room="studio0"]')).to_have_count(4)
         page.clock.fast_forward(59000)
         assert not page.locator('#characters .agent[data-room="meeting"]').count()
         page.clock.fast_forward(1000)
         playwright.expect(page.locator('#characters .agent[data-room="meeting"]')).to_have_count(6)
         assert not page.locator('#characters .agent[data-room="studio0"]').count()
-        assert page.locator(".room-overflow").count() == 1
+        assert page.locator(".room-overflow").count() == 0
+        playwright.expect(page.locator('#characters .agent[data-room="meeting-east"]')).to_have_count(2)
         assert {row["key"] for row in placements(page) if row["room"] == "meeting"} == {
             json.dumps(["b1", f"alpha-{i}"], separators=(",", ":")) for i in range(6)}
         for row in placements(page):
-            if row["room"] == "meeting":
+            if row["room"].startswith("meeting"):
                 assert not row["hands"] and not row["working"]
         changed = copy.deepcopy(payload)
         changed["activities"][0]["state"] = "waiting"
@@ -166,6 +169,7 @@ def test_live_meeting_entry_refill_exit_reserves_desks_and_keeps_identity(tmp_pa
         playwright.expect(page.locator("#employee-detail")).to_contain_text("alpha-6")
         changed["activities"][1]["state"] = "idle"
         hq.advance(); hq.send(payload=changed)
+        playwright.expect(page.locator('#characters .agent[data-employee-key=\'["b1","alpha-1"]\']')).to_have_class(re.compile(r"\bidle\b"))
         page.clock.fast_forward(29000)
         assert len([row for row in placements(page) if row["key"] == '["b1","alpha-1"]' and row["room"] == "meeting"]) == 1
         page.clock.fast_forward(1000)
@@ -177,38 +181,37 @@ def test_live_meeting_entry_refill_exit_reserves_desks_and_keeps_identity(tmp_pa
 @pytest.mark.parametrize("width", [1440, 720])
 def test_facility_seats_are_used_before_distinct_waiting_spots(tmp_path, width):
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
-        payload = roster(hq, [("alpha", 14)], "idle")
+        payload = roster(hq, [("alpha", 39)], "idle")
         old = iso(hq.clock[0] - timedelta(seconds=4300))
         for i, activity in enumerate(payload["activities"]):
             activity["state_since"] = old
-            if i >= 9:
+            if i >= 34:
                 activity["state"] = "error"
         hq.send(payload=payload)
         browser, page, errors = open_page(driver, hq.url, width)
-        playwright.expect(page.locator("#characters .agent")).to_have_count(14)
+        playwright.expect(page.locator("#characters .agent")).to_have_count(39)
         seen = placements(page)
-        assert len([row for row in seen if row["room"] == "fika" and row["index"]]) == 3
+        assert len([row for row in seen if row["room"] == "fika" and row["index"]]) == 28
         assert len([row for row in seen if row["room"] == "fika" and row["queue"]]) == 6
-        assert len([row for row in seen if row["room"] == "infirmary" and row["index"]]) == 1
-        assert len([row for row in seen if row["room"] == "infirmary" and row["queue"]]) == 4
-        assert len({(row["x"], row["y"]) for row in seen}) == 14
+        assert len([row for row in seen if row["room"] != "fika"]) == 5
+        assert not page.locator('[data-room="infirmary"]').count()
+        assert len({(row["x"], row["y"]) for row in seen}) == 39
         assert not any(row["walking"] for row in seen)
         held = {row["key"]: row["index"] for row in seen if row["index"]}
         payload["activities"][0].update(state="waiting", state_since=iso(hq.clock[0]))
-        payload["activities"][9].update(state="waiting", state_since=iso(hq.clock[0]))
+        payload["activities"][34].update(state="waiting", state_since=iso(hq.clock[0]))
         hq.advance(); hq.send(payload=payload)
-        playwright.expect(page.locator('#characters .agent[data-room="studio0"]')).to_have_count(2)
+        playwright.expect(page.locator('#characters .agent:not([data-room="fika"])')).to_have_count(6)
         after = {row["key"]: row for row in placements(page)}
-        assert after['["b1","alpha-3"]']["index"] == "0"
-        assert after['["b1","alpha-10"]']["index"] == "0"
+        assert after['["b1","alpha-28"]']["index"] == "0"
         for key, index in held.items():
-            if key not in {'["b1","alpha-0"]', '["b1","alpha-9"]'}:
+            if key != '["b1","alpha-0"]':
                 assert after[key]["index"] == index
         assert not errors
         browser.close()
 
 
-def test_motion_walks_between_desk_fika_counter_and_bed(tmp_path):
+def test_motion_walks_between_desk_fika_counter_and_error_desk(tmp_path):
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
         payload = roster(hq, [("alpha", 3)])
         hq.send(payload=payload)
@@ -222,7 +225,7 @@ def test_motion_walks_between_desk_fika_counter_and_bed(tmp_path):
         # Redirect one colleague while it is on the seat departure step.
         payload["activities"][0].update(state="error", state_since=iso(hq.clock[0]))
         hq.advance(); hq.send(payload=payload)
-        playwright.expect(page.locator('#characters .agent[data-room="infirmary"]')).to_have_count(1)
+        playwright.expect(page.locator('#characters .agent.error')).to_have_count(1)
         visited_counter = False
         for _ in range(90):
             page.clock.run_for(500)
@@ -230,9 +233,10 @@ def test_motion_walks_between_desk_fika_counter_and_bed(tmp_path):
             assert visits.count() <= 1
             visited_counter |= visits.count() == 1
         assert visited_counter
-        bed = page.locator('#characters .agent[data-room="infirmary"]')
-        playwright.expect(bed).to_have_class(re.compile(r"\breclining\b"))
-        assert not bed.locator('[data-pose="walking"]').count()
+        error_desk = page.locator('#characters .agent.error')
+        playwright.expect(error_desk).to_have_class(re.compile(r"\bseated\b"))
+        assert not error_desk.locator('[data-pose="walking"]').count()
+        assert not page.locator('[data-room="infirmary"]').count()
         assert not errors
         browser.close()
 
@@ -250,7 +254,7 @@ def test_off_page_remote_meeting_reconnect_reload_and_replay(tmp_path):
         page.add_init_script("""const NativeSocket=window.WebSocket;window.observedSockets=[];
           window.WebSocket=class extends NativeSocket {constructor(...args){super(...args);window.observedSockets.push(this);}};""")
         page.reload()
-        playwright.expect(page.locator('#characters .agent[data-room="studio0"]')).to_have_count(6)
+        playwright.expect(page.locator('#characters .agent[data-room="studio0"]')).to_have_count(4)
         page.get_by_role("button", name="Dashboard", exact=True).click()
         page.clock.fast_forward(60000)
         page.get_by_role("button", name="Virtual office", exact=True).click()
@@ -260,7 +264,7 @@ def test_off_page_remote_meeting_reconnect_reload_and_replay(tmp_path):
         assert len({row["key"] for row in placements(page)}) == 24
         page.locator("#next-floor").click()
         playwright.expect(meeting).to_have_count(4)
-        assert not page.locator('#characters .agent[data-room="studio0"]').count()
+        assert all("common-office" in row["key"] for row in placements(page) if not row["room"].startswith("meeting"))
         page.locator("#previous-floor").click()
         page.evaluate("observedSockets.at(-1).close()")
         playwright.expect(page.locator("#office-open")).to_have_class(re.compile("unreachable"))
@@ -300,7 +304,7 @@ def test_fixed_demo_meeting_and_desk_reservations(tmp_path, mode, count):
         browser, page, errors = open_page(driver, hq.url + "/?demo=" + mode)
         meeting = page.locator('#characters .agent[data-room="meeting"]')
         playwright.expect(meeting).to_have_count(count)
-        assert len(placements(page)) == (11 if mode == "1" else 30)
+        assert len(placements(page)) == (11 if mode == "1" else 60)
         if mode == "1":
             assert {row["key"] for row in placements(page) if row["room"] == "meeting"} == {
                 '["home","milo"]', '["home","theo"]', '["garden","sage"]'}

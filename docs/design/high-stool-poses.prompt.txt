@@ -1,0 +1,15 @@
+Use case: identity-preserve
+Asset type: transparent seated-character sprite atlas for the actual AgentVille office, not a full office illustration.
+Input image 1 is the CHARACTER IDENTITY, PROPORTION AND PIXEL-ART STYLE REFERENCE. It contains six established adult chibi colleagues in six columns. Preserve exactly their faces, hair, skin tone and clothing:
+column 1 chestnut tousled hair, terracotta sweater, olive trousers, cream sneakers;
+column 2 dark bob, sage sweater, dark trousers, dark shoes;
+column 3 auburn double buns, blue-gray sweater, cream trousers;
+column 4 dark skin, curly hair, round glasses, lavender sweater, brown trousers;
+column 5 sandy hair, olive beanie, mustard sweater, olive trousers, cream sneakers;
+column 6 dark hair, sage over-ear headphones, teal sweater, charcoal trousers, cream sneakers.
+Create exactly EIGHTEEN complete figures arranged in a strict SIX-COLUMN by THREE-ROW grid, one figure per cell. Same identity in each column across the three rows. Uniform human scale, generous transparent gutters, every full head, hand and shoe present.
+ALL figures are naturally SEATED ON AN INVISIBLE HIGH CAFE STOOL: thighs supported at hip height, knees bent, shins drop toward an invisible foot ring, feet draw slightly back with shoes on that foot ring. Relaxed hands on lap or naturally near waist for conversation. No typing reach, arms hanging down or standing straight legs. No actual stool, table, chair, ring, furniture, floor, cast shadow, background, cup, book, bag, labels or cell lines; only the complete person. The frame must include bent legs and both shoes, so these figures can be placed over existing high stools in the office background.
+ROW 1: three-quarter FRONT view, face visible, facing diagonally toward LOWER LEFT.
+ROW 2: three-quarter REAR view, back of head visible, facing diagonally toward UPPER RIGHT.
+ROW 3: genuine RIGHT-SIDE profile view, facing RIGHT; seated body and bent legs readable from the side.
+Match the reference's warm detailed textured pixel-art painting, crisp miniature stepped edges, cozy clothing, 2.5-head adult proportions, soft warm shading and identity consistency. This is a game sprite atlas, not an icon sheet or vector drawing. Keep consistent proportions across poses. TRUE transparent alpha everywhere outside figures, no painted checkerboard. Requested 1536x1024 landscape PNG.

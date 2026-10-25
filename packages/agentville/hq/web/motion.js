@@ -20,7 +20,7 @@ export function updateWorkGestures(root) {
       || document.body.classList.contains("reduce-motion")) return;
   const now = performance.now();
   for (const svg of root.querySelectorAll('.character[data-activity="working"]')) {
-    if (svg.closest(".filtered") || svg.closest('.agent[data-room="meeting"]')) continue;
+    if (svg.closest(".filtered") || svg.closest('.agent[data-room^="meeting"]')) continue;
     const previous = progress.get(svg);
     if (previous && now < previous.until) continue;
     const choices = GESTURES.filter((gesture) => gesture.name !== previous?.name);
