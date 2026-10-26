@@ -33,6 +33,9 @@ def roster(hq, counts=DESK_COUNTS, state="waiting"):
     return {"branch": copy.deepcopy(BRANCH), "agents": people, "activities": activities, "contractors": []}
 
 
+STATE_FRAMES = {}
+
+
 def open_page(driver, url, width=1440, motion="reduce"):
     browser = driver.chromium.launch(**launch_options())
     page = browser.new_page(viewport={"width": width, "height": 1100}, reduced_motion=motion, locale="en-US")
@@ -40,6 +43,10 @@ def open_page(driver, url, width=1440, motion="reduce"):
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.clock.install()
+    # Live state frames received, so a test can wait for an update before moving the page clock.
+    frames = STATE_FRAMES.setdefault(id(page), [0])
+    page.on("websocket", lambda socket: socket.on(
+        "framereceived", lambda payload: frames.__setitem__(0, frames[0] + 1) if '"state"' in str(payload) else None))
     page.goto(url)
     return browser, page, errors
 

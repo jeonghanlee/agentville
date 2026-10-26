@@ -3,13 +3,14 @@
 import copy
 import json
 import re
+import time
 from datetime import timedelta
 
 import pytest
 
 from agentville.common.protocol import iso
 from tests.browser.test_seated_presentation import MEASURE, area, contractor_conflicts, overlap
-from tests.browser.test_seats import open_page, placements, roster
+from tests.browser.test_seats import STATE_FRAMES, open_page, placements, roster
 from tests.browser_support import launch_options, playwright_sync
 from tests.lifecycle_support import HQ
 
@@ -35,9 +36,20 @@ def dismiss(payload, agent_id):
     payload["contractors"] = [row for row in payload["contractors"] if not row["contractor_id"].startswith(f"helper-{agent_id}-")]
 
 
-def resend(hq, payload):
+def resend(hq, payload, page=None):
+    """Send the payload again; with a page, wait until the page has received the resulting live state."""
     hq.advance()
+    if page is None:
+        hq.send(payload=payload)
+        return
+    frames = STATE_FRAMES[id(page)]
+    seen = frames[0]
     hq.send(payload=payload)
+    deadline = time.monotonic() + 10
+    while frames[0] == seen:
+        assert time.monotonic() < deadline, "no live state after the update"
+        page.evaluate("0")
+        time.sleep(.02)
 
 
 def contractors(page):
@@ -82,7 +94,7 @@ def test_team_forms_after_ten_seconds_and_keeps_its_desk_reserved(tmp_path):
         newcomer["instance"]["instance_id"] = "shift-alpha-2"
         activity = copy.deepcopy(payload["activities"][1]); activity.update(agent_id="alpha-2", instance_id="shift-alpha-2")
         payload["agents"].append(newcomer); payload["activities"].append(activity)
-        resend(hq, payload)
+        resend(hq, payload, page)
         playwright.expect(page.locator("#characters .agent")).to_have_count(3)
         assert where(page, "alpha-2")["index"] == "2"
         assert not any(row["room"] == "studio0" and row["index"] == "0" for row in placements(page))
@@ -105,7 +117,7 @@ def test_team_ends_after_its_last_contractor_or_at_once_on_waiting(tmp_path):
         # Common Office colleagues form teams too.
         playwright.expect(page.locator('#characters .agent[data-room="meeting"]')).to_have_count(1)
         dismiss(payload, "common-office-0")
-        resend(hq, payload)
+        resend(hq, payload, page)
         playwright.expect(page.locator("#characters .contractor")).to_have_count(0)
         page.clock.fast_forward(9000)
         assert where(page, "common-office-0")["room"] == "meeting"
@@ -114,16 +126,16 @@ def test_team_ends_after_its_last_contractor_or_at_once_on_waiting(tmp_path):
         assert (where(page, "common-office-0")["room"], where(page, "common-office-0")["index"]) == desk
         # A new Contractor within the grace keeps the team; waiting ends it at once, with Contractors beside the desk.
         hire(hq, payload, "common-office-0", 2, start=5)
-        resend(hq, payload)
+        resend(hq, payload, page)
         page.clock.fast_forward(10000)
         playwright.expect(page.locator('#characters .agent[data-room="meeting"]')).to_have_count(1)
-        dismiss(payload, "common-office-0"); resend(hq, payload)
+        dismiss(payload, "common-office-0"); resend(hq, payload, page)
         page.clock.fast_forward(5000)
-        hire(hq, payload, "common-office-0", 2, start=7); resend(hq, payload)
+        hire(hq, payload, "common-office-0", 2, start=7); resend(hq, payload, page)
         page.clock.fast_forward(8000)
         assert where(page, "common-office-0")["room"] == "meeting"
         payload["activities"][1]["state"] = "waiting"
-        resend(hq, payload)
+        resend(hq, payload, page)
         playwright.expect(page.locator('#characters .agent[data-room="meeting"]')).to_have_count(0)
         assert (where(page, "common-office-0")["room"], where(page, "common-office-0")["index"]) == desk
         assert [row["seated"] for row in contractors(page)] == [False, False]
@@ -149,11 +161,11 @@ def test_meeting_and_team_never_displace_each_other(tmp_path):
         assert where(page, "alpha-0")["room"] == "meeting"
         # The other way: with both rooms in meetings, a new team does not displace either meeting.
         payload["activities"][0]["state"] = "waiting"
-        resend(hq, payload)
+        resend(hq, payload, page)
         playwright.expect(page.locator('#characters .agent[data-room="meeting"]')).to_have_count(2)
         payload["activities"][0]["state"] = "working"
         hire(hq, payload, "alpha-0", 1, start=3)
-        resend(hq, payload)
+        resend(hq, payload, page)
         page.clock.fast_forward(10000)
         playwright.expect(page.locator(f'#characters .agent[data-employee-key=\'{key("alpha-0")}\'][data-room="fika"]')).to_have_count(1)
         rooms = {row["key"]: row["room"] for row in placements(page)}
@@ -174,7 +186,7 @@ def test_fika_fallback_takes_the_free_group_with_the_lowest_seat_id(tmp_path):
         page.clock.fast_forward(60000)
         playwright.expect(page.locator('#characters .agent[data-room^="meeting"]')).to_have_count(4)
         hire(hq, payload, "charlie-0", 4)
-        resend(hq, payload)
+        resend(hq, payload, page)
         page.clock.fast_forward(10000)
         # charlie-0 is not in a meeting (both rooms hold alpha and bravo); its team takes the second Fika table.
         playwright.expect(page.locator(f'#characters .agent[data-employee-key=\'{key("charlie-0")}\'][data-room="fika"]')).to_have_count(1)
@@ -182,7 +194,7 @@ def test_fika_fallback_takes_the_free_group_with_the_lowest_seat_id(tmp_path):
         assert seated_with(page, "charlie-0") == ["fika.10", "fika.11", "fika.12", "fika.9"]
         # Fika colleagues arriving later do not take the team's places.
         payload["activities"][5].update(state="idle", state_since=iso(hq.clock[0] - timedelta(seconds=4300)))
-        resend(hq, payload)
+        resend(hq, payload, page)
         playwright.expect(page.locator(f'#characters .agent[data-employee-key=\'{key("charlie-1")}\'][data-room="fika"]')).to_have_count(1)
         assert where(page, "charlie-1")["index"] == "1"
         assert not errors
@@ -208,7 +220,7 @@ def test_contractors_beyond_the_chairs_show_as_plus_n(tmp_path):
         # A meeting member does not form a team.
         playwright.expect(page.locator('#characters .agent[data-room="meeting-east"]')).to_have_count(6)
         hire(hq, payload, "bravo-0", 1)
-        resend(hq, payload)
+        resend(hq, payload, page)
         page.clock.fast_forward(11000)
         playwright.expect(page.locator(f'#characters .agent[data-employee-key=\'{key("bravo-0")}\'] .team-more')).to_have_count(1)
         assert seated_with(page, "bravo-0") == []
@@ -217,7 +229,7 @@ def test_contractors_beyond_the_chairs_show_as_plus_n(tmp_path):
         # The team ends at once; alpha (two members) meets in the freed room and brings four of five Contractors.
         payload["activities"][8]["state"] = "waiting"
         hire(hq, payload, "alpha-0", 5)
-        resend(hq, payload)
+        resend(hq, payload, page)
         playwright.expect(page.locator('#characters .agent[data-room="meeting"]')).to_have_count(2)
         alpha = [row for row in contractors(page) if row["parent"] == key("alpha-0")]
         assert sorted(row["seat"] for row in alpha) == [f"meeting.{i}" for i in range(2, 6)]
@@ -314,10 +326,10 @@ def test_motion_walks_together_while_reduced_motion_and_replay_place_directly(tm
         # A recorded change while the team works, then the team ends and walks back; replaying that change places the
         # team directly, without walking.
         payload["activities"][0]["state"] = "thinking"
-        resend(hq, payload)
+        resend(hq, payload, page)
         payload["activities"][0]["state"] = "waiting"
         dismiss(payload, "alpha-0")
-        resend(hq, payload)
+        resend(hq, payload, page)
         page.clock.run_for(30000)
         playwright.expect(page.locator('#characters .agent[data-room="studio0"].seated')).to_have_count(1)
         page.get_by_role("button", name="Timeline", exact=True).click()
