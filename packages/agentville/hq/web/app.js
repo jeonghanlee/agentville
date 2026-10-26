@@ -16,7 +16,7 @@ import { createCoffeeBreaks } from "./coffee.js";
 import { createLounge } from "./lounge.js";
 import { createWalkers } from "./walk.js";
 import { NODES, route, distance, clear, blockedBy } from "./floor.js";
-import { roomSeats, roomOfSeat, indexOfSeat, seatFoot } from "./seats.js";
+import { roomSeats, roomOfSeat, indexOfSeat, seatFoot, rearFacing } from "./seats.js";
 import { walkerDepth, updateWalkerOcclusion } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
 import { createNotifications } from "./notify.js";
@@ -337,6 +337,15 @@ function placeOf(seat, spot) {
   if (seat.facing === "lying") return { foot: side || seat.position, approach: null };
   return { foot: seatFoot(seat), approach: side };
 }
+// Contractors stand beside their parent, each further one a step to the right and nearer the viewer. A parent seated
+// with its back to the viewer has them centered on the seat's measured approach when that free side lies toward the
+// viewer, because the neighbouring chairs of a row are closer than one Contractor step.
+function contractorFoot(standing, place, i, count) {
+  const foot = standing || seatFoot(place);
+  const free = !standing && place.approach && rearFacing(place.facing) ? NODES[place.approach] : null;
+  const [x,y] = free && free[1] > foot[1] ? [free[0] - 1.4 * (count - 1) * ACTOR_SCALE, free[1]] : [foot[0] + 3.1 * ACTOR_SCALE, foot[1]];
+  return [x + 2.8 * i * ACTOR_SCALE, y + .9 * i * ACTOR_SCALE];
+}
 // A changed place starts a walk along the floor routes; the first sighting, another Branch, or reduced motion places directly.
 function moveWalker(key, target) {
   const last = places.get(key) || (shownBranch === branchId && !DEMO && !replay?.active
@@ -532,11 +541,10 @@ function renderCharacters(ctx) {
         companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
           + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
         companion.tabIndex = visible ? 0 : -1;
-        const contact = walk || visit || spot ? [seat[0],seat[1]] : seatFoot(place);
-        const foot = [contact[0]+3.1*ACTOR_SCALE,contact[1]];
-        companion.style.left = (foot[0] + i * 2.8 * ACTOR_SCALE) + "%";
-        companion.style.top = (foot[1] + i * .9 * ACTOR_SCALE) + "%";
-        companion.style.zIndex = String(floorDepth(foot[1] + i * .9 * ACTOR_SCALE));
+        const foot = contractorFoot(walk || visit || spot ? [seat[0],seat[1]] : null, place, i, shown.length);
+        companion.style.left = foot[0] + "%";
+        companion.style.top = foot[1] + "%";
+        companion.style.zIndex = String(floorDepth(foot[1]));
         const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra]);
         if (companion.dataset.appearance !== appearance) {
           companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
