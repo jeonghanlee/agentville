@@ -77,7 +77,9 @@ export function seatedCharacter(native, seat) {
     body = lowerBody(native, frame, rear);
   }
   const { source, width, height, hip, foot, pixels, knee, ankle } = body;
-  const delta = (seat.supportY - pointPixels(seat.position)[1]) / pixels - (foot[1] - hip);
+  // Seen from behind, a chair sitter's feet rest forward under the table, above the measured floor point beneath
+  // the hip; the rear lower part keeps its drawn length there. Front-facing feet and stool feet reach their support.
+  const delta = rear && seat.kind !== "high" ? 0 : (seat.supportY - pointPixels(seat.position)[1]) / pixels - (foot[1] - hip);
   const stretch = (ankle - knee + delta) / (ankle - knee);
   if (stretch <= 0) throw new Error("Invalid seat support: " + seat.id);
   const outputHeight = height + Math.max(0, delta), root = element("svg", {
