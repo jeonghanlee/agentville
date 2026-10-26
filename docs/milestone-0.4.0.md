@@ -7,7 +7,7 @@ Canonical branch or ref: master
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: M1 and M2 are Complete. Unified office commit 20627e8 and the approved status/manual correction 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33 are on origin/master. All four test jobs passed in run 40121607492; public manual deployment 40121607476 passed and all eight published screenshots match the committed captures. The later sixty-seat office f323b87, its rendering corrections and open owner decisions are recorded under [M2 Post-Closure Office Change](#post-closure-office-change). Continue with M3 Town map plan review; its draft plan has no implementation authorization. Version 0.3.0 is unchanged and no 0.4.0 release or tag is claimed.
+Next session entry point: M1 and M2 are Complete. Unified office commit 20627e8 and the approved status/manual correction 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33 are on origin/master. All four test jobs passed in run 40121607492; public manual deployment 40121607476 passed and all eight published screenshots match the committed captures. The later sixty-seat office f323b87 is accepted as the M2 target by D13, with Contractor teams added by D14; both, the sixty-seat audit and the pending owner review of `docs/review/m2-seats/` are recorded under [M2 Post-Closure Office Change](#post-closure-office-change). Continue with M3 Town map plan review; its draft plan has no implementation authorization. Version 0.3.0 is unchanged and no 0.4.0 release or tag is claimed.
 
 ## Scope
 
@@ -44,6 +44,8 @@ Status totals: Complete 2; Not started 2. Nearest Ready work: M3.
 | D10 | Keep attempt-01-clean.png unchanged and continue calibrating furniture contacts and seat approaches. Retain 20 total desks, six meeting chairs, the existing foot box, and the 46 px circulation requirement. | 2026-10-23 |
 | D11 | Subsequently revise the furniture layout to widen circulation, superseding D10's unchanged-image choice. Keep the prior candidate and calibration evidence; retain 20 total desks, six meeting chairs, the existing foot box, and the 46 px requirement. Remeasure the revised image before accepting it or changing runtime scene geometry. | 2026-10-23 |
 | D12 | Combine the main office and annex into one larger single-floor office containing 20 workstations, one six-chair meeting room, and a visible Fika coffee lounge. Retain existing facilities, including the wellness room. This replaces D5/P1's two-image layout and D11's annex-only artwork target. Generate and inspect the unified candidate; revise layout-dependent implementation details before changing runtime scene code. | 2026-10-23 |
+| D13 | The owner changed the M2 plan during the work: the sixty-seat office of f323b87 (20 shared desks, two six-chair meeting rooms, 28 Fika places, no infirmary) supersedes the layout parts of D5-D7 and D12 and the M2 scope and completion criteria that conflict with it. M2 is Complete. (Given by the owner as "D8"; recorded as D13 because D8-D12 were already assigned.) | 2026-10-26 |
+| D14 | Contractor teams. A colleague with Contractors works together with them away from the desk: the colleague and its Contractors walk together to a free meeting room and sit at its table and work there; when no meeting room is free they sit together on a sofa or at a Fika table; only when no suitable seats are free do Contractors stand beside the desk, spaced so they do not overlap neighbours. Rules: [D14 rules](#d14-contractor-teams). (Given by the owner as "D9"; recorded as D14.) | 2026-10-26 |
 
 ### Milestone Details
 
@@ -220,7 +222,7 @@ The following observations describe the pre-commit handoff and its retained evid
 Origin: 0.4.0 / M2
 Identity History: none
 GitHub Issue: none
-Status: Complete
+Status: Complete. Closed 2026-10-24 on the unified office; D13 (2026-10-26) accepts the sixty-seat office of f323b87 as the M2 result and keeps M2 Complete. D14 adds Contractor teams. The sixty-seat owner review of `docs/review/m2-seats/` is pending and does not reopen M2.
 
 ##### Summary
 
@@ -232,6 +234,8 @@ Define participation, layout, capacity, and transitions, including any required 
 
 Out of scope: recording a collaboration relationship merely because characters share a room.
 
+Scope note (D13): the sixty-seat office supersedes the layout in this scope. It has 20 desks shared across four Project areas (4, 4, 4, 8) and Common Office, two six-chair meeting rooms, 28 Fika places (16 table, six sofa, six high-table), and no infirmary. D14 adds Contractor teams.
+
 ##### Completion Criteria
 
 - Participation follows the accepted same-Project concurrency rule.
@@ -241,11 +245,19 @@ Out of scope: recording a collaboration relationship merely because characters s
 - The single floor contains one meeting room with six seats and an open corridor entrance, Fika with two sofa places and one armchair place, and an infirmary with one bed. Walking and foreground occlusion connect them in the same scene.
 - The four retained flower arrangements remain at the two rear window areas and the two coffee surfaces; old decoration coordinates do not introduce extra pots.
 
+Completion criteria notes (D13):
+
+- Criterion 3 is superseded: 20 desks in areas of 4, 4, 4, and 8 are shared. Newcomers use their own Project area first, then vacancies across Projects and Common Office (`reservations.js`); `tests/browser/test_seats.py` covers distinct desks, reuse, and overflow.
+- Criterion 5 is superseded: two six-chair meeting rooms, each holding a meeting of a different Project or one Contractor team (D14); 28 Fika places; no infirmary or bed, so colleagues in error stay at their desks. The single floor, walking, and foreground occlusion are covered by `test_floor_clearance.py`, `test_seat_audit.py`, and `test_unified_renderer.py`.
+- Criteria 1, 2, 4, and 6 stand as written. For criterion 4, the Fika places use the measured facings of the sixty-seat table; their owner review is part of the pending review of `docs/review/m2-seats/`.
+
 ##### Dependencies And Decisions
 
 - M1 precedes M2 by D1; this is work ordering.
 - Artwork measurement can proceed independently of M1 runtime behavior.
 - D12 replaces D5/P1's annex layout with one continuous single floor. D8-D11, the earlier image checks, and the previous renderer tests remain evidence for their own targets only.
+- D13 supersedes the layout parts of D5-D7 and D12 (P1 counts and seat ids, one meeting room, three Fika places, the infirmary) with the sixty-seat office of f323b87. P2's timing and ordering rules apply to each of the two meeting rooms (`meetingsInRooms`); P3's single seat table holds the sixty entries.
+- D14 adds Contractor teams; its rules are under [D14 Contractor teams](#d14-contractor-teams).
 - The selected raw candidate is work/m2-unified-generation/unified-office-04-fewer-pots.png, SHA-256 f52a6e68745e0008c74ea1bf85117e1cac4c4e3a010296e13bf40af96a4864b2. It has 1536 x 1024 pixels; the larger requested canvas was not produced. D12 enlarges the depicted floor plan; no increased pixel resolution is claimed.
 - P1 below is revised for D12. P2's meeting rules and P3's seat-table principle are retained. The revised plan was accepted and authorized on 2026-10-24 as plan20261024_045830 through auth20261024_053554; the earlier annex acceptance was not reused.
   - P1 (unified office). One scene, main, contains four Project studios in existing Project order with capacities 6, 6, 4, and 2, plus two Common Office workstations, six meeting chairs, three Fika places, and one infirmary bed. Studio 0 is upper-left, studio 1 upper-middle, studio 2 upper-right, studio 3 middle-right; Common Office is middle-left, Fika is foreground, and the infirmary is lower-right.
@@ -423,7 +435,7 @@ Convergence: conv20261024_172054. Reports and fresh receipts were recorded under
 
 ##### Post-Closure Office Change
 
-Commit f323b87406b2e427e03cf9085a9d9d6cc5e97608 ("Expand the office to sixty seats with two meeting rooms", 2026-10-25) is on origin/master. It postdates the closure above; no decision, plan revision or owner visual acceptance for it is recorded in this document.
+Commit f323b87406b2e427e03cf9085a9d9d6cc5e97608 ("Expand the office to sixty seats with two meeting rooms", 2026-10-25) is on origin/master. It postdates the closure above. D13 (2026-10-26) records the owner's change of the M2 plan: this office supersedes the conflicting layout decisions, scope and criteria, and M2 stays Complete. Owner visual acceptance of the sixty seats is pending (sixty-seat audit below).
 
 What changed:
 
@@ -442,11 +454,64 @@ Rendering defects found after f323b87 (demo `/?demo=1`, 1440 px):
 
 Tests: `tests/browser/test_seated_presentation.py` (seven cases) fails all seven on the f323b87 runtime and passes after the correction; it measures rendered boxes in artwork pixels against the seat table. No artwork was changed or drawn.
 
-Open items for owner decision:
+Open items:
 
-- f323b87 differs from the recorded M2 scope, completion criteria and D12/P1-P3 (studios 6/6/4/2 plus Common Office 2 without cross-Project reassignment, one six-chair meeting room with at most one meeting per Branch, Fika with three places, an infirmary with one bed, seat ids studio0.0-5 and similar). Whether to record a decision superseding them, and whether M2 stays Complete on that basis, is not decided here.
-- The 60-seat arrangement, the new atlases and their poses have no recorded intake or per-seat owner acceptance comparable to T1 and T7.
-- Contractors of front-facing parents still stand at the previous offset. In rows of 34 to 65 px pitch, two Contractors per parent can overlap the next colleague; the artwork has no free floor beside these chairs. At the 720 px layout, provider tags are wider than one Contractor step, so the tags of one parent's two Contractors touch (up to 35 percent of a tag).
+1. Resolved by D13: f323b87 differed from the recorded M2 scope, completion criteria and D12/P1-P3 (studios 6/6/4/2 plus Common Office 2 without cross-Project reassignment, one six-chair meeting room with at most one meeting per Branch, Fika with three places, an infirmary with one bed, seat ids studio0.0-5 and similar). D13 accepts the sixty-seat office in their place; M2 stays Complete.
+2. Partly addressed: the 60-seat arrangement, the new atlases and their poses had no recorded intake or per-seat owner acceptance comparable to T1 and T7. The sixty-seat audit below adds automated checks and an owner review set; the owner review of `docs/review/m2-seats/` is pending.
+3. Resolved by D14: Contractors of front-facing parents stood at a fixed offset and could overlap the next colleague, and at 720 px the tags of one parent's Contractors touched. Contractors now sit with their team where seats are free; Contractors that stand beside a desk take spaced floor spots (D14 rules), verified at 1440 and 720 px with 40 Contractors.
+4. Open, artwork-side: the stools high-west.1 (fika.25) and high-east.0 (fika.26) of two neighbouring high tables stand one behind the other in the picture, so their sitters' silhouettes overlap by 52 percent of the smaller one. Seat anchors match the artwork; separating them needs an artwork or seat-table decision by the owner. `test_seat_audit.py` names this pair as the only known exception.
+5. Open, for the owner review: seated Contractors at rear-facing chairs are smaller than the chair backs in front of them, so mostly their hard hats show (sheet 07). This follows the existing depth layers; whether it reads acceptably is part of the owner review.
+
+##### D14 Contractor Teams
+
+The owner's decision D14 (2026-10-26). Presentation only: computed in the page from observed state; nothing is recorded or sent. The rules are also stated in architecture Section 6.2 (`teams.js`, `app.js`).
+
+- Team. An on-duty colleague of the displayed Branch's office, not in a closed Project or Branch, with at least one current Contractor, observed so for 10 s on the page's own observation clock (as P2). Common Office colleagues are included, since Contractors are not tied to a Project room. A team ends 10 s after its last Contractor ends, or at once when the colleague goes waiting, error, limited or off duty, or loses eligibility; the colleague then returns to where the existing rules place it, with its Contractors beside it. A reload starts observation afresh; a reconnect keeps teams and restarts their clocks.
+- Rooms. Meeting rooms are held first come. A P2 meeting in progress is never displaced by a team, and a team is never displaced by a meeting; a room used by a team is not free for a new meeting. A team uses one whole meeting room: the colleague in chair 0, Contractors in the next chairs in Contractor order; Contractors beyond the room's chairs show as "+N" on the last seated Contractor. Within one update a qualifying meeting takes a free room before a new team.
+- Meetings. A P2 meeting member is not a team. It brings its Contractors into its meeting room if chairs are free there, in chair and Contractor order; otherwise they show as "+N" (on the last seated Contractor, or on the member when none is seated).
+- Fallback. With no free meeting room, a team takes one free Fika group (a Fika table or a sofa, with none of its places in use and room for the colleague and at least one Contractor), chosen by lowest seat id; remaining Contractors show as "+N". Its places are not offered to Fika colleagues. A team keeps its room or group until it ends; a team at its desk takes a room or group as soon as one is free. With no such group the team stays at the desk: Contractors stand on the seat's free side when it has one (existing rule) and that spot is clear, otherwise on the nearest floor-graph spot (node or point along a link, within 22 percent of the artwork width) where their figure and tags overlap no other figure by more than 5 percent and no other Contractor's tag.
+- Desk and movement. The colleague's desk stays reserved (shown empty) while the team is away. The colleague and its Contractors walk with the existing route graph and depth rules; walking Contractors keep their standing figure. Reduced motion places directly; replay forms teams from each replayed state and places them directly without walking. `/?demo=1` lists one fixed team (Noah with two Contractors in the second meeting room) as data.
+- Figures. Seated Contractors use the existing seated sprites of their appearance at Contractor scale (`CONTRACTOR_WIDTH`), with the hard hat and the seat's facing. No artwork was drawn or changed.
+
+Tests (`tests/browser/test_contractor_teams.py`, Chromium through the real HQ):
+
+| Test | Rule |
+| --- | --- |
+| `test_team_forms_after_ten_seconds_and_keeps_its_desk_reserved` | Formation after 10 s, chair 0 and next chairs, seated sprites with hard hat and facing, desk reserved for a newcomer, Project room filter |
+| `test_team_ends_after_its_last_contractor_or_at_once_on_waiting` | Common Office teams, end 10 s after the last Contractor, a new Contractor within the grace keeps the team, immediate end on waiting with Contractors beside the desk |
+| `test_meeting_and_team_never_displace_each_other` | A team keeps its room when two Projects qualify; with both rooms in meetings a new team goes to Fika |
+| `test_fika_fallback_takes_the_free_group_with_the_lowest_seat_id` | Free group by lowest seat id, Fika colleagues kept off the team's places |
+| `test_contractors_beyond_the_chairs_show_as_plus_n` | "+N" on the last seated Contractor, on a member of a full meeting, and for a member's Contractors in free chairs |
+| `test_desk_fallback_spaces_contractors_clear_of_other_figures[1440, 720]` | 40 standing Contractors without overlaps before teams form; six teams away, fourteen at desks, desks reserved |
+| `test_demo_team_and_meeting_contractors_keep_tags_readable[1440, 720]` | Demo team, meeting members' Contractors in free chairs, no tag overlap between figures beyond 5 percent |
+| `test_motion_walks_together_while_reduced_motion_and_replay_place_directly` | Walking together, replay without walking, reduced motion placing directly |
+
+Mutation check (2026-10-26, local Chromium): each rule was broken in a copy of the runtime and the focused tests rerun; every one of these failed: entry time 10 s, exit grace 10 s, immediate end on waiting, Common Office teams, a meeting not starting in a team's room, a team not taking a meeting's room, lowest-seat-id Fika group, free Fika group, desk reservation, "+N" on the last seated Contractor and on a meeting member, a member's Contractors in free chairs, desk spacing, replay without walking, Contractors walking with their colleague, Contractor scale (silhouette overlap and tag checks), and the coffee-table depth. Replacing the walking depth rule of standing Contractors with plain floor depth was not detected, because only one standing Contractor overlaps a furniture front layer in the audit scenarios.
+
+`test_seated_presentation.py::test_demo_meeting_contractors_stand_clear_of_other_colleagues` is removed: under D14 the demo meeting's Contractors sit in its free chairs, which the demo-team test covers.
+
+##### Sixty-Seat Audit
+
+Requested by the owner on 2026-10-26: the confirmation record, routes and image overlaps of the sixty-seat office.
+
+Method:
+
+- Routes. `test_floor_clearance.py` (existing) checks every graph link, all node-pair routes and every seat step against independent pixel annotations with the 46 px aisle and the retained foot box. `test_seat_audit.py::test_every_seat_walks_clear_to_each_meeting_chair_and_the_coffee_spot` adds the path a colleague walks, built as the page builds it, from each of the 60 seats to each of the 12 meeting chairs and to the coffee spot (768 paths): seat step with the seat's own furniture only, routed stretches with the 46 px aisle, and the final chair step.
+- Simultaneous occupancy. `test_simultaneous_seats_keep_figures_apart` renders each seated figure alone and compares opaque silhouettes pairwise, for all 60 places occupied (`/?demo=seats`) and for six Contractor teams filling all 12 meeting chairs and the 22 Fika table and sofa places (34 figures). Tolerance: 10 percent of the smaller silhouette.
+- Depth layers. `test_figures_follow_furniture_depth_layers` checks every seated figure, seated Contractor and standing Contractor against each furniture front layer it overlaps: a piece whose footprint lies wholly in front of the figure's floor point must be drawn over it, one wholly behind must be drawn under it. The seat's own chair back and monitor are calibrated with the seat and excluded. Walls are part of the background image and are never drawn over characters.
+- Owner review set. `docs/review/m2-seats/` holds seven contact sheets (1440 px, device scale 2) and `index.md`, which lists every seat with area, facing, sheet, and what to check: facing the chair or table, hands on keyboard at desks, feet under the table, no clipping through furniture. Desks are shown occupied by working colleagues and again while their colleague's Contractor team is away; sheet 07 shows seated Contractor teams. Total size under 1 MB.
+
+Results:
+
+| Check | Result |
+| --- | --- |
+| Routes from every seat | Passed: 768 paths, no slab or furniture contact |
+| Simultaneous occupancy, 60 seats | One pair above tolerance: fika.25 and fika.26, 52 percent (open item 4, artwork-side); next highest 6.4 percent (meeting-east.1 and meeting-east.2) |
+| Simultaneous occupancy, Contractor teams | Passed: no pair above 10 percent |
+| Depth layers | Defect found and fixed: the coffee-table front layer (depth 7000) was drawn over the rear sofa's sitters fika.20 and fika.21, hiding fika.21's head. Its depth is now 6350, between the front sofa (up to 6280) and the rear sofa (from 6420); the front sofa's sitters keep their feet behind the table. Standing Contractors now take the walking depth rule (`walkerDepth`) instead of plain floor depth. |
+| Owner review | Pending: `docs/review/m2-seats/index.md` |
+
+Verification: the full local suite passed 374 tests in 902 s on 2026-10-26 with `AGENTVILLE_REQUIRE_BROWSER=1` (Chromium at `/opt/pw-browsers/chromium`), zero failures, errors or skips; it includes the 10 new team cases and 6 audit cases. No CI run, push or installation is claimed. The manual screenshot `docs/images/office.png` was recaptured from `/?demo=1` to show the demo team; the other manual screenshots are unchanged.
 
 #### M3 - Town Map
 
