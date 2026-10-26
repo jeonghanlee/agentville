@@ -7,7 +7,7 @@ Canonical branch or ref: master
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: M1 and M2 are Complete. Unified office commit 20627e8 and the approved status/manual correction 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33 are on origin/master. All four test jobs passed in run 40121607492; public manual deployment 40121607476 passed and all eight published screenshots match the committed captures. Continue with M3 Town map plan review; its draft plan has no implementation authorization. Version 0.3.0 is unchanged and no 0.4.0 release or tag is claimed.
+Next session entry point: M1 and M2 are Complete. Unified office commit 20627e8 and the approved status/manual correction 854be4dfe7f6ee27bbc5b1e44abba0c2dbf4bf33 are on origin/master. All four test jobs passed in run 40121607492; public manual deployment 40121607476 passed and all eight published screenshots match the committed captures. The later sixty-seat office f323b87, its rendering corrections and open owner decisions are recorded under [M2 Post-Closure Office Change](#post-closure-office-change). Continue with M3 Town map plan review; its draft plan has no implementation authorization. Version 0.3.0 is unchanged and no 0.4.0 release or tag is claimed.
 
 ## Scope
 
@@ -420,6 +420,33 @@ Convergence: conv20261024_172054. Reports and fresh receipts were recorded under
 - The separately authorized local installation was applied at 20627e8, with both services restarted at 2026-10-24 10:49:25 PDT. Actual installed HTTP, WebSocket and Chromium verification recorded 20 desks, 30 distinct places, 93 nodes, 92 links, identical served asset bytes and zero page errors at both widths. Receipt: work/m2-unified-generation/deployment-20627e8/receipt.json. The later status-text correction at 854be4d has not been installed locally; publication did not restart services.
 - M1 is Complete, M3 is Ready for plan review and M4 remains Not started. Neither M3 nor M4 implementation is authorized by this closure. Version 0.3.0 remains unchanged; no 0.4.0 tag or GitHub Release was created.
 - Formal review-session closure follows clo20261024_184642: independent acceptance precedes the status-record commit and retention of all session artifacts, and removal of the working session occurs only after the durable output is in git HEAD. The archive and local removal receipt above retain its evidence without changing the original artwork or visual-acceptance files.
+
+##### Post-Closure Office Change
+
+Commit f323b87406b2e427e03cf9085a9d9d6cc5e97608 ("Expand the office to sixty seats with two meeting rooms", 2026-10-25) is on origin/master. It postdates the closure above; no decision, plan revision or owner visual acceptance for it is recorded in this document.
+
+What changed:
+
+- Artwork. `office-modern.png` replaces `office-unified.png` at runtime; it is byte-identical to `docs/design/sources/office-modern.png`, SHA-256 329fdfd71eeafdb3369d116609ca23d1feb599fa0b689b59531b8efbc6f5bd04. New atlases `seated-lower-parts.png` (12 lower-body frames, SHA-256 16641a40d7e0d14ea706a6e4af58de11877b56b5ea9690304b7b9373c135877c) and `high-stool-poses.png` (18 frames, SHA-256 22cb0884bf962d78ac795dbad5e5bd34b6531bf254ba146e8047dd15666548fb). Prompts and reference hashes are in `docs/design/office-modern-assets.json` (Section "Modern office geometry and poses" of `design/artwork.md`).
+- Layout. Sixty seat entries: 20 desks in four Project areas of 4, 4, 4 and 8; two six-chair meeting rooms; 28 Fika places (16 table, six sofa, six high-table). No infirmary or bed; colleagues in error stay at desks. The floor graph has 181 nodes and 180 links. Independent annotations: `tests/browser/fixtures/modern-image-annotations.json`.
+- Behavior. Newcomers take their own Project area first, then vacancies shared across Projects and Common Office (`reservations.js`). Each Branch can hold two meetings of different Projects, one per room (`meetingsInRooms` in `meeting.js`). `seated.js` composes native torsos with the lower-body and high-stool atlases.
+- Verification at f323b87. GitHub test runs [40215102460](https://github.com/jeonghanlee/agentville/actions/runs/40215102460) and [40255908279](https://github.com/jeonghanlee/agentville/actions/runs/40255908279) and docs run [40215102422](https://github.com/jeonghanlee/agentville/actions/runs/40215102422) concluded success (read with `gh run list` on 2026-10-26). The local full suite passed 353 tests.
+
+Rendering defects found after f323b87 (demo `/?demo=1`, 1440 px):
+
+| Observation | Classification | Evidence | Correction |
+| --- | --- | --- | --- |
+| Desk colleagues in the rear studios stand behind or beside their chairs | Defect against "Seated bodies align with chair cushions" (architecture Section 6.2) | Every rear-facing chair seat (27 of 60: desk, meeting, Fika table, rear sofa) stretched the calf band 4.2 to 6.5 times so the soles reached `supportY`, the floor point beneath the hip; drawn depth below the hip equalled 100 percent of the seat height (28 to 37 source px), against 15.5 px for the unstretched rear lower-body frame. Anchors themselves match the annotations. | Rear-facing chair and sofa sitters keep the drawn length of the rear lower-body frame, since their feet rest forward under the table (`seated.js`). Front-facing seats and high stools still reach their support. After: 42 to 58 percent. |
+| Three Fika colleagues stand behind chairs at a Fika table | Same rendering defect; seat allocation is as specified | Luna, Otto and Pip hold `fika.0`-`fika.2` (fika-north.0-2, rear-facing), class `seated`, no queue position; 25 Fika places remain free | Covered by the correction above |
+| Sage, another colleague and three Contractors cluster in the north meeting room with overlapping tags | Members: same rendering defect. Contractors: defect against "Contractors stand beside their parent" | Contractors stood 30.5 source px right of the seat's floor point; neighbouring meeting chairs are 34 px apart horizontally, so Milo's Contractor covered Theo (figure overlap 100 percent, tag on Theo) and overlapped Sage's figure (36 percent) | For a parent seated with its back to the viewer whose seat approach lies toward the viewer, Contractors stand centered on that measured approach (`app.js` `contractorFoot`). Other placements keep the previous offsets. After: no overlap in demo=1 at 1440 and 720 px. |
+
+Tests: `tests/browser/test_seated_presentation.py` (seven cases) fails all seven on the f323b87 runtime and passes after the correction; it measures rendered boxes in artwork pixels against the seat table. No artwork was changed or drawn.
+
+Open items for owner decision:
+
+- f323b87 differs from the recorded M2 scope, completion criteria and D12/P1-P3 (studios 6/6/4/2 plus Common Office 2 without cross-Project reassignment, one six-chair meeting room with at most one meeting per Branch, Fika with three places, an infirmary with one bed, seat ids studio0.0-5 and similar). Whether to record a decision superseding them, and whether M2 stays Complete on that basis, is not decided here.
+- The 60-seat arrangement, the new atlases and their poses have no recorded intake or per-seat owner acceptance comparable to T1 and T7.
+- Contractors of front-facing parents still stand at the previous offset. In rows of 34 to 65 px pitch, two Contractors per parent can overlap the next colleague; the artwork has no free floor beside these chairs. At the 720 px layout, provider tags are wider than one Contractor step, so the tags of one parent's two Contractors touch (up to 35 percent of a tag).
 
 #### M3 - Town Map
 

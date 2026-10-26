@@ -10,9 +10,9 @@ This document lists the user-visible changes of each AgentVille release.
 
 ### Web UI
 
-- One enlarged office contains 20 desks across four Project studios and Common Office, a six-chair meeting room, three Fika places, and one infirmary bed. Project navigation pages by four; arrivals use available seats before waiting or overflowing.
-- Same-Project colleagues meet after 60 seconds of observed concurrent work. Participants retain identity, selection, and held desks; meetings follow immediate exits or a 30-second grace period, survive reconnects, and are excluded from replay.
-- Walking, furniture occlusion, gestures, lighting, and decoration follow the unified artwork. The full-seat and meeting demonstrations expose all 30 seat ids.
+- One enlarged office contains 20 desks in four Project areas of 4, 4, 4, and 8 places, two six-chair meeting rooms, and 28 Fika places at two tables, two sofas, and three high tables. Project navigation pages by four. Colleagues take their Project's desks first, then vacancies shared with other Projects and Common Office; Fika colleagues sit before joining a waiting line. The infirmary is removed: colleagues in error stay at their desks.
+- Same-Project colleagues meet after 60 seconds of observed concurrent work, with up to two meetings of different Projects per Branch. Participants retain identity, selection, and held desks; meetings follow immediate exits or a 30-second grace period, survive reconnects, and are excluded from replay.
+- Walking, furniture occlusion, seated poses, gestures, lighting, and decoration follow the office artwork. Colleagues seated with their backs to the viewer rest their feet under the table, and their Contractors stand on the free side of the chair. The full-seat and meeting demonstrations expose all 60 seat ids.
 
 ## 0.3.0 - Observation Release - 2026-10-22
 
