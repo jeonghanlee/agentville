@@ -15,6 +15,7 @@ This document lists the user-visible changes of each AgentVille release.
 - Walking, furniture occlusion, seated poses, gestures, lighting, and decoration follow the office artwork. Colleagues seated with their backs to the viewer rest their feet under the table, and their Contractors stand on the free side of the chair. The full-seat and meeting demonstrations expose all 60 seat ids.
 - Contractor teams: a colleague that has had Contractors for 10 seconds works with them at a free meeting-room table, otherwise at a free Fika table or sofa, with its desk reserved; they walk there together, and Contractors sit at Contractor size in hard hats. A meeting keeps its room when a team forms and a team keeps its room when a meeting could start. Meeting members bring their Contractors to free chairs. Contractors without a chair show as "+N". The team ends 10 seconds after its last Contractor, or at once on waiting, error, limit, or going off duty. Replay shows teams without walking, and the demo shows one fixed team.
 - Contractors standing beside a desk keep clear of other colleagues and of each other's tags, using nearby floor spots when the chair has no free side.
+- Colleagues on the rear sofa are no longer covered by the coffee table.
 
 ## 0.3.0 - Observation Release - 2026-10-22
 
