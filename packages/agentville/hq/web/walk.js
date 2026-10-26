@@ -29,7 +29,8 @@ export function createWalkers(root, { motionAllowed, changed }) {
     return Math.abs(down) < .2 * across || Math.abs(down) < .01 ? walk.view : down > 0 ? "front" : "back";
   }
   function place(walk) {
-    const node = [...root.querySelectorAll(".agent")].find((actor) => actor.dataset.employeeKey === walk.key);
+    // Colleagues and Contractors both name their walk with data-walk-key.
+    const node = [...root.querySelectorAll("[data-walk-key]")].find((actor) => actor.dataset.walkKey === walk.key);
     if (!node) return;
     const [x, y] = position(walk);
     walk.facing = facing(walk);

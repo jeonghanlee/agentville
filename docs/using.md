@@ -18,7 +18,7 @@ One floor per Branch. The Branch selector at the top of the office card switches
 |---|---|
 | Project area | Colleagues working in that repository, with priority for its desks. The name is the repository; the sublabel reads "repository". |
 | Common Office | Colleagues working outside any repository; they use available desks. |
-| Meeting rooms | Two rooms, each seating up to six colleagues of a different Project after 60 seconds of observed concurrent work. |
+| Meeting rooms | Two rooms, each seating up to six colleagues of a different Project after 60 seconds of observed concurrent work, or one colleague working with its Contractors. |
 | Lounge (Fika) | Colleagues idle for an hour or more, with the default thresholds; each Branch can set its own ([Configuration](configuration.md)). |
 
 The single floor has 20 desks: three window areas with four places each and a central area with eight. The arrows beside the room tabs page through four Projects at a time. Colleagues take their Project's available desks first, then share other vacancies with Common Office. Occupants keep their desks until they leave; arrivals do not move existing occupants. Further colleagues appear as "+N" when all desks are reserved.
@@ -27,7 +27,19 @@ Meeting participants appear at the table on every Project page. Their held desks
 
 Fika has 28 places: 16 around two tables, six on two sofas, and six at three high tables. Colleagues fill these places before joining a waiting line. An Error colleague uses a desk and retains the error status; this floor has no infirmary or bed. Live arrivals enter between the sofas and Fika. Colleagues walk between places on the same floor; reduced motion places them directly. `/?demo=seats` and `/?demo=meeting` display all 60 seat ids, including both six-person meetings.
 
-Each colleague wears a provider badge (`CL` Claude, `CX` Codex). Contractors (subagents) stand beside their colleague in a yellow hard hat with their own provider badge.
+Each colleague wears a provider badge (`CL` Claude, `CX` Codex). Contractors (subagents) wear a yellow hard hat and their own provider badge.
+
+### Contractor teams
+
+A colleague that has had Contractors for 10 seconds works with them away from its desk:
+
+1. In a free meeting room: the colleague takes the first chair and its Contractors the next chairs.
+2. With both meeting rooms in use: at a free Fika table or sofa.
+3. With neither free: at its desk, with its Contractors standing nearby where they do not cover other colleagues.
+
+The colleague's desk stays reserved and empty while the team is away. Contractors without a chair appear as "+N" on the last seated Contractor. A meeting keeps its room when a team forms, and a team keeps its room when a meeting could start. A meeting member brings its Contractors to free chairs of its meeting room.
+
+The team ends 10 seconds after its last Contractor finishes, or at once when the colleague starts waiting, has an error, reaches a limit, or goes off duty. The colleague and its Contractors then walk back to the desk. Reduced motion and replay place them directly. Teams are presentation only and do not record collaboration. The demo (`/?demo=1`) shows one fixed team in the second meeting room.
 
 ## Activity states
 
@@ -88,7 +100,7 @@ The Timeline lists what HQ recorded on one day, newest first: colleagues startin
 Replay (되감기) shows the office as it was at an earlier time:
 
 - Pick a day, then move the time slider, select an entry in the list, or press play. Speeds are 1x, 10x (a minute in 6 seconds), and 60x (a minute per second). The step buttons jump to the previous or next recorded change.
-- Replay does not show meetings.
+- Replay does not show meetings. Contractor teams are shown from the replayed state, without walking.
 - While replaying, a banner with the replay time appears on every page. The office, lists, details, clock, and window light show that time, so the Virtual office can be watched while it plays. The banner holds the same controls.
 - "Back to live" (or Escape) returns to the current state. Live data keeps arriving during replay; browser notifications are not sent while replaying.
 - HQ keeps 30 days of history by default (Installation Section 4). An HQ upgraded from 0.1.0 has history from the upgrade on.

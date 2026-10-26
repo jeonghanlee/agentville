@@ -103,20 +103,6 @@ def test_demo_fika_and_meeting_colleagues_sit_on_free_seats(tmp_path, width):
         browser.close()
 
 
-@pytest.mark.parametrize("width", [1440, 720])
-def test_demo_meeting_contractors_stand_clear_of_other_colleagues(tmp_path, width):
-    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
-        browser, page, errors = open_page(driver, hq.url + "/?demo=1", width)
-        playwright.expect(page.locator("#characters .contractor")).to_have_count(3)
-        scene = page.evaluate(MEASURE)
-        parents = {row["parent"] for row in scene["contractors"]}
-        assert parents == {'["home","milo"]', '["garden","sage"]'}
-        assert {row["room"] for row in scene["agents"] if row["key"] in parents} == {"meeting"}
-        assert contractor_conflicts(scene) == []
-        assert not errors
-        browser.close()
-
-
 def test_rear_facing_desk_contractors_stand_on_the_free_side(tmp_path):
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
         payload = roster(hq, state="working")
