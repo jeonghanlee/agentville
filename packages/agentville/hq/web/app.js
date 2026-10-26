@@ -688,6 +688,7 @@ function renderCharacters(ctx) {
     }
   }
   renderContractors(helpers, hired);
+  separateContractorTags();
   for (const [key,node] of actors) {
     if (!used.has(key)) { node.remove(); actors.delete(key); walkers?.stop(key); places.delete(key); }
   }
@@ -699,6 +700,30 @@ function renderCharacters(ctx) {
   }
   updateWorkGestures($("characters"));
   shownBranch = branchId;
+}
+// Provider tags and "+N" counts of different Contractors never cover each other, whatever the font metrics: in
+// Contractor order, a label that would overlap an earlier one moves up or down by whole label heights to the nearest
+// clear place. Labels are measured from layout sizes at each figure's target place, so moving figures do not matter.
+function separateContractorTags() {
+  const world = $("world").getBoundingClientRect();
+  if (!world.width || !world.height) return;
+  const labels = [...companions.values()].filter((node) => node.isConnected)
+    .flatMap((node) => [...node.querySelectorAll(":scope > .contractor-tag, :scope > small")].map((label) => ({ node, label })));
+  labels.forEach(({ label }) => { label.style.translate = ""; });
+  const placed = [];
+  for (const { node, label } of labels) {
+    const box = targetBox(node, world), height = label.offsetHeight + 1;
+    const base = [box[0] + label.offsetLeft, box[1] + label.offsetTop, box[0] + label.offsetLeft + label.offsetWidth,
+      box[1] + label.offsetTop + label.offsetHeight];
+    const at = (shift) => [base[0], base[1] + shift, base[2], base[3] + shift];
+    const clearAt = (shift) => placed.every((other) => boxArea([Math.max(at(shift)[0], other[0]), Math.max(at(shift)[1], other[1]),
+      Math.min(at(shift)[2], other[2]), Math.min(at(shift)[3], other[3])]) === 0);
+    let shift = 0;
+    for (let step = 1; !clearAt(shift) && step <= 8; step++) shift = (step % 2 ? -1 : 1) * Math.ceil(step / 2) * height;
+    if (!clearAt(shift)) shift = 0;
+    if (shift) label.style.translate = "0 " + shift + "px";
+    placed.push(at(shift));
+  }
 }
 // Contractors after every colleague is placed: seated at their colleague's table, otherwise standing beside it.
 function renderContractors(helpers, hired) {
@@ -1395,6 +1420,8 @@ cats = createOfficeCats($("characters"));
 applyLanguage();
 decor = mountDecor($("world"));
 furniture = mountFurniture($("world"));
+// Tags keep their pixel size while the floor scales with the window and zoom, so separate them again.
+if (typeof ResizeObserver === "function") new ResizeObserver(() => separateContractorTags()).observe($("world"));
 furniture.update();
 if (!DEMO) connect();
 replay.refreshRange().then(() => { refreshToday(); render(); });

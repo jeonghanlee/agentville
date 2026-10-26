@@ -10,7 +10,7 @@ import pytest
 from agentville.common.protocol import iso
 from tests.browser.test_seated_presentation import MEASURE, area, contractor_conflicts, overlap
 from tests.browser.test_seats import open_page, placements, roster
-from tests.browser_support import playwright_sync
+from tests.browser_support import launch_options, playwright_sync
 from tests.lifecycle_support import HQ
 
 playwright = playwright_sync()
@@ -252,21 +252,42 @@ def test_desk_fallback_spaces_contractors_clear_of_other_figures(tmp_path, width
         browser.close()
 
 
-@pytest.mark.parametrize("width", [1440, 720])
-def test_demo_team_and_meeting_contractors_keep_tags_readable(tmp_path, width):
+# Wider provider tags than any Chromium build draws, so neighbouring seated Contractors' tags must be separated by the
+# page rather than by lucky text metrics.
+WIDE_TAGS = """document.addEventListener('DOMContentLoaded', () => { const style = document.createElement('style');
+  style.textContent = '.contractor-tag{font-size:9px!important;letter-spacing:3px!important;padding:2px 4px!important}';
+  document.head.append(style); });"""
+
+
+@pytest.mark.parametrize("width,tags", [(1440, "normal"), (720, "normal"), (1440, "wide"), (720, "wide")])
+def test_demo_team_and_meeting_contractors_keep_tags_readable(tmp_path, width, tags):
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
-        browser, page, errors = open_page(driver, hq.url + "/?demo=1", width)
+        browser = driver.chromium.launch(**launch_options())
+        page = browser.new_page(viewport={"width": width, "height": 1100}, reduced_motion="reduce", locale="en-US")
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        if tags == "wide":
+            page.add_init_script(WIDE_TAGS)
+        page.goto(hq.url + "/?demo=1")
         playwright.expect(page.locator("#characters .contractor.seated-contractor")).to_have_count(5)
         rows = {row["key"]: row for row in placements(page)}
         assert rows['["home","noah"]']["room"] == "meeting-east" and rows['["home","noah"]']["index"] == "0"
         assert sorted(row["seat"] for row in contractors(page) if row["parent"] == '["home","noah"]') == ["meeting-east.1", "meeting-east.2"]
         assert sorted(row["seat"] for row in contractors(page) if row["parent"] != '["home","noah"]') == [
             "meeting.3", "meeting.4", "meeting.5"]
-        scene = page.evaluate(MEASURE)
-        labels = [(row["parent"], label) for row in scene["contractors"] for label in row["labels"]]
-        for i, (parent, label) in enumerate(labels):
-            for other_parent, other in labels[i + 1:]:
-                assert overlap(label, other) / area(label) <= .05, (parent, other_parent)
+
+        def collisions():
+            scene = page.evaluate(MEASURE)
+            labels = [(row["parent"], label) for row in scene["contractors"] for label in row["labels"]]
+            return [(parent, other_parent, round(overlap(label, other) / area(label), 3))
+                    for i, (parent, label) in enumerate(labels) for other_parent, other in labels[i + 1:]
+                    if overlap(label, other) / area(label) > .05]
+
+        assert collisions() == []
+        # Zooming scales the floor but not the tags; they are separated again.
+        page.locator("#zoom-in").click()
+        page.wait_for_timeout(300)
+        assert collisions() == []
         assert not errors
         browser.close()
 
