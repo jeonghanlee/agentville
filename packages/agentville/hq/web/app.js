@@ -1,8 +1,10 @@
 // Branch-provided strings are rendered through text nodes, never as markup.
 import { icon, character, avatarColor, prepareAppearances } from "./art.js";
-import { applyLayoutMetrics, RECLINING_WIDTH, ACTOR_SCALE, PROJECTS_PER_PAGE, floorDepth } from "./layout.js";
+import { applyLayoutMetrics, RECLINING_WIDTH, ACTOR_SCALE, ACTOR_WIDTH, ACTOR_VIEW, CONTRACTOR_WIDTH, PROJECTS_PER_PAGE,
+  floorDepth } from "./layout.js";
 import { ROOM_LAYOUT, WAITING_SPOTS, SEATS, MEETING_ROOMS, ENTRANCE } from "./office-layout.js";
 import { createObservations, observe, meetingsInRooms } from "./meeting.js";
+import { createTeamObservations, observeTeams, teams as formTeams, placeTeams } from "./teams.js";
 import { reserveDesks } from "./reservations.js";
 import { seatedCharacter, seatedWorkstation, applySeatedMetrics } from "./seated.js";
 import { demoState } from "./demo.js";
@@ -15,7 +17,7 @@ import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 import { createLounge } from "./lounge.js";
 import { createWalkers } from "./walk.js";
-import { NODES, route, distance, clear, blockedBy } from "./floor.js";
+import { NODES, LINKS, route, distance, clear, blockedBy } from "./floor.js";
 import { roomSeats, roomOfSeat, indexOfSeat, seatFoot, rearFacing } from "./seats.js";
 import { walkerDepth, updateWalkerOcclusion } from "./furniture.js";
 import { t, locale, currentLanguage, setLanguage, translateDocument } from "./i18n.js";
@@ -63,6 +65,19 @@ let coffee = null;
 let lounge = null;
 const meetingLounges = new Map();
 let observations = createObservations(), branchMeetings = {};
+// Contractor teams (teams.js): formation per Branch, and the places of the displayed Branch's teams.
+let teamObservations = createTeamObservations(), branchTeams = {}, teamPlaces = new Map(), teamPlacesBranch = "";
+// Replayed teams are placed apart from the live ones, so replay never holds a live meeting room.
+let replayTeamPlaces = new Map();
+// The floor spot each Contractor standing beside a desk keeps while it stays clear of other figures.
+const contractorSpots = new Map();
+// Fika groups a team can use: the two Fika tables and the two sofas, as Fika seat indices in seat order.
+const FIKA_GROUPS = [...roomSeats("fika").filter((seat) => seat.kind !== "high").reduce((groups, seat) => {
+  const id = seat.sourceId.split(".")[0];
+  if (!groups.has(id)) groups.set(id, []);
+  groups.get(id).push(indexOfSeat(seat));
+  return groups;
+}, new Map())].map(([id, seats]) => ({ id, seats }));
 let walkers = null;
 // Last floor place of each shown colleague, so a change of place becomes a walk.
 const places = new Map();
@@ -212,6 +227,8 @@ function rows(data = current) {
 }
 function roomOf(row) {
   if (displayedMeeting()?.members.some((member) => member.key === row.key)) return projectRoom(row.agent.project_id);
+  // A team colleague belongs to its own room wherever the team works.
+  if (displayedTeams().some((team) => team.key === row.key)) return row.agent.project_id === COMMON ? "common" : projectRoom(row.agent.project_id);
   if (row.detail === "fika") return "fika";
   return row.agent.project_id === COMMON ? "common" : projectRoom(row.agent.project_id);
 }
@@ -229,12 +246,28 @@ function displayedMeeting() {
   if (!Array.isArray(value)) return value;
   return { members: value.flatMap((meeting) => meeting.members.map((member) => ({ ...member, room: meeting.room }))) };
 }
+// The teams of the displayed Branch; while replaying, formed at once from the replayed state.
+let teamMemo = { inputs: [], value: [] };
+function displayedTeams() {
+  const inputs = [Boolean(replay?.active), current, branchTeams, branchId];
+  if (inputs.every((value, i) => value === teamMemo.inputs[i])) return teamMemo.value;
+  const value = replay?.active ? formTeams(current, null, {}, nowMs(), "replay", current.lifecycles)[branchId] || []
+    : branchTeams[branchId] || [];
+  teamMemo = { inputs, value };
+  return value;
+}
 function updateMeetings(restart = false) {
-  if (DEMO) { branchMeetings = live.meetings || {}; return; }
+  if (DEMO) { branchMeetings = live.meetings || {}; branchTeams = live.teams || {}; return; }
   if (!connected) return;
   const now = Date.now();
   observations = observe(observations, live, now, { restart });
-  branchMeetings = meetingsInRooms(live, observations, branchMeetings, now, "live", live.lifecycles, MEETING_ROOMS);
+  teamObservations = observeTeams(teamObservations, live, now, { restart });
+  branchTeams = formTeams(live, teamObservations, branchTeams, now, "live", live.lifecycles);
+  // A meeting room used by a team of the displayed Branch is not free for a new meeting.
+  const teamKeys = new Set((branchTeams[teamPlacesBranch] || []).map((team) => team.key));
+  const held = { [teamPlacesBranch]: new Set([...teamPlaces].filter(([key, place]) => teamKeys.has(key) && place.kind === "room")
+    .map(([, place]) => place.room)) };
+  branchMeetings = meetingsInRooms(live, observations, branchMeetings, now, "live", live.lifecycles, MEETING_ROOMS, held);
 }
 function context(all) {
   const local = all.filter((r) => r.agent.branch_id === branchId);
@@ -245,8 +278,9 @@ function context(all) {
   const ids = new Set(projects.map((p) => p.id));
   const present = all.filter((r) => r.duty && (r.agent.branch_id === branchId || ids.has(r.agent.project_id)));
   const pageIds = new Set(page.map((p) => p.id));
+  const teamKeys = new Set(displayedTeams().map((team) => team.key));
   const office = present.filter((r) => pageIds.has(r.agent.project_id) || displayedMeeting()?.members.some((m) => m.key === r.key)
-    || ["common", "fika"].includes(roomOf(r)));
+    || teamKeys.has(r.key) || ["common", "fika"].includes(roomOf(r)));
   return { local, projects, page, present, office };
 }
 // Unverified has two causes: the page has no HQ connection, or HQ is connected but has no fresh Branch report.
@@ -337,22 +371,81 @@ function placeOf(seat, spot) {
   if (seat.facing === "lying") return { foot: side || seat.position, approach: null };
   return { foot: seatFoot(seat), approach: side };
 }
-// Contractors stand beside their parent, each further one a step to the right and nearer the viewer. A parent seated
-// with its back to the viewer has them centered on the seat's measured approach when that free side lies toward the
-// viewer, because the neighbouring chairs of a row are closer than one Contractor step.
-function contractorFoot(standing, place, i, count) {
-  const foot = standing || seatFoot(place);
-  const free = !standing && place.approach && rearFacing(place.facing) ? NODES[place.approach] : null;
-  const [x,y] = free && free[1] > foot[1] ? [free[0] - 1.4 * (count - 1) * ACTOR_SCALE, free[1]] : [foot[0] + 3.1 * ACTOR_SCALE, foot[1]];
-  return [x + 2.8 * i * ACTOR_SCALE, y + .9 * i * ACTOR_SCALE];
+// Contractors beside a desk stand on the seat's free side when it lies toward the viewer: a parent seated with its
+// back to the viewer has them centered on the seat's measured approach, each further one a step to the right and
+// nearer the viewer.
+function freeSideFoot(place, i, count) {
+  if (!place?.approach || !rearFacing(place.facing)) return null;
+  const foot = seatFoot(place), free = NODES[place.approach];
+  if (!(free[1] > foot[1])) return null;
+  return [free[0] - 1.4 * (count - 1) * ACTOR_SCALE + 2.8 * i * ACTOR_SCALE, free[1] + .9 * i * ACTOR_SCALE];
 }
-// A changed place starts a walk along the floor routes; the first sighting, another Branch, or reduced motion places directly.
+// Beside a standing or walking parent, each Contractor a step to the right and nearer the viewer.
+function followingFoot([x, y], i) {
+  return [x + 3.1 * ACTOR_SCALE + 2.8 * i * ACTOR_SCALE, y + .9 * i * ACTOR_SCALE];
+}
+// Without a free side, Contractors take floor-graph spots near the desk where their figure and tags overlap no
+// other figure by more than CLEAR_SHARE (5 percent of their own area), the nearest first; a spot stays while clear.
+const SPOT_RADIUS = 22, CLEAR_SHARE = .05;
+// Floor-graph spots: every node and points along every link, about one Contractor width apart.
+const FLOOR_SPOTS = Object.values(NODES).concat(LINKS.flatMap(([a, b]) => {
+  const from = NODES[a], to = NODES[b], steps = Math.floor(distance(from, to) / .8);
+  return Array.from({ length: Math.max(0, steps - 1) }, (_, i) => [from[0] + (to[0] - from[0]) * (i + 1) / steps,
+    from[1] + (to[1] - from[1]) * (i + 1) / steps]);
+}));
+const boxArea = (b) => Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+const shareOf = (a, b) => boxArea([Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])]) / (boxArea(a) || 1);
+// A positioned node's box in world pixels at its target place, from its layout size and transform.
+function targetBox(node, world) {
+  const width = node.offsetWidth, height = node.offsetHeight;
+  const shift = /translate\(-50%,\s*(-?[\d.]+)%\)/.exec(node.style.transform)?.[1];
+  const ty = shift !== undefined ? Number(shift) / 100 : -ACTOR_VIEW.foot / ACTOR_VIEW.height;
+  const x = parseFloat(node.style.left) / 100 * world.width, y = parseFloat(node.style.top) / 100 * world.height;
+  return [x - width / 2, y + ty * height, x + width / 2, y + ty * height + height];
+}
+// Figure and label boxes of a standing Contractor node if its feet were at foot (percent).
+function contractorBoxes(node, foot, world) {
+  const width = node.offsetWidth, height = node.offsetHeight;
+  const x = foot[0] / 100 * world.width, y = foot[1] / 100 * world.height;
+  const left = x - width / 2, top = y - ACTOR_VIEW.foot / ACTOR_VIEW.height * height;
+  const labels = [...node.querySelectorAll(":scope > .contractor-tag, :scope > small")].map((label) =>
+    [left + label.offsetLeft, top + label.offsetTop, left + label.offsetLeft + label.offsetWidth, top + label.offsetTop + label.offsetHeight]);
+  return { figure: [left, top, left + width, top + height], labels };
+}
+function spacedFoot(id, node, place, world, figures, placed, preferred) {
+  const conflict = (foot) => {
+    const own = contractorBoxes(node, foot, world);
+    let worst = 0;
+    for (const other of figures) worst = Math.max(worst, shareOf(own.figure, other), ...own.labels.map((label) => shareOf(label, other)));
+    for (const other of placed) worst = Math.max(worst, shareOf(own.figure, other.figure),
+      ...other.labels.map((theirs) => shareOf(theirs, own.figure)),
+      ...own.labels.map((label) => Math.max(shareOf(label, other.figure), ...other.labels.map((theirs) => shareOf(label, theirs) * 20))));
+    return worst;
+  };
+  const kept = contractorSpots.get(id);
+  if (kept && kept.seat === place.id && conflict(kept.foot) <= CLEAR_SHARE) return kept.foot;
+  const origin = seatFoot(place);
+  const spots = (preferred ? [preferred] : []).concat(FLOOR_SPOTS.filter((point) => distance(point, origin) <= SPOT_RADIUS)
+    .sort((a, b) => distance(a, origin) - distance(b, origin)));
+  let best = null;
+  for (const foot of spots) {
+    // Further rings are searched only while nothing nearer is clear.
+    if (best?.worst <= CLEAR_SHARE) break;
+    const worst = conflict(foot);
+    if (!best || worst < best.worst) best = { foot, worst };
+  }
+  const foot = best?.foot || followingFoot(origin, 0);
+  contractorSpots.set(id, { seat: place.id, foot });
+  return foot;
+}
+// A changed place starts a walk along the floor routes; the first sighting, another Branch, replay, or reduced motion
+// places directly.
 function moveWalker(key, target) {
   const last = places.get(key) || (shownBranch === branchId && !DEMO && !replay?.active
     ? { foot: ENTRANCE, approach: null, scope: branchId } : null);
   places.set(key, { ...target, scope: branchId });
   const current = walkers?.get(key);
-  if (!walkers || !last || last.scope !== branchId || !motionAllowed()) { walkers?.stop(key); return null; }
+  if (!walkers || !last || last.scope !== branchId || !motionAllowed() || replay?.active) { walkers?.stop(key); return null; }
   if (distance(current ? current.goal : last.foot, target.foot) < .05) return current;
   const start = current ? [current.x, current.y] : last.foot;
   // A walker leaves a seat through its free side; one turned around on the step into or out of a seat first
@@ -366,8 +459,53 @@ function moveWalker(key, target) {
   walkers.start(key, path, () => coffee?.arrived(key), visit?.phase === "walking-back");
   return walkers.get(key);
 }
+// Where each shown colleague's Contractors go: seats at the colleague's meeting or team table (with "+N" for those
+// without a chair), or standing beside the colleague.
+function contractorSeats(members, teamAt, rows) {
+  const result = new Map();
+  for (const [key, place] of teamAt) {
+    if (place.kind === "desk") continue;
+    const room = place.kind === "room" ? place.room : "fika";
+    result.set(key, { room, seats: place.seats.slice(1), extra: place.extra });
+  }
+  // Members of a meeting bring their Contractors to the free chairs of their room, in chair and Contractor order.
+  const byRoom = new Map();
+  for (const member of members.values()) {
+    const room = member.room || "meeting";
+    if (!byRoom.has(room)) byRoom.set(room, []);
+    byRoom.get(room).push(member);
+  }
+  for (const [room, list] of byRoom) {
+    const used = new Set(list.map((member) => member.chair));
+    const free = roomSeats(room).map((_, i) => i).filter((i) => !used.has(i));
+    for (const member of list.sort((a, b) => a.chair - b.chair)) {
+      const count = rows.get(member.key)?.contractors.length || 0;
+      const seats = free.splice(0, count);
+      result.set(member.key, { room, seats, extra: count - seats.length });
+    }
+  }
+  return result;
+}
 function renderCharacters(ctx) {
   const members = new Map((displayedMeeting()?.members || []).map((member) => [member.key, member]));
+  const shown = new Map(ctx.office.map((row) => [row.key, row]));
+  // Teams of the displayed Branch; a meeting member is not a team, its Contractors come with it to the meeting.
+  const teamList = displayedTeams().filter((team) => !members.has(team.key) && shown.has(team.key))
+    .map((team) => ({ ...team, count: shown.get(team.key).contractors.length }));
+  const fikaScope = seatScope(ctx, "fika");
+  if (!seatOccupancy.has(fikaScope)) seatOccupancy.set(fikaScope, new Map());
+  const teamKeys = new Set(teamList.map((team) => team.key));
+  const fikaPeople = new Set(ctx.office.filter((row) => roomOf(row) === "fika" && !teamKeys.has(row.key)).map((row) => row.key));
+  const fikaTaken = new Set([...seatOccupancy.get(fikaScope)].filter(([key, index]) => index !== null && fikaPeople.has(key))
+    .map(([, index]) => index));
+  if (teamPlacesBranch !== branchId) { teamPlaces = new Map(); replayTeamPlaces = new Map(); teamPlacesBranch = branchId; }
+  const teamAt = placeTeams(teamList, {
+    rooms: MEETING_ROOMS.map((room) => ({ id: room.id, seats: roomSeats(room.id).map((_, i) => i) })),
+    busy: new Set([...members.values()].map((member) => member.room || "meeting")),
+    groups: FIKA_GROUPS, taken: fikaTaken, previous: replay?.active ? replayTeamPlaces : teamPlaces });
+  if (replay?.active) replayTeamPlaces = teamAt; else { teamPlaces = teamAt; replayTeamPlaces = new Map(); }
+  const away = new Set([...teamAt].filter(([, place]) => place.kind !== "desk").map(([key]) => key));
+  const teamSeats = new Set([...teamAt.values()].filter((place) => place.kind === "fika").flatMap((place) => place.seats));
   const desks = SEATS.filter((seat) => seat.workstation);
   const preferred = new Map();
   const residents = ctx.office.filter((row) => {
@@ -378,31 +516,33 @@ function renderCharacters(ctx) {
     return true;
   });
   const deskScope = keyOf(branchId, "desks:" + floor + ":" + JSON.stringify(ctx.page.map((project) => project.id)));
+  // Meeting members and teams away from their desks keep a held desk and receive none while away.
   const assignments = reserveDesks(seatOccupancy.get(deskScope) || new Map(), residents, desks, preferred,
-    DEMO ? new Set() : new Set(members.keys()));
+    DEMO ? new Set() : new Set([...members.keys(), ...away]));
   seatOccupancy.set(deskScope, assignments);
   const groups = new Map();
   for (const row of ctx.office) {
-    const id = assignments.get(row.key), member = members.get(row.key);
-    const room = member ? member.room || "meeting" : roomOf(row) === "fika" ? "fika"
-      : id ? roomOfSeat({ id }) : preferred.get(row.key);
+    const id = assignments.get(row.key), member = members.get(row.key), team = away.has(row.key) ? teamAt.get(row.key) : null;
+    const room = member ? member.room || "meeting" : team ? (team.kind === "room" ? team.room : "fika")
+      : roomOf(row) === "fika" ? "fika" : id ? roomOfSeat({ id }) : preferred.get(row.key);
     if (!Object.hasOwn(ROOM_LAYOUT, room)) continue;
     if (!groups.has(room)) groups.set(room, []);
     groups.get(room).push(row);
   }
-  // Fika keeps arrival order across its table, sofa and stool places. Desks remain held during a meeting;
-  // all visible Projects and Common Office share vacancies after their own areas have been allocated.
+  // Fika keeps arrival order across its table, sofa and stool places; places used by a team are not offered.
+  // Desks remain held during a meeting or team; all visible Projects and Common Office share vacancies after their
+  // own areas have been allocated.
   const scopes = new Set([deskScope]);
   for (const room of Object.keys(WAITING_SPOTS)) {
     const id = seatScope(ctx, room);
     scopes.add(id);
     if (!seatOccupancy.has(id)) seatOccupancy.set(id,new Map());
     const occupants = seatOccupancy.get(id);
-    const people = groups.get(room) || [];
+    const people = (groups.get(room) || []).filter((row) => !away.has(row.key));
     const residents = new Set(people.map((row) => row.key));
     for (const key of occupants.keys()) if (!residents.has(key)) occupants.delete(key);
     for (const row of people) if (!occupants.has(row.key)) occupants.set(row.key,null);
-    const occupied = new Set([...occupants.values()].filter((index) => index !== null));
+    const occupied = new Set([...occupants.values()].filter((index) => index !== null).concat(room === "fika" ? [...teamSeats] : []));
     for (const [key,index] of occupants) {
       if (index !== null || (!DEMO && members.has(key))) continue;
       const free = roomSeats(room).findIndex((_,i) => !occupied.has(i));
@@ -418,12 +558,15 @@ function renderCharacters(ctx) {
   for (const [room, controller] of meetingLounges) controller.sync(ctx.present
     .filter((row) => (members.get(row.key)?.room || (members.has(row.key) ? "meeting" : "")) === room)
     .map((row) => [row.key, row.agent.agent_id]));
-  const used = new Set(), hired = new Set(), dark = new Set();
+  const seatedContractors = contractorSeats(members, teamAt, shown);
+  const used = new Set(), hired = new Set(), dark = new Set(), helpers = [];
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room], seats = roomSeats(room);
-    const occupants = room.startsWith("meeting") ? new Map(people.map((row) => [row.key, members.get(row.key).chair]))
-      : room === "fika" ? seatOccupancy.get(seatScope(ctx,room))
+    const teamIndex = (key) => away.has(key) ? teamAt.get(key).seats[0] : undefined;
+    const occupants = room.startsWith("meeting") ? new Map(people.map((row) => [row.key, members.get(row.key)?.chair ?? teamIndex(row.key)]))
+      : room === "fika" ? new Map([...seatOccupancy.get(seatScope(ctx,room)),
+        ...people.filter((row) => away.has(row.key)).map((row) => [row.key, teamIndex(row.key)])])
       : new Map(people.map((row) => [row.key, assignments.get(row.key) ? indexOfSeat({ id: assignments.get(row.key) }) : null]));
     const waiting = WAITING_SPOTS[room] ? [...occupants].filter(([,index]) => index === null).map(([key]) => key) : [];
     const shownWaiting = waiting.slice(0,WAITING_SPOTS[room]?.length || 0);
@@ -439,13 +582,18 @@ function renderCharacters(ctx) {
       }
       used.add(row.key);
       node.dataset.employeeKey = row.key;
+      node.dataset.walkKey = row.key;
       const visible = passes(row);
       const condition = CONDITIONS.includes(row.agent.condition) ? row.agent.condition : "normal";
       node.className = ["agent", row.state, row.detail, condition, row.verified ? "" : "unverified",
         selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
       const reset = resetLabel(row), done = showsDone(row);
+      // Contractors without a chair at the colleague's table are counted on the colleague or its last seated Contractor.
+      const table = seatedContractors.get(row.key);
+      const unseated = table && !table.seats.length ? table.extra : 0;
       node.setAttribute("aria-label", row.name + ", " + stateName(row.state) + (row.verified ? "" : t("state.unverifiedSuffix"))
-        + (done && row.state !== "completed" ? ", " + stateName("completed") : "") + (reset ? ", " + reset : "") + ", " + row.project);
+        + (done && row.state !== "completed" ? ", " + stateName("completed") : "") + (reset ? ", " + reset : "") + ", " + row.project
+        + (unseated ? t("contractor.more", { n: unseated }) : ""));
       node.setAttribute("aria-pressed", String(row.key === selected));
       node.tabIndex = visible ? 0 : -1;
       const visit = coffee?.get(row.key);
@@ -467,6 +615,7 @@ function renderCharacters(ctx) {
       node.dataset.walkView = walk?.view || "";
       node.dataset.queuePosition = spot ? String(waiting.indexOf(row.key)+1) : "";
       node.dataset.seatIndex = index === null ? "" : String(index);
+      node.dataset.team = away.has(row.key) ? teamAt.get(row.key).kind : teamAt.has(row.key) ? "desk" : "";
       node.style.width = desk === "lying" ? RECLINING_WIDTH + "%" : SEATED_WIDTH + "%";
       node.style.left = seat[0] + "%";
       node.style.top = seat[1] + "%";
@@ -498,19 +647,21 @@ function renderCharacters(ctx) {
         }
         screen.style.zIndex = String(seat[3] - 1);
       }
+      const atTable = room.startsWith("meeting") || away.has(row.key);
       const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, room, place?.id, row.activity?.tool, node.dataset.queuePosition,
-        row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass)]);
+        row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass), atTable, unseated]);
       if (node.dataset.appearance !== appearance) {
         const name = el("span", { class: "agent-name" }, badge(row.agent.provider), row.name,
           row.agent.branch_id === branchId ? null : el("span", { class: "remote-badge" }, row.branchName),
           reset ? el("span", { class: "reset-time" }, reset) : null,
-          room.startsWith("meeting") ? stateLabel(row) : null,
-          room.startsWith("meeting") && row.state === "working" && row.activity?.tool ? el("span", { class: "agent-tool" }, row.activity.tool) : null);
+          atTable ? stateLabel(row) : null,
+          atTable && row.state === "working" && row.activity?.tool ? el("span", { class: "agent-tool" }, row.activity.tool) : null);
         const native = character(row.key, row.state, detail, condition, false, desk, workstation, cup);
         native.dataset.occlusionId = String(++actorRevision);
         const children = [seated ? seatedCharacter(native, place) : native,
           name, el("span", { class: "agent-signal", style: { background: color(row.state) } })];
         if (DEMO_MODE === "seats" || DEMO_MODE === "meeting") children.push(el("span", { class: "agent-seat-id" }, room + "." + index));
+        if (unseated) children.push(el("small", { class: "team-more", "aria-hidden": "true" }, "+" + unseated));
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
         if (done) children.push(el("span", { class: "done-check", title: stateName("completed") }, icon("check")));
         if (counter && visit.phase === "waiting") children.push(el("span", { class: "coffee-status" },
@@ -524,36 +675,7 @@ function renderCharacters(ctx) {
       updateWalkerOcclusion(node, seat[0], seat[1]);
       lounge?.decorate(node, row.key);
       for (const controller of meetingLounges.values()) controller.decorate(node, row.key);
-      // Each Contractor shows its own activity; further Contractors collapse into "+N".
-      const shown = row.contractors.slice(0, MAX_CONTRACTORS);
-      shown.forEach((contractor, i) => {
-        const id = JSON.stringify([row.key, contractor.contractor_id]);
-        let companion = companions.get(id);
-        if (!companion) {
-          companion = button("", "contractor", () => selectEmployee(row.key), { "data-parent-key": row.key });
-          companions.set(id, companion);
-          $("characters").append(companion);
-        }
-        hired.add(id);
-        const state = contractorState(contractor), tool = contractorTool(contractor);
-        const extra = i === shown.length - 1 ? row.contractors.length - shown.length : 0;
-        companion.className = ["contractor", state, row.verified ? "" : "unverified", visible ? "" : "filtered"].join(" ");
-        companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
-          + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
-        companion.tabIndex = visible ? 0 : -1;
-        const foot = contractorFoot(walk || visit || spot ? [seat[0],seat[1]] : null, place, i, shown.length);
-        companion.style.left = foot[0] + "%";
-        companion.style.top = foot[1] + "%";
-        companion.style.zIndex = String(floorDepth(foot[1]));
-        const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra]);
-        if (companion.dataset.appearance !== appearance) {
-          companion.replaceChildren(character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, "standing"),
-            el("span", { class: "contractor-tag" + (contractor.provider === "codex" ? " codex" : ""), "aria-hidden": "true" }, providerInitials(contractor.provider)),
-            el("span", { class: "contractor-name" }, badge(contractor.provider), t("contractor") + " / " + stateName(state), tool ? " / " + tool : null),
-            ...(extra ? [el("small", {}, "+" + extra)] : []));
-          companion.dataset.appearance = appearance;
-        }
-      });
+      helpers.push({ row, visible, place, standing: walk || visit || spot ? [seat[0], seat[1]] : null, table });
     });
     if (people.length > placed.length) {
       const overflow = button("+" + (people.length - placed.length), "room-overflow", () => {
@@ -565,17 +687,94 @@ function renderCharacters(ctx) {
       $("characters").append(overflow);
     }
   }
+  renderContractors(helpers, hired);
   for (const [key,node] of actors) {
     if (!used.has(key)) { node.remove(); actors.delete(key); walkers?.stop(key); places.delete(key); }
   }
   for (const [key,node] of companions) {
-    if (!hired.has(key)) { node.remove(); companions.delete(key); }
+    if (!hired.has(key)) { node.remove(); companions.delete(key); walkers?.stop(key); places.delete(key); contractorSpots.delete(key); }
   }
   for (const [key,node] of screensOff) {
     if (!dark.has(key)) { node.remove(); screensOff.delete(key); }
   }
   updateWorkGestures($("characters"));
   shownBranch = branchId;
+}
+// Contractors after every colleague is placed: seated at their colleague's table, otherwise standing beside it.
+function renderContractors(helpers, hired) {
+  const world = $("world").getBoundingClientRect();
+  const measured = world.width > 0 && world.height > 0;
+  // Figures of seated and standing colleagues at their places; walking colleagues are passing through.
+  const figures = measured ? new Map([...actors].filter(([, node]) => !node.classList.contains("walking") && node.isConnected)
+    .map(([key, node]) => [key, targetBox(node, world)])) : new Map();
+  const standingPlaced = [], spaced = [];
+  for (const { row, visible, place, standing, table } of helpers) {
+    const seatsAt = table ? table.seats.map((index) => roomSeats(table.room)[index]) : [];
+    const list = table ? row.contractors.slice(0, seatsAt.length) : row.contractors.slice(0, MAX_CONTRACTORS);
+    const extraOf = (i) => i !== list.length - 1 ? 0 : table ? table.extra : row.contractors.length - list.length;
+    list.forEach((contractor, i) => {
+      const id = JSON.stringify([row.key, contractor.contractor_id]);
+      let companion = companions.get(id);
+      if (!companion) {
+        companion = button("", "contractor", () => selectEmployee(row.key), { "data-parent-key": row.key });
+        companions.set(id, companion);
+        $("characters").append(companion);
+      }
+      hired.add(id);
+      companion.dataset.walkKey = id;
+      const state = contractorState(contractor), tool = contractorTool(contractor), extra = extraOf(i);
+      const chair = seatsAt[i] || null;
+      // A seated Contractor walks from beside the desk to its chair and back; one beside a moving colleague follows it.
+      const walk = chair ? moveWalker(id, placeOf(chair, null)) : null;
+      const sitting = chair && !walk;
+      companion.className = ["contractor", state, row.verified ? "" : "unverified", visible ? "" : "filtered",
+        sitting ? "seated-contractor" : ""].join(" ");
+      companion.dataset.seat = sitting ? chair.id : "";
+      companion.dataset.seatFacing = sitting ? chair.facing : "standing";
+      companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
+        + (row.verified ? "" : t("state.unverifiedSuffix")) + (tool ? ", " + tool : "") + (extra ? t("contractor.more", { n: extra }) : ""));
+      companion.tabIndex = visible ? 0 : -1;
+      const appearance = JSON.stringify([currentLanguage(), state, tool, contractor.provider, extra, sitting ? chair.id : ""]);
+      if (companion.dataset.appearance !== appearance) {
+        const figure = character(row.key + "helper:" + contractor.contractor_id, state, "", "normal", true, sitting ? chair.facing : "standing");
+        companion.replaceChildren(sitting ? seatedCharacter(figure, chair, CONTRACTOR_WIDTH / ACTOR_WIDTH) : figure,
+          el("span", { class: "contractor-tag" + (contractor.provider === "codex" ? " codex" : ""), "aria-hidden": "true" }, providerInitials(contractor.provider)),
+          el("span", { class: "contractor-name" }, badge(contractor.provider), t("contractor") + " / " + stateName(state), tool ? " / " + tool : null),
+          ...(extra ? [el("small", {}, "+" + extra)] : []));
+        companion.dataset.appearance = appearance;
+      }
+      if (sitting) {
+        applySeatedMetrics(companion, chair);
+        companion.style.left = chair.position[0] + "%";
+        companion.style.top = chair.position[1] + "%";
+        companion.style.zIndex = String(chair.depth);
+        return;
+      }
+      applySeatedMetrics(companion, null);
+      companion.style.width = "";
+      if (walk || standing) {
+        const foot = walk ? [walk.x, walk.y] : followingFoot(standing, i);
+        if (!walk) { walkers?.stop(id); places.set(id, { foot, approach: null, scope: branchId }); }
+        show(companion, foot, walk ? walk.depth : walkerDepth(...foot));
+        return;
+      }
+      // Beside a desk: the free side when clear, otherwise a spaced floor spot; placed after the moving ones.
+      spaced.push({ id, companion, place, free: freeSideFoot(place, i, list.length), i });
+    });
+  }
+  for (const { id, companion, place, free, i } of spaced) {
+    let foot = measured ? spacedFoot(id, companion, place, world, [...figures.values()], standingPlaced, free)
+      : free || followingFoot(seatFoot(place), i);
+    // A Contractor returning from a table walks back beside the desk.
+    const back = moveWalker(id, { foot, approach: null });
+    show(companion, back ? [back.x, back.y] : foot, back ? back.depth : walkerDepth(...foot));
+    if (measured) standingPlaced.push(contractorBoxes(companion, foot, world));
+  }
+  function show(companion, foot, depth) {
+    companion.style.left = foot[0] + "%";
+    companion.style.top = foot[1] + "%";
+    companion.style.zIndex = String(depth);
+  }
 }
 
 function renderTeam(ctx) {
@@ -608,6 +807,9 @@ function renderTeam(ctx) {
   const occupants = seatOccupancy.get(keyOf(branchId,"facility:" + roomOf(row)));
   const waiting = occupants?.get(row.key) === null;
   if (waiting) stats.push([t("detail.place"), t(roomOf(row) === "infirmary" ? "queue.bed" : "queue.seat")]);
+  // A Contractor team names where it works (Section 6.2).
+  const team = (replay?.active ? replayTeamPlaces : teamPlaces).get(row.key);
+  if (team && teamPlacesBranch === branchId) stats.push([t("detail.team"), t("team." + team.kind)]);
   const note = !row.verified ? t(hqConnected() ? "detail.awaiting" : "detail.unverified") : row.state === "limited" ? t("detail.limited")
     : row.state === "unknown" ? t("detail.unknown") : "";
   const observed = clockTime(row.branch?.last_seen_at);
@@ -1200,9 +1402,9 @@ setInterval(() => replay.refreshRange(), TODAY_REFRESH);
 setInterval(refreshToday, TODAY_REFRESH);
 setInterval(render, 30000);
 setInterval(() => {
-  const previous = JSON.stringify(branchMeetings);
+  const previous = JSON.stringify([branchMeetings, branchTeams]);
   updateMeetings();
-  if (JSON.stringify(branchMeetings) !== previous) render();
+  if (JSON.stringify([branchMeetings, branchTeams]) !== previous) render();
 }, 1000);
 setInterval(updateClock, 1000);
 setInterval(() => { updateWorkGestures($("characters")); furniture.update(); }, WORK_MOTION_INTERVAL);

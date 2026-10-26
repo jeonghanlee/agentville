@@ -62,7 +62,8 @@ function lowerBody(native, frame, rear) {
 }
 
 // Head, torso, shoes and props retain their proportions; only the calf band reaches the measured support.
-export function seatedCharacter(native, seat) {
+// scale draws the whole seated figure smaller around the same hip, as for a Contractor (CONTRACTOR_WIDTH).
+export function seatedCharacter(native, seat, scale = 1) {
   const rear = rearFacing(seat.facing), look = Number(native.dataset.look) % 6;
   let body;
   if (seat.kind === "high") {
@@ -76,7 +77,7 @@ export function seatedCharacter(native, seat) {
     const frame = POSES.lower.frames.find((item) => item.row === (rear ? 1 : 0) && item.column === look);
     body = lowerBody(native, frame, rear);
   }
-  const { source, width, height, hip, foot, pixels, knee, ankle } = body;
+  const { source, width, height, hip, foot, knee, ankle } = body, pixels = body.pixels * scale;
   // Seen from behind, a chair sitter's feet rest forward under the table, above the measured floor point beneath
   // the hip; the rear lower part keeps its drawn length there. Front-facing feet and stool feet reach their support.
   const delta = rear && seat.kind !== "high" ? 0 : (seat.supportY - pointPixels(seat.position)[1]) / pixels - (foot[1] - hip);

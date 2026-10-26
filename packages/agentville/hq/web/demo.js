@@ -64,9 +64,12 @@ export function demoState(now = Date.now(), mode = "1") {
           const branch_id = "home", agent_id = "meeting-" + room + "-" + chair;
           return {key:JSON.stringify([branch_id,agent_id]),branch_id,agent_id,chair};
         }) })) },
+    // A fixed Contractor team, listed as data like the meeting: Noah works with two Contractors away from the desk.
+    teams: { home: mode === "1" ? [{ key: JSON.stringify(["home", "noah"]), branch_id: "home", agent_id: "noah", since: 0 }] : [] },
     contractors: mode === "1" ? [contractor("milo", "milo", "claude", "working", 240, "Read"),
       contractor("sage", "sage-1", "codex", "working", 80, "exec_command"), contractor("sage", "sage-2", "claude", "waiting", 30),
-      contractor("sage", "sage-3", "claude", "idle", 300)] : [],
+      contractor("sage", "sage-3", "claude", "idle", 300), contractor("noah", "noah-1", "codex", "working", 150, "exec_command"),
+      contractor("noah", "noah-2", "claude", "thinking", 70)] : [],
   };
 }
 
