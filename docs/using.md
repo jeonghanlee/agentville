@@ -6,7 +6,7 @@ This document covers the office page served by HQ: places, states, views, and se
 
 **Out of scope:** how the Collector decides states (docs/architecture.md in the repository).
 
-Open HQ in a browser, for example `http://127.0.0.1:8470/`. With a viewer token, open `.../#token=<viewer token>` once; the page keeps the token for the browser session. `/?demo=1` shows fictional colleagues without connecting to HQ; the screenshots use that mode or the full-seat demonstration `/?demo=seats`.
+Open HQ in a browser, for example `http://127.0.0.1:8470/`. With a viewer token, open `.../#token=<viewer token>` once; the page keeps the token for the browser session. `/?demo=1` shows fictional colleagues without connecting to HQ. Screenshots use this demo. The disconnected example uses synthetic reports in an isolated HQ; production data is not used.
 
 ## Virtual office
 
@@ -26,6 +26,8 @@ The single floor has 20 desks: three window areas with four places each and a ce
 Meeting participants appear at the table on every Project page. Their held desks remain reserved and empty, and their Project filters and colleague details continue to work. Waiting, error, limits, or going off duty ends membership immediately; other non-working states have a 30-second grace period. Meetings are presentation only and do not record collaboration.
 
 Fika has 28 places: 16 around two tables, six on two sofas, and six at three high tables. Colleagues fill these places before joining a waiting line. An Error colleague uses a desk and retains the error status; this floor has no infirmary or bed. Live arrivals enter between the sofas and Fika. Colleagues walk between places on the same floor; reduced motion places them directly. `/?demo=seats` and `/?demo=meeting` display all 60 seat ids, including both six-person meetings.
+
+Seated figures keep the proportions of the painted artwork at every zoom level.
 
 Each colleague wears a provider badge (`CL` Claude, `CX` Codex). Contractors (subagents) wear a yellow hard hat and their own provider badge.
 

@@ -28,6 +28,43 @@ MEASURE = """async () => {
 REAR = {"back", "back-left"}
 
 
+@pytest.mark.parametrize("width", [1440, 720])
+def test_every_painted_seat_keeps_uniform_image_scale(tmp_path, width):
+    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
+        browser, page, errors = open_page(driver, hq.url + "/?demo=seats", width)
+        playwright.expect(page.locator("#characters .agent.seated")).to_have_count(60)
+        result = page.evaluate("""async () => {
+          const {SEATS}=await import('/seats.js');
+          const {character,prepareAppearances}=await import('/art.js');
+          const {seatedCharacter,seatedWorkstation,applySeatedMetrics}=await import('/seated.js');
+          const seeds=Array.from({length:12},(_,i)=>'proportion-'+i),world=document.getElementById('world');
+          prepareAppearances(seeds);let figures=0,images=0,maximumError=0;const looks=new Set(),files=new Set();
+          for(const seat of SEATS)for(const seed of seeds)for(const scale of [1,.7]){
+            const native=character(seed,'working','','normal',scale!==1,seat.facing,seatedWorkstation(seat));
+            looks.add(native.dataset.look);const sprite=seatedCharacter(native,seat,scale);
+            const node=document.createElement('div');node.className='agent seated';
+            node.style.left=seat.position[0]+'%';node.style.top=seat.position[1]+'%';
+            node.append(sprite);world.append(node);applySeatedMetrics(node,seat);
+            for(const image of sprite.querySelectorAll('image')){
+              const m=image.getScreenCTM(),x=Math.hypot(m.a,m.b),y=Math.hypot(m.c,m.d);
+              maximumError=Math.max(maximumError,Math.abs(x-y)/Math.max(x,y));
+              files.add(image.getAttribute('href'));images++;
+            }
+            figures++;node.remove();
+          }
+          return {figures,images,maximumError,looks:[...looks],files:[...files]};
+        }""")
+        assert result["figures"] == 1440
+        assert result["images"] >= result["figures"]
+        assert len(result["looks"]) == 12
+        assert result["maximumError"] < 1e-6
+        assert set(result["files"]) <= {
+            "employees.png", "employees-varied.png", "seated-lower-parts.png", "high-stool-poses.png"
+        }
+        assert not errors
+        browser.close()
+
+
 def area(box):
     return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
 

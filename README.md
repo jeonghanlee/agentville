@@ -2,7 +2,9 @@
 
 A self-hosted, read-only virtual office for AI coding agents (Claude Code, Codex). Each host runs a Collector that watches local agent sessions; one host runs HQ, which shows every colleague's state as an office floor in the browser.
 
-![Virtual office](docs/images/office.png)
+![Virtual office with fictional colleagues](docs/images/office.png)
+
+Fictional colleagues in the [demo office](docs/using.md#virtual-office).
 
 AgentVille observes only. It never starts, resumes, answers, or interrupts an agent. Prompts, commands, file paths, and tool arguments never leave the host.
 

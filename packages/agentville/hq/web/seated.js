@@ -14,15 +14,6 @@ function element(name, attributes = {}) {
   return node;
 }
 
-function clone(source) {
-  const node = source.cloneNode(true), ids = new Map(), suffix = "-seat-copy-" + (++sequence);
-  for (const item of node.querySelectorAll("[id]")) { ids.set(item.id, item.id + suffix); item.id += suffix; }
-  for (const item of [node, ...node.querySelectorAll("*")]) for (const attribute of [...item.attributes])
-    for (const [from, to] of ids) if (attribute.value.includes("url(#" + from + ")"))
-      item.setAttribute(attribute.name, attribute.value.replaceAll("url(#" + from + ")", "url(#" + to + ")"));
-  return node;
-}
-
 function viewport(data, frame, width, height, x = 0, y = 0) {
   const [left, top, w, h] = frame.box;
   const root = element("svg", { x, y, width, height, viewBox: [left, top, w, h].join(" ") });
@@ -31,7 +22,7 @@ function viewport(data, frame, width, height, x = 0, y = 0) {
   return root;
 }
 
-// Working hands use the seated torso's original coordinate system before the lower legs are calibrated.
+// Working hands use the seated torso's original coordinate system.
 export function seatedWorkstation(seat) {
   if (!seat?.workstation) return null;
   const rear = rearFacing(seat.facing), hip = HIPS[rear ? "back" : "front"];
@@ -56,65 +47,42 @@ function lowerBody(native, frame, rear) {
   const legs = element("g", { "clip-path": "url(#" + lower.id + ")" });
   legs.append(viewport(POSES.lower, frame, w * scale, h * scale, ...offset));
   source.append(defs, torso, legs);
-  return { source, width: 32, height, hip, pixels,
-    foot: [offset[0] + frame.sole[0] * scale, offset[1] + frame.sole[1] * scale],
-    knee: offset[1] + h * (rear ? .57 : .48) * scale, ankle: offset[1] + h * (rear ? .70 : .63) * scale };
+  return { source, width: 32, height, hip, pixels };
 }
 
-// Head, torso, shoes and props retain their proportions; only the calf band reaches the measured support.
-// scale draws the whole seated figure smaller around the same hip, as for a Contractor (CONTRACTOR_WIDTH).
+// Complete painted figures keep their proportions around the registered hip.
+// A seat's floor or footrest annotation must not change a person's limb lengths.
 export function seatedCharacter(native, seat, scale = 1) {
   const rear = rearFacing(seat.facing), look = Number(native.dataset.look) % 6;
   let body;
   if (seat.kind === "high") {
     const row = seat.facing.startsWith("side") ? 2 : rear ? 1 : 0;
     const frame = POSES.high.frames.find((item) => item.row === row && item.column === look);
-    const [, , width, height] = frame.box, hip = height * HIGH_HIPS[row], foot = frame.sole;
+    const [, , width, height] = frame.box, hip = height * HIGH_HIPS[row];
     const source = viewport(POSES.high, frame, width, height);
-    body = { source, width, height, hip, pixels: HIGH_WIDTH / width, foot,
-      knee: hip + (foot[1] - height * .1 - hip) * .2, ankle: foot[1] - height * .1 };
+    body = { source, width, height, hip, pixels: HIGH_WIDTH / width };
   } else {
     const frame = POSES.lower.frames.find((item) => item.row === (rear ? 1 : 0) && item.column === look);
     body = lowerBody(native, frame, rear);
   }
-  const { source, width, height, hip, foot, knee, ankle } = body, pixels = body.pixels * scale;
-  // Seen from behind, a chair sitter's feet rest forward under the table, above the measured floor point beneath
-  // the hip; the rear lower part keeps its drawn length there. Front-facing feet and stool feet reach their support.
-  const delta = rear && seat.kind !== "high" ? 0 : (seat.supportY - pointPixels(seat.position)[1]) / pixels - (foot[1] - hip);
-  const stretch = (ankle - knee + delta) / (ankle - knee);
-  if (stretch <= 0) throw new Error("Invalid seat support: " + seat.id);
-  const outputHeight = height + Math.max(0, delta), root = element("svg", {
-    viewBox: `0 0 ${width} ${outputHeight}`, class: "character calibrated-character", "aria-hidden": "true" });
+  const { source, width, height, hip } = body, pixels = body.pixels * scale;
+  const root = element("svg", {
+    viewBox: `0 0 ${width} ${height}`, class: "character calibrated-character", "aria-hidden": "true" });
   root.classList.add(...native.classList);
   Object.assign(root.dataset, native.dataset);
   root.style.cssText = native.style.cssText;
-  const definitions = element("defs");
-  const bands = [[-100, -100, width + 200, knee + 100], [-100, knee, width + 200, ankle - knee + .05],
-    [-100, ankle, width + 200, height - ankle + 100]];
   native.classList.remove("character"); native.classList.add("employee-sprite");
-  bands.forEach((box, index) => {
-    const clip = element("clipPath", { id: "seat-band-" + (++sequence) });
-    clip.append(element("rect", Object.fromEntries(["x", "y", "width", "height"].map((key, i) => [key, box[i]]))));
-    definitions.append(clip);
-    const drawing = index === 0 ? source : clone(source);
-    // Lower bands contain atlas legs only, without invisible copies of the working hands or head.
-    if (index) drawing.querySelectorAll('[data-seat-part="torso"]').forEach((node) => node.remove());
-    drawing.setAttribute("width", width); drawing.setAttribute("height", height);
-    const band = element("g", { "clip-path": "url(#" + clip.id + ")" }); band.append(drawing);
-    const transform = index === 1 ? `translate(0 ${knee}) scale(1 ${stretch}) translate(0 ${-knee})`
-      : index === 2 ? `translate(0 ${delta})` : "";
-    const wrapper = element("g", { transform, "data-body-band": ["upper", "calf", "shoes"][index] });
-    wrapper.append(band); root.append(wrapper);
-  });
-  root.prepend(definitions);
+  source.setAttribute("width", width); source.setAttribute("height", height);
+  root.append(source);
   if (seat.kind === "high") {
     const marks = element("g", { transform: `scale(${width / 32})` });
     native.querySelectorAll(".state-symbol, .state-clock").forEach((node) => marks.append(node.cloneNode(true)));
     root.append(marks);
   }
   root.dataset.seatWidth = String(width * pixels / ARTWORK.width * 100);
-  root.dataset.seatRatio = width + " / " + outputHeight;
-  root.dataset.seatTranslate = String(-hip / outputHeight * 100);
+  root.dataset.seatRatio = width + " / " + height;
+  root.dataset.seatTranslate = String(-hip / height * 100);
+  root.dataset.figureScale = String(scale);
   return root;
 }
 
