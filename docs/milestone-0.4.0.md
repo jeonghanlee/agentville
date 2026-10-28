@@ -7,11 +7,11 @@ Canonical branch or ref: master
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: M1 and M2 remain historically Complete under D13/D14. The owner rejected the 3D replacement and authorized adjusting only the existing artwork's scale on 2026-10-26. The painted office remains in use. The current seated renderer removes calf-only stretching and preserves uniform scaling of complete figures around the hip; all 14 original PNGs remain byte-identical. Two actual HQ/browser runs pass 47 tests, including all 60 seats, twelve appearances, both role scales, movement, working hands and Contractor teams. Local installation is verified at 2026-10-27T03:02:03Z with both services active, exact wheel/source/served bytes, live data, and uniform image proportions at 1440/720 px and 100/175-percent zoom. Evidence: work/painted-scale-20261027/. The calf-extension cause of M2 item 6 is corrected; exact painted foot/support contact and owner visual acceptance remain open. The 3D studies are references only; do not restore the rejected 3D runtime. M3 has no implementation authorization. Version 0.3.0 is unchanged; no commit, push, release or tag is claimed. Fresh fictional demo screenshots feed README and the user guide; see work/painted-scale-20261027/manual-refresh-v3/receipt.json.
+Next session entry point: M4 implementation and local verification are complete under D16/D17; inspect work/weather-20261027/verification-summary.json and prepare the verified code/documentation for commit when requested. All 424 current test identities have actual passing results, including permission rechecks. The actual user HQ and Collector have been updated and restarted; installed/served bytes, Collector reachability, HTTP, live WebSocket, and browser settings passed. The owner-selected city is configured; the actual installed HQ forecast endpoint and browser show a valid MET Norway forecast, attribution, and northern calendar season. Recheck work/weather-20261027/local-deployment-ofu_opuh/berkeley/receipt.json. Keep M4 In progress until upstream landing is verified. G1 is Complete; M3 remains Deferred outside 0.4.0. Preserve original painted artwork and unrelated prototype notes.
 
 ## Scope
 
-This document tracks Branch and Project lifecycle, meeting rooms, the Town map, and seasonal presentation.
+This document tracks Branch and Project lifecycle, meeting rooms, and seasonal presentation for 0.4.0. The Town map is deferred to the end of the Backlog, without an assigned release.
 
 Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
 
@@ -23,16 +23,16 @@ Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
 | --- | --- | --- | --- | --- | --- | --- |
 | M1 | Branch and Project lifecycle | Milestone | Complete | No | [0.3.0 M3](milestone-0.3.0.md#m3---remote-development-environments), D1, D2, D3, D4 | Closure and observed automatic reopening work at HQ; [detail](#m1---branch-and-project-lifecycle) |
 | M2 | Meeting rooms | Milestone | Complete | No | M1, D1 | Concurrent colleagues of one Project share the intended presentation; [detail](#m2---meeting-rooms) |
-| M3 | Town map | Milestone | Not started | Yes | M2, D1 | Multiple Branches are navigable on the map; [detail](#m3---town-map) |
-| M4 | Seasons and weather | Milestone | Not started | No | M3, D1 | Visual settings affect presentation consistently; [detail](#m4---seasons-and-weather) |
+| M4 | Seasons and weather | Milestone | In progress | No | M2, D15, D16, G1 | Visual settings and regional forecasts affect presentation consistently; [detail](#m4---seasons-and-weather) |
+| G1 | Seasons and weather plan acceptance | External gate | Complete | No | | Accept location, season, and replay rules; [detail](#g1---seasons-and-weather-plan-acceptance) |
 
-Status totals: Complete 2; Not started 2. Nearest Ready work: M3.
+Status totals: Complete 3; In progress 1. Nearest Ready work: none; M4 implementation is active. Backlog: Deferred 1; excluded from the release tally.
 
 ### Decisions
 
 | ID | Decision | Decision Date |
 | --- | --- | --- |
-| D1 | Execute 0.4.0 after 0.3.0, in order M1, M2, M3, then M4. | 2026-10-22 |
+| D1 | Execute 0.4.0 after 0.3.0, originally in order M1, M2, M3, then M4. D15 supersedes the M3/M4 ordering and release assignment. | 2026-10-22 |
 | D2 | Require a separate administrator token to close a Branch or Project at HQ. Viewer access alone does not authorize closure. | 2026-10-22 |
 | D3 | Reopen a closed Branch or Project when an on-duty agent is observed again, including an idle agent. A new shift or new work is not required. | 2026-10-22 |
 | D4 | Use HQ receipt of a newly accepted qualifying agent/activity report or snapshot as the reopening observation. Unchanged idle polls that emit only heartbeat do not reopen records. Include the real 0.3.0 database-upgrade check and browser Notification check in the plan. | 2026-10-22 |
@@ -46,6 +46,9 @@ Status totals: Complete 2; Not started 2. Nearest Ready work: M3.
 | D12 | Combine the main office and annex into one larger single-floor office containing 20 workstations, one six-chair meeting room, and a visible Fika coffee lounge. Retain existing facilities, including the wellness room. This replaces D5/P1's two-image layout and D11's annex-only artwork target. Generate and inspect the unified candidate; revise layout-dependent implementation details before changing runtime scene code. | 2026-10-23 |
 | D13 | The owner changed the M2 plan during the work: the sixty-seat office of f323b87 (20 shared desks, two six-chair meeting rooms, 28 Fika places, no infirmary) supersedes the layout parts of D5-D7 and D12 and the M2 scope and completion criteria that conflict with it. M2 is Complete. (Given by the owner as "D8"; recorded as D13 because D8-D12 were already assigned.) | 2026-10-26 |
 | D14 | Contractor teams. A colleague with Contractors works together with them away from the desk: the colleague and its Contractors walk together to a free meeting room and sit at its table and work there; when no meeting room is free they sit together on a sofa or at a Fika table; only when no suitable seats are free do Contractors stand beside the desk, spaced so they do not overlap neighbours. Rules: [D14 rules](#d14-contractor-teams). (Given by the owner as "D9"; recorded as D14.) | 2026-10-26 |
+| D15 | Exclude the Town map (M3) from 0.4.0 and defer it to the end of the Backlog without assigning a future release. Execute seasons and weather (M4) after M2, independently of M3. Neither draft implementation plan is accepted or authorized by this scheduling change. | 2026-10-27 |
+| D16 | Use external weather data rather than a decorative weather selector, with MET Norway Locationforecast as the source. The provider selection does not accept the remaining location, season, or replay rules or authorize runtime implementation. | 2026-10-27 |
+| D17 | Accept the current M4 plan and authorize implementation. HQ owns city-level Branch coordinates; calendar seasons use latitude and Branch date; replay hides weather. | 2026-10-27 |
 
 ### Milestone Details
 
@@ -526,12 +529,136 @@ Results:
 
 Verification: the full local suite passed 374 tests in 902 s on 2026-10-26 with `AGENTVILLE_REQUIRE_BROWSER=1` (Chromium at `/opt/pw-browsers/chromium`), zero failures, errors or skips; it includes the 10 new team cases and 6 audit cases. No CI run, push or installation is claimed. The manual screenshot `docs/images/office.png` was recaptured from `/?demo=1` to show the demo team; the other manual screenshots are unchanged.
 
+#### M4 - Seasons and Weather
+
+Origin: 0.4.0 / M4
+Identity History: none
+GitHub Issue: none
+Status: In progress
+
+##### Summary
+
+Extend the painted office with seasonal presentation and location-based weather forecasts from MET Norway [1].
+
+##### Scope
+
+Define location settings, HQ forecast retrieval and caching, forecast status, season rules, time-zone behavior, and reduced-motion presentation.
+
+Out of scope: changing colleague activity or provider state, new office or character artwork, 3D rendering, and Town map implementation. Forecasts are not local weather-station observations.
+
+##### Completion Criteria
+
+- Configured Branches show the forecast for the correct location and valid time, with temperature, source, and update status.
+- Missing location, unavailable data, unsupported conditions, and stale data are distinguishable; none silently becomes clear weather.
+- HQ shares cached provider results, honors provider expiry and conditional requests, and keeps weather retrieval outside agent ingestion and live delivery.
+- The original painted assets, seat geometry, and figure proportions remain unchanged. Weather effects stay within the existing window polygons and cannot cover indoor colleagues or intercept input.
+- Seasons, Branch switching, replay, local daylight, reduced motion, English/Korean labels, and narrow layouts follow the accepted rules.
+
+##### Dependencies And Decisions
+
+- M2 precedes M4 by D15; M3 is no longer a prerequisite. D15 supersedes D1's original ordering.
+- D16 selects external forecasts and MET Norway; no decorative selector is presented as actual weather.
+- G1 is Complete under D17. Implementation is authorized for this accepted plan.
+
+##### Implementation Plan
+
+Plan Status: accepted
+Plan Acceptance: 2026-10-27, explicit acceptance of the current draft.
+Implementation Authorization: 2026-10-27, explicit instruction to start implementation.
+Superseded Plan Artifacts: none
+
+D17 accepts the following design, including HQ-owned city coordinates, calendar seasons, and hiding weather during replay.
+
+1. Define explicit Branch location settings. Proposed ownership: an optional private HQ file loaded through `hq/main.py`, keyed by stable Branch ID, with city-level latitude and longitude. Missing configuration disables external retrieval. Do not infer coordinates from IP addresses, fictional location labels, or time zones. Do not use browser geolocation.
+2. Add a MET Norway client and shared cache in `hq/weather.py`, integrated with the application lifespan in `hq/app.py` [1], [2]. Use HTTPS, a truthful AgentVille version and public project contact in User-Agent, provider expiry, Last-Modified, and conditional GET. Limit coordinate precision to four decimals. Bound request time and response size, prevent concurrent duplicate refreshes, and apply retry backoff. A slow provider must not block ingestion, history, or the live socket.
+3. Add a viewer-authorized, read-only HQ weather endpoint keyed by Branch ID. Return only display fields, source attribution [3], forecast validity, retrieval time, and status. Reject unknown IDs; do not accept arbitrary provider URLs or coordinates from the browser. Keep the configured coordinates and provider payload out of Collector messages and colleague history under the proposed HQ ownership.
+4. Add `web/weather.js` and connect it through `web/app.js`. Select the provider interval that covers the displayed time; do not treat the nearest future sample as a current observation. Distinguish loading, unconfigured, available, stale, and unavailable states. Expired or missing data must not drive an effect presented as current. Prevent late responses for a previous Branch from repainting the selected office. Share HQ results across browser tabs.
+5. Extend the existing window layer in `web/daylight.js` and `web/app.css`, with display controls and labels in `web/index.html` and `web/i18n.js`. Preserve all painted PNGs and seat measurements. Use restrained rain, snow, cloud, or fog effects clipped to WINDOWS; use a static thunder indication without flashing. Reduced motion uses a static indication. Weather and daylight remain separate so manual window-light settings cannot rewrite the forecast.
+6. Proposed season policy: derive calendar seasons from the displayed Branch date and the sign of its configured latitude; reverse the calendar seasons in the southern hemisphere. Offer Off and explicit season overrides. With missing coordinates or latitude zero, do not guess a hemisphere. Label these as calendar seasons rather than measured climate. Use only window tint and text, preserving the office artwork.
+7. Proposed replay policy: hide live weather and its effects while replaying, with an explicit historical-weather-unavailable label. Derive calendar season and daylight from the replay timestamp. Returning live restores the selected Branch's valid forecast. Demo uses clearly fictional, fixed weather fixtures and makes no provider requests.
+8. Update `docs/install.md`, `docs/using.md`, `docs/architecture.md`, and CHANGELOG only after implementation. Document opt-in setup, city-level coordinates sent to the provider, forecast semantics, attribution, refresh behavior, failure states, and the accepted replay policy. Refresh fictional demo and settings screenshots using the shipped UI.
+
+Provider premises, checked 2026-10-27: Locationforecast supplies global model forecasts, requires latitude/longitude, and limits coordinate precision for caching. Its terms require application identification, local caching, expiry handling, and attribution. These establish the integration requirements, not successful application verification. Provider contracts: [1], [2], [3].
+
+##### Test Plan
+
+| Label | Layer | Method | Environment | Expected Result |
+| --- | --- | --- | --- | --- |
+| T1 | HQ configuration | Run the shipped loader and CLI with valid, missing, malformed, non-finite, and out-of-range location settings | Local temporary files | Valid city coordinates load; invalid settings fail clearly; unconfigured service makes no weather requests |
+| T2 | Provider and cache | Run the shipped client/cache with captured provider-format fixtures through an outer HTTP test server and controlled clock | Local HQ | Expiry, conditional 304, duplicate requests, restart behavior, timeout, 429, malformed data, response bounds, and retry rules are enforced without replacing internal functions |
+| T3 | HQ API and concurrency | Start the real HQ and its worker; exercise viewer authentication, Branch selection, slow provider responses, ingestion, and live delivery together | Local HTTP/WebSocket clients | Correct status and validity fields; no raw coordinates or payload exposure; slow weather retrieval does not delay agent updates |
+| T4 | Weather presentation | Use actual HQ endpoints and shipped JS with recorded clear, cloud, rain, snow, sleet, fog, thunder, stale, and unsupported fixtures; switch Branches during an outstanding request | Chromium at 1440 and 720 px, 100 and 175 percent zoom | Correct forecast/temperature/status, no stale Branch repaint, original artwork hashes unchanged, effects remain clipped to window polygons |
+| T5 | Season and replay | Drive real date boundaries in northern/southern zones, missing and zero latitude, overrides, live/replay transitions, and demo | Actual HQ and Chromium | Accepted calendar rules and replay policy hold; current forecasts never appear as historical observations; demo sends no provider requests |
+| T6 | Accessibility and regression | Exercise English/Korean, keyboard controls, system and UI reduced motion, screen resizing, and existing seat/team routes | Actual HQ, Chromium, and repository checks | Static reduced-motion weather, readable attribution/status, unchanged seats and agent states, existing checks pass |
+| T7 | Provider and deployment | After explicit local setup, retrieve a forecast through the installed HQ client for one configured city and inspect the browser response; build the manual with the CI-pinned mdBook | Installed service, live provider, browser, and documentation build | A real forecast with valid time and attribution is shown; documentation matches shipped controls; no claim of weather-station measurement |
+
+##### Verification Results
+
+| Label | Observed At | Environment | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| T1 | 2026-10-27T21:54:27.871943+00:00 | Real private loader and installed CLI | Passed: finite/ranged explicit coordinates and file permissions; missing location makes no provider request | work/weather-20261027/: weather-matrix.xml; installed-proof-02/cli-help.txt |
+| T2 | 2026-10-27T21:54:27.871943+00:00 | Real client/cache and outer HTTP server | Passed: expiry, 304, restart, shared cells, concurrent refresh, size limit, timeout, errors, Retry-After and backoff | work/weather-20261027/: weather-matrix.xml; installed-proof-02/receipt.json |
+| T3 | 2026-10-27T21:54:27.871943+00:00 | Real HQ HTTP and WebSocket | Passed: viewer authentication, unknown-ID refusal, display-only response, and activity frames during blocked provider transport | work/weather-20261027/: weather-matrix.xml |
+| T4 | 2026-10-27T21:54:27.871943+00:00 | Chromium 156, real HQ and captured provider input | Passed: eight conditions at both 1440/720 px and 100/175 percent zoom; late previous-Branch response cannot repaint; twelve original PNGs unchanged | work/weather-20261027/: weather-matrix.xml; artwork-baseline.json |
+| T5 | 2026-10-27T21:54:27.871943+00:00 | Actual calendar/date and replay modules in Chromium | Passed: 24 monthly hemisphere cases, local date boundaries, missing/equatorial hemisphere, overrides, replay hiding and live restoration, fictional demo without provider requests | work/weather-20261027/: weather-matrix.xml |
+| T6 | 2026-10-27T21:54:27.871943+00:00 | Full repository coverage plus scoped permission rerun | Passed: all 424 current collected cases have an actual passing result; English/Korean, keyboard, reduced motion, unchanged announcements, and settings persistence verified | work/weather-20261027/: full-first.xml; privileged-recheck.xml; weather-matrix.xml; settings-persistence.xml; verification-summary.json |
+| T7 | 2026-10-27T21:54:27.871943+00:00 | Isolated installed wheel, live MET Norway and Chromium; mdBook 0.4.40 | Passed: actual public-city forecast through installed HQ; all 76 package files and 48 served web files match source/wheel; cache-preserving restart and expected SIGTERM termination; eight fictional captures and setup link verified | work/weather-20261027/: installed-proof-02/receipt.json; installed-proof-02/terminal.json; manual-01/receipt.json; book-verification.json |
+
+The full first run recorded 403 passes and 12 failures under sandbox restrictions. The two affected existing suites passed all 13 cases with the required permissions. The expanded weather matrix passed 46 cases, and the added persistence assertions passed at both widths. The final coverage check matches actual results to all 424 current collected identities; it does not relabel the first run as a clean full-suite pass. No tests are skipped.
+
+The wheel is built from a fresh explicit package-source inventory, excluding historical prototype files and unrelated untracked annex.js. Installation evidence covers a separate local test HQ using a public Oslo coordinate and a fictional colleague. The actual user services were subsequently updated under the owner instruction to continue. City configuration remains absent pending the owner choice. The manual uses fictional captures; no production roster is published.
+
+
+Actual user-service verification observed at 2026-10-28T01:22:20.182137+00:00: the verified wheel was installed in the existing environment and HQ/Collector were restarted. Both remained active/running with real PIDs and zero automatic restarts; all 76 installed package files and 48 served web files matched the wheel. The actual local Collector was reachable, and Chromium observed a live WebSocket frame, the season/weather settings, and no page or HTTP errors. The forecast endpoint and page correctly report unconfigured; no city was inferred and production weather retrieval is not enabled. Package and unit backups plus the private browser captures are retained in work/weather-20261027/local-deployment-ofu_opuh/; receipt.json is the observed result, and work/weather-20261027/verify-local-service.py repeats the checks.
+
+Subsequent city setup observed at 2026-10-28T01:24:52.028010+00:00: the owner-selected city was configured in the private HQ file, and the existing HQ unit was reloaded and restarted. The actual endpoint returned an available MET Norway forecast within its validity and cache-expiry bounds. Chromium confirmed the forecast label, attribution, update time, autumn calendar season, settings, and live WebSocket with no page or HTTP errors; Collector remained reachable. Coordinates and production screenshots remain local. Evidence: work/weather-20261027/local-deployment-ofu_opuh/berkeley/receipt.json; actual-service verification: work/weather-20261027/verify-berkeley-service.py.
+
+##### Closure Evidence
+
+- Implementation and local verification are complete for the accepted plan. M4 remains In progress until the source and documentation are committed and upstream landing is verified under separate authorization. Version remains 0.3.0; no release or tag is created.
+- Final evidence: work/weather-20261027/verification-summary.json; recheck with work/weather-20261027/aggregate-verification.py.
+
+#### G1 - Seasons and Weather Plan Acceptance
+
+Origin: 0.4.0 / G1
+GitHub Issue: none
+Status: Complete
+
+##### Summary
+
+D17 accepts the M4 location, calendar-season, and replay policies. D16 selects the external-data approach and MET Norway provider.
+
+##### Completion Criteria
+
+- Accept or revise HQ-owned city-coordinate configuration, calendar seasons based on latitude and Branch date, and the replay policy proposed in M4.
+- Record the dated decisions and acceptance of the resulting draft. Provider selection alone does not close this gate or authorize implementation.
+
+##### Verification Results
+
+| Observed At | Result | Evidence |
+| --- | --- | --- |
+| 2026-10-27 | Accepted | Explicit plan acceptance and implementation instruction; D17 |
+
+##### Closure Evidence
+
+- Decision Date: 2026-10-27. The owner accepted the current M4 plan and explicitly authorized implementation. HQ owns city coordinates; calendar seasons follow latitude and Branch date; replay hides weather.
+
+## Backlog
+
+### Work
+
+| ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| M3 | Town map | Milestone | Deferred | No | M4, D15 | Multiple Branches are navigable on the map; [detail](#m3---town-map) |
+
+### Backlog Details
+
 #### M3 - Town Map
 
 Origin: 0.4.0 / M3
 Identity History: none
 GitHub Issue: none
-Status: Not started
+Status: Deferred
 
 ##### Summary
 
@@ -541,7 +668,7 @@ Provide a map for navigating multiple Branches and opening their offices.
 
 Branch representation, reachability, selection, navigation, and equal-alias disambiguation.
 
-Out of scope: inferring geographic coordinates from fictional location labels.
+Out of scope: inferring geographic coordinates from fictional location labels, and inclusion in the 0.4.0 release.
 
 ##### Completion Criteria
 
@@ -551,7 +678,8 @@ Out of scope: inferring geographic coordinates from fictional location labels.
 
 ##### Dependencies And Decisions
 
-- M2 precedes M3 by D1; this is work ordering.
+- D15 defers this work on 2026-10-27, excludes it from 0.4.0, and places it last in the Backlog after M4.
+- A new dated scheduling decision is required to assign a future release and return this work to Not started.
 
 ##### Implementation Plan
 
@@ -580,66 +708,16 @@ Superseded Plan Artifacts: none
 
 - none
 
-#### M4 - Seasons and Weather
+## Assignment History
 
-Origin: 0.4.0 / M4
-Identity History: none
-GitHub Issue: none
-Status: Not started
-
-##### Summary
-
-Extend the office's visual presentation with seasons and weather.
-
-##### Scope
-
-Define visual settings, time-zone behavior, and reduced-motion presentation.
-
-Out of scope: changing Collector observations, colleague activity, or provider state.
-
-##### Completion Criteria
-
-- Seasons and weather follow the accepted display rules.
-- Replay, Branch time, reduced motion, and narrow layouts remain consistent.
-
-##### Dependencies And Decisions
-
-- M3 precedes M4 by D1; this is work ordering.
-
-##### Implementation Plan
-
-Plan Status: draft
-Plan Acceptance: none
-Implementation Authorization: none
-Superseded Plan Artifacts: none
-
-1. Define settings and deterministic display rules.
-2. Implement the accepted visuals.
-3. Verify live, replay, and reduced-motion presentation.
-
-##### Test Plan
-
-| Label | Layer | Method | Environment | Expected Result |
+| Decision Date | Work ID | From | To | Target Commit |
 | --- | --- | --- | --- | --- |
-| T1 | UI | Render settings across Branch time zones, replay, and reduced motion | Browser | Visuals follow settings without changing observations |
+| 2026-10-27 | M3 | Milestone: 0.4.0 | Backlog: last, future release unassigned | this synchronization commit |
 
-##### Verification Results
+## References
 
-| Label | Observed At | Environment | Result | Evidence |
-| --- | --- | --- | --- | --- |
-| T1 | Not run | Browser | Pending | none |
+[1] MET Norway. "Locationforecast HOWTO." MET Weather API. Accessed: Oct. 27, 2026. [Online]. Available: https://docs.api.met.no/doc/locationforecast/HowTO.html
 
-##### Closure Evidence
+[2] MET Norway. "Terms of Service." MET Weather API. Accessed: Oct. 27, 2026. [Online]. Available: https://docs.api.met.no/doc/TermsOfService.html
 
-- none
-
-## Backlog
-
-### Work
-
-| ID | Work unit | Type | Status | Ready | Deps | Done when / Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-
-### Backlog Details
-
-No unassigned work.
+[3] G. Aalberg. "Licensing and Data Policy." MET Weather API. Accessed: Oct. 27, 2026. [Online]. Available: https://docs.api.met.no/doc/License.html

@@ -21,6 +21,7 @@ from agentville import version
 from agentville.hq.app import LOCAL_HOSTS, create_app
 from agentville.hq.notify import Notifier, NotifyConfig, Outbox, http_post, parse_config
 from agentville.hq.store import Store
+from agentville.hq.weather import Weather, parse_config as parse_weather_config
 
 
 MIN_TOKEN = 16
@@ -84,6 +85,14 @@ def load_notify_config(path: str) -> NotifyConfig:
     return config
 
 
+def load_weather_config(path: str):
+    """Weather coordinates from a private HQ file, independent of Collector configuration."""
+    try:
+        return parse_weather_config(_load_yaml(path))
+    except ValueError as exc:
+        raise SystemExit(f"agentville-hq: {path}: {exc}") from None
+
+
 def is_loopback(host: str) -> bool:
     if host == "localhost":
         return True
@@ -132,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tls-key", help="PEM private key file for --tls-cert")
     parser.add_argument("--retention-days", type=int, default=30)
     parser.add_argument("--notify-config", help="YAML file configuring notifications to an ntfy topic (mode 0600)")
+    parser.add_argument("--weather-config", help="private YAML file mapping Branch IDs to city latitude and longitude")
     args = parser.parse_args(argv)
     if bool(args.tls_cert) != bool(args.tls_key):
         parser.error("--tls-cert and --tls-key are used together")
@@ -152,12 +162,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.tls_cert:
         check_tls(args.tls_cert, args.tls_key)
     notify_config = load_notify_config(args.notify_config) if args.notify_config else None
+    weather_locations = load_weather_config(args.weather_config) if args.weather_config else None
 
     db = args.db or os.path.join(data_dir(), "hq.sqlite3")
     directory = os.path.dirname(db) or "."
     try:
         os.makedirs(directory, mode=0o700, exist_ok=True)
         store = Store(db)
+        weather = Weather(weather_locations, db + ".weather.sqlite3") if weather_locations is not None else None
     except (OSError, sqlite3.Error) as exc:
         raise SystemExit(f"agentville-hq: cannot open database {db}: {getattr(exc, 'strerror', None) or exc}") from None
     outbox = Outbox(http_post(notify_config)) if notify_config else None
@@ -173,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
         hosts=None if remote else LOCAL_HOSTS | {args.host},
         server_names=frozenset(args.server_name),
         notifier=Notifier(notify_config, outbox.put) if notify_config and outbox else None,
+        weather=weather,
     )
     sock = listen(args.host, args.port)
     scheme = "https" if args.tls_cert else "http"

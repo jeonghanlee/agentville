@@ -341,6 +341,27 @@ Verification: the card shows Closed, while observed Employees and history remain
 
 A missing or incorrect token leaves the record open and shows an error. Without `--admin-token-file`, HQ returns 503 and the dialog says administrator closure is disabled. HQ rejects unsafe or conflicting token files at startup. Use the token only over HTTPS or a trusted loopback connection.
 
+### 6.9 Configure regional forecasts
+
+HQ can retrieve MET Norway forecasts for explicitly configured cities. This is optional; without a weather file HQ makes no weather requests. Coordinates are not inferred from a Branch name, time zone, IP address, or browser location.
+
+Create a private YAML file, for example `~/.config/agentville/weather.yaml`, with a `branches` mapping. Use the exact Branch ID shown on the Branch card, rather than its alias. Choose a city representative point instead of a host's precise location:
+
+```yaml
+branches:
+  <branch_id>: {latitude: 59.91, longitude: 10.75}
+```
+
+Set mode 0600 on the file. Add `--weather-config <weather_file>` to the existing HQ command, retaining all token, network, TLS, and notification options. In a user unit use an absolute path or `%h`, and reload the unit and restart HQ after changing the file. The settings are read at startup.
+
+Only latitude and longitude are accepted per Branch. Latitude must be between -90 and 90, longitude between -180 and 180; both must be finite numbers. HQ rounds requests to four decimal places. Unconfigured Branches show a missing-location status and make no weather request.
+
+HQ sends the configured city coordinates and an identifying AgentVille User-Agent to `api.met.no` over HTTPS. Browser viewers contact HQ, which shares a persistent cache at `<hq_database>.weather.sqlite3`. Provider expiry, conditional requests, request limits, and retry backoff govern refreshes. Failed weather retrieval does not delay Collector reports or the live socket.
+
+Verification: open the configured Branch in the office. The forecast line shows the condition, temperature, forecast issue time, MET Norway attribution, and license link. Missing or expired data shows a separate status instead of clear weather. This is a regional model forecast, not a weather-station observation.
+
+Calendar seasons follow the Branch date and configured hemisphere, with reversed seasons south of the equator. With missing coordinates or latitude zero, automatic season is unavailable. Display settings offer a fixed season, season Off, and a weather display toggle. Turning off the display does not disable HQ's configured retrieval. Replay hides weather and uses its timestamp for season and light; demo uses fictional weather without external requests.
+
 ## 7. External notifications
 
 HQ can post notifications to an [ntfy](https://ntfy.sh) topic, so a phone or desktop subscribed to the topic is notified without an open browser tab. They are off by default.

@@ -13,6 +13,7 @@ import { createOfficeCats } from "./cats.js";
 import { mountFurniture } from "./furniture.js";
 import { mountDecor } from "./decor.js";
 import { createDaylight, branchZone } from "./daylight.js";
+import { createWeather } from "./weather.js";
 import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
 import { createCoffeeBreaks } from "./coffee.js";
 import { createLounge } from "./lounge.js";
@@ -59,6 +60,7 @@ const lastStates = new Map();
 // Desk reservations store seat ids; facility reservations store indices. A null value waits for a vacancy.
 const seatOccupancy = new Map();
 let daylight = null;
+let weather = null;
 let furniture = null;
 let decor = null;
 let coffee = null;
@@ -984,6 +986,7 @@ function updateClock() {
   text("clock-label", zone ? zone.replaceAll("_", " ") : t("clock.browser"));
   $("clock-label").title = zone ? t("clock.branch", { branch: branchName(branch) }) : "";
   daylight?.update(now, zone);
+  weather?.update({ branchId, now, zone, replay: !!replay?.active });
 }
 function render() {
   const focused = focusKey();
@@ -1361,7 +1364,7 @@ function applyLanguage() {
   text("settings-mode-toggle", t(DEMO ? "settings.toLive" : "settings.toDemo"));
   setConnection(...connection);
   labels($("labels-toggle").getAttribute("aria-pressed") === "true");
-  daylight?.relabel(); cats?.relabel(); notifications?.relabel();
+  daylight?.relabel(); weather?.relabel(); cats?.relabel(); notifications?.relabel();
   setView(view);
 }
 document.querySelectorAll("[data-icon]").forEach((node) => node.replaceChildren(icon(node.dataset.icon)));
@@ -1391,6 +1394,10 @@ document.addEventListener("keydown", (event) => {
 $("settings-dialog").addEventListener("click", (event) => { if (event.target === $("settings-dialog")) $("settings-dialog").close(); });
 applyLayoutMetrics($("world"));
 daylight = createDaylight($("world"), $("scene"), $("scene-weather"), document.querySelector(".scene-sun"), $("setting-daylight"));
+weather = createWeather({ world: $("world"), scene: $("scene"), report: $("weather-report"),
+  seasonReport: $("season-report"), source: $("weather-source"), license: $("weather-license"),
+  updated: $("weather-updated"), seasonSetting: $("setting-season"), weatherSetting: $("setting-weather"),
+  demo: DEMO, token: TOKEN });
 lounge = createLounge($("characters"), { motionAllowed });
 for (const { id } of MEETING_ROOMS) meetingLounges.set(id,
   createLounge($("characters"), { motionAllowed, room: id, conversationOnly: true }));

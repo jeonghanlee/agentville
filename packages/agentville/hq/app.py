@@ -28,6 +28,7 @@ from agentville import version
 from agentville.common.protocol import iso, load_schema
 from agentville.hq.notify import Notifier
 from agentville.hq.store import Store, now_utc
+from agentville.hq.weather import Weather
 
 log = logging.getLogger(__name__)
 
@@ -177,6 +178,7 @@ def create_app(
     notifier: Notifier | None = None,
     notify_interval: float = NOTIFY_INTERVAL,
     admin_token: str | None = None,
+    weather: Weather | None = None,
 ) -> FastAPI:
     """Build the HQ app.
 
@@ -266,6 +268,8 @@ def create_app(
         if notifier is not None:
             await run_in_threadpool(evaluate)
         tasks = [asyncio.create_task(broadcast_loop())]
+        if weather is not None:
+            tasks.append(asyncio.create_task(weather.run()))
         if notifier is not None:
             tasks.append(asyncio.create_task(notify_loop()))
         yield
@@ -274,6 +278,8 @@ def create_app(
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         store.close()
+        if weather is not None:
+            weather.close()
 
     app = FastAPI(title="AgentVille HQ", version=version(), lifespan=lifespan)
 
@@ -467,6 +473,12 @@ def create_app(
         first, last = _period(start, end)
         return await results.get(("worklog", first, last, branch_id),
                                  lambda: read_history(store.worklog, first, last, clock(), branch_id))
+
+    @app.get("/api/v1/weather", dependencies=[Depends(authorize_viewer)])
+    def weather_display(branch_id: str = Query(..., min_length=1, max_length=256)) -> dict[str, Any]:
+        if not any(branch["branch_id"] == branch_id for branch in store.state(clock())["branches"]):
+            raise HTTPException(status_code=404, detail="unknown Branch")
+        return weather.display(branch_id) if weather is not None else {"status": "unconfigured", "hemisphere": ""}
 
     @app.get("/api/v1/branches", dependencies=[Depends(authorize_viewer)])
     def branches() -> list[dict[str, Any]]:

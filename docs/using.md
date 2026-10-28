@@ -142,5 +142,13 @@ Choose a Branch to see its colleagues with days in that Branch's time zone; "All
 | Show colleague names | Keeps name labels visible in the office. |
 | Reduce motion | Stops animations. |
 | Window light | Branch time, or a fixed time of day. |
+| Calendar season | Branch date and the hemisphere configured at HQ, a fixed season, or Off. Missing or equatorial coordinates have no automatic season. This is a calendar label, not measured climate. |
+| Show regional forecast | Shows the regional forecast received by HQ and effects within the windows. Turning this display off does not disable HQ retrieval. |
 | Browser notifications | Notifies when a colleague starts waiting or has an error, and when a Branch stops or resumes reporting. Only while the page is open in a browser tab. Needs HTTPS or localhost and the browser's permission; off by default. |
 | Demo data | Shown in demo mode (`/?demo=1`): fictional colleagues, HQ data unchanged. "Open live data" returns to HQ. |
+
+The office forecast line shows a condition and Celsius temperature, the forecast issue time, and MET Norway attribution. Unconfigured location, loading, unavailable, and out-of-date data have distinct labels. Expired data does not drive current-weather effects. The forecast is a model result for the configured city, not a local measurement. See [regional forecast setup](install.md#69-configure-regional-forecasts).
+
+Rain, snow, and cloud effects stay within the painted windows. Reduced motion makes them static. The office artwork, furniture, and colleague proportions remain unchanged. Calendar-season and weather-display choices persist in browser storage when available.
+
+Replay shows "Historical weather unavailable" and hides current-weather effects. Calendar season and window light follow the replay timestamp. Demo shows a labeled fictional forecast and makes no weather requests.
