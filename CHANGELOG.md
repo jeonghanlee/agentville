@@ -6,7 +6,7 @@ This document lists the user-visible changes of each AgentVille release.
 
 **Out of scope:** internal refactoring and test-only changes.
 
-## 0.4.0 - Office Release - Unreleased
+## 0.4.0 - Office Release
 
 ### HQ
 

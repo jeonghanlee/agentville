@@ -7,7 +7,7 @@ Canonical branch or ref: master
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: In docs/milestone-0.4.0.md, inspect the corrected replay verification and M5 release draft. Land the replay clock correction under separate commit/push authority, observe its CI, and complete M4 before version readiness. G2 awaits acceptance and implementation authority for M5. Preserve unrelated M2 prototype notes and original painted artwork; M3 remains last in the Backlog, outside 0.4.0 with no future version assigned.
+Next session entry point: In docs/milestone-0.4.0.md, continue accepted M5 at Release Execution 2. The changelog is finalized and curated notes match; Release Verification 1 through 5 are Pass with prechange-01/ retaining fresh document, installed-service, and remote/version observations. Obtain separate Commit and Push authority for CHANGELOG.md and the selected canonical changes, excluding the 184 unrelated M2 lines. Observe landing before creating a clean checkout for the version-only change. M1, M2, M4, G1, and G2 are Complete. Preserve original painted artwork; M3 remains last in the Backlog, outside 0.4.0 with no future version assigned.
 
 ## Scope
 
@@ -25,12 +25,12 @@ Out of scope: Town map implementation and automatic creation of a future release
 | --- | --- | --- | --- | --- | --- | --- |
 | M1 | Branch and Project lifecycle | Milestone | Complete | No | [0.3.0 M3](milestone-0.3.0.md#m3---remote-development-environments), D1, D2, D3, D4 | Closure and observed automatic reopening work at HQ; [detail](#m1---branch-and-project-lifecycle) |
 | M2 | Meeting rooms | Milestone | Complete | No | M1, D1 | Concurrent colleagues of one Project share the intended presentation; [detail](#m2---meeting-rooms) |
-| M4 | Seasons and weather | Milestone | In progress | No | M2, D15, D16, G1 | Visual settings and regional forecasts affect presentation consistently; [detail](#m4---seasons-and-weather) |
+| M4 | Seasons and weather | Milestone | Complete | No | M2, D15, D16, G1 | Visual settings and regional forecasts affect presentation consistently; [detail](#m4---seasons-and-weather) |
 | G1 | Seasons and weather plan acceptance | External gate | Complete | No | | Accept location, season, and replay rules; [detail](#g1---seasons-and-weather-plan-acceptance) |
-| M5 | Final release | Milestone | Blocked | No | M1, M2, M4, G2 | Verified 0.4.0 release and actual installation; [detail](#m5---final-release) |
-| G2 | Release plan acceptance | External gate | Open | No | | Accept and authorize the concrete release plan; [detail](#g2---release-plan-acceptance) |
+| M5 | Final release | Milestone | In progress | No | M1, M2, M4, G2 | Verified 0.4.0 release and actual installation; [detail](#m5---final-release) |
+| G2 | Release plan acceptance | External gate | Complete | No | | Accept and authorize the concrete release plan; [detail](#g2---release-plan-acceptance) |
 
-Status totals: Complete 3; In progress 1; Blocked 1; Open 1. Nearest Ready work: none; M4 verification is active and M5 awaits G2. Backlog: Deferred 1; excluded from the release tally.
+Status totals: Complete 5; In progress 1. Nearest Ready work: none; M5 release preparation is active. Backlog: Deferred 1; excluded from the release tally.
 
 ### Decisions
 
@@ -538,7 +538,7 @@ Verification: the full local suite passed 374 tests in 902 s on 2026-10-26 with 
 Origin: 0.4.0 / M4
 Identity History: none
 GitHub Issue: none
-Status: In progress
+Status: Complete
 
 ##### Summary
 
@@ -604,8 +604,8 @@ Provider premises, checked 2026-10-27: Locationforecast supplies global model fo
 | T2 | 2026-10-27T21:54:27.871943+00:00 | Real client/cache and outer HTTP server | Passed: expiry, 304, restart, shared cells, concurrent refresh, size limit, timeout, errors, Retry-After and backoff | work/weather-20261027/: weather-matrix.xml; installed-proof-02/receipt.json |
 | T3 | 2026-10-27T21:54:27.871943+00:00 | Real HQ HTTP and WebSocket | Passed: viewer authentication, unknown-ID refusal, display-only response, and activity frames during blocked provider transport | work/weather-20261027/: weather-matrix.xml |
 | T4 | 2026-10-27T21:54:27.871943+00:00 | Chromium 156, real HQ and captured provider input | Passed: eight conditions at both 1440/720 px and 100/175 percent zoom; late previous-Branch response cannot repaint; twelve original PNGs unchanged | work/weather-20261027/: weather-matrix.xml; artwork-baseline.json |
-| T5 | 2026-10-27T21:54:27.871943+00:00 | Actual calendar/date and replay modules in Chromium | Passed: 24 monthly hemisphere cases, local date boundaries, missing/equatorial hemisphere, overrides, replay hiding and live restoration, fictional demo without provider requests | work/weather-20261027/: weather-matrix.xml |
-| T6 | 2026-10-27T21:54:27.871943+00:00 | Full repository coverage plus scoped permission rerun | Passed: all 424 current collected cases have an actual passing result; English/Korean, keyboard, reduced motion, unchanged announcements, and settings persistence verified | work/weather-20261027/: full-first.xml; privileged-recheck.xml; weather-matrix.xml; settings-persistence.xml; verification-summary.json |
+| T5 | 2026-10-28T16:32:06.004774+00:00 | Actual calendar/date and replay modules; full local suite and Chromium CI at d174536 | Passed: accepted calendar and replay checks, including both corrected replay viewport cases; the original date-dependent failure remains retained | work/weather-20261027/weather-matrix.xml; work/release-040-prep-20261028/full-final.xml; landing-d174536/receipt.json; https://github.com/jeonghanlee/agentville/actions/runs/40714222039 |
+| T6 | 2026-10-28T16:32:06.004774+00:00 | Real local suite and Python 3.12/3.13, browser, and install CI at d174536 | Passed: local 426 cases with zero failures/errors/skips; CI Python jobs each 329 passed and 12 optional-browser skips, separate required-browser job 97 passed with no skips; install passed. All 391 tracked runtime/test files match the full local run | work/release-040-prep-20261028/full-final.xml; full-final.json; landing-d174536/receipt.json and completed job logs; https://github.com/jeonghanlee/agentville/actions/runs/40714222039 |
 | T7 | 2026-10-27T21:54:27.871943+00:00 | Isolated installed wheel, live MET Norway and Chromium; mdBook 0.4.40 | Passed: actual public-city forecast through installed HQ; all 76 package files and 48 served web files match source/wheel; cache-preserving restart and expected SIGTERM termination; eight fictional captures and setup link verified | work/weather-20261027/: installed-proof-02/receipt.json; installed-proof-02/terminal.json; manual-01/receipt.json; book-verification.json |
 
 The full first run recorded 403 passes and 12 failures under sandbox restrictions. The two affected existing suites passed all 13 cases with the required permissions. The expanded weather matrix passed 46 cases, and the added persistence assertions passed at both widths. The final coverage check matches actual results to all 424 current collected identities; it does not relabel the first run as a clean full-suite pass. No tests are skipped.
@@ -619,8 +619,8 @@ Subsequent city setup observed at 2026-10-28T01:24:52.028010+00:00: the owner-se
 
 ##### Closure Evidence
 
-- Runtime and documentation landed in 034aa31fa6caefbf1fa7ee0a611cbcf8dd41c604, followed by walking in 3f1a25b7afbd2bc7597deede7987873862ee2088; fetched origin/master equals the latter on 2026-10-28. Release preparation exposed a replay-test clock mismatch in CI and the complete local run. The bounded correction passes both browser widths and the independent outside-repository unit case. Keep M4 In progress until this test correction lands and required combined/CI verification passes. Version remains 0.3.0; no release or tag is created.
-- Original evidence: work/weather-20261027/verification-summary.json; recheck with work/weather-20261027/aggregate-verification.py. Combined release-preparation verification completed at 2026-10-28T07:55:27.132679+00:00: all 426 cases passed in the real full suite with zero skips/errors/failures. work/release-040-prep-20261028/full-final.xml and full-final.json retain the result and unchanged source identities. The corrected replay test still awaits landing; current remote CI is not relabeled as passing.
+- Complete, 2026-10-28. Runtime and documentation landed in 034aa31fa6caefbf1fa7ee0a611cbcf8dd41c604, walking in 3f1a25b7afbd2bc7597deede7987873862ee2088, and the replay clock correction in d174536869e41a5a200212d21fa0cf58532bab06. At 2026-10-28T16:32:06.004774+00:00, fetched origin/master, local HEAD, and the advertised remote master all identified d174536; its test run 40714222039 and documentation run 40714222368 were completed successfully. All required checks and G1 are complete. Version remains 0.3.0; no release or tag is created.
+- Original evidence: work/weather-20261027/verification-summary.json; recheck with work/weather-20261027/aggregate-verification.py. The real full suite completed at 2026-10-28T07:55:27.132679+00:00 with 426 passes and zero skips/errors/failures. All 391 recorded runtime/test file hashes still match the landed correction. work/release-040-prep-20261028/landing-d174536/receipt.json and its actual completed CI job logs establish landing and supported CI success. Recheck by fetching origin, comparing HEAD/upstream and advertised master, then reading the exact CI run and job logs. The earlier failed CI run remains recorded in ci-observation.json; it is not relabeled.
 
 #### G1 - Seasons and Weather Plan Acceptance
 
@@ -652,7 +652,7 @@ D17 accepts the M4 location, calendar-season, and replay policies. D16 selects t
 Origin: 0.4.0 / M5
 Identity History: none
 GitHub Issue: none
-Status: Blocked
+Status: In progress
 
 ##### Summary
 
@@ -675,16 +675,16 @@ Out of scope: Town map implementation, new artwork, prototype publication, and a
 
 ##### Dependencies And Decisions
 
-- M1, M2, and M4 precede release readiness. M4 remains In progress while its replay-test correction awaits landing and fresh CI.
-- G2 requires acceptance and implementation authority for this draft; resume as Not started when G2 closes.
+- M1, M2, and M4 precede release readiness and are Complete. The replay correction landed in d174536 with passing test and documentation CI.
+- G2 is Complete. The current plan was accepted and implementation was explicitly authorized on 2026-10-28; release preparation is active.
 - D15 excludes the Town map. No future line or version is assigned by this draft.
-- Git and GitHub actions require their separate git-workflow authority. Acceptance of this draft does not authorize publication.
+- Git and GitHub actions require their separate git-workflow authority. Plan acceptance and implementation authority do not authorize publication.
 
 ##### Implementation Plan
 
-Plan Status: draft
-Plan Acceptance: none
-Implementation Authorization: none
+Plan Status: accepted
+Plan Acceptance: 2026-10-28, explicit acceptance of the M5 release plan.
+Implementation Authorization: 2026-10-28, explicit instruction to proceed with implementation of the accepted plan.
 Superseded Plan Artifacts: none
 
 1. Release Execution 1 uses Release Verification 1, 2, 3, and 4. Land the replay clock correction and release-preparation records under separate commit/push authority. Observe CI at that exact commit; retain the original failed run.
@@ -700,9 +700,9 @@ Superseded Plan Artifacts: none
 | --- | --- | --- | --- | --- | --- |
 | M1 / T1, M1 / T2, M1 / T3, M1 / T4, M1 / T5, M1 / T6, M1 / T7, M1 / T8 | Final combined candidate or later HQ/history change | HQ authorization, store, history, notifications, and browser | Release Verification 1 | Real repository suite passes without skips or errors | Passed: full-final.xml |
 | M2 / T1, M2 / T2, M2 / T3, M2 / T4, M2 / T5, M2 / T6, M2 / T7 | Final combined candidate or later scene/gait change | Painted office, seats, routes, meetings, and Contractor teams | Release Verification 1 | Real browser regressions pass; original PNGs retained | Passed: full-final.xml |
-| M2 / T8 | Later runtime, version, documentation, screenshot, or artwork-input change | Complete suite, CI, named documentation, screenshots, and artwork provenance | Release Verification 1; Release Verification 2; Release Verification 3; Release Verification 7 | Full real-path checks run; named documents agree with the candidate; asset, raw-image, and prompt hashes match their recorded provenance | Full-suite result retained; provenance/manual recheck passed in corrections-03/receipt.json; corrected-commit CI and post-version checks remain pending |
+| M2 / T8 | Later runtime, version, documentation, screenshot, or artwork-input change | Complete suite, CI, named documentation, screenshots, and artwork provenance | Release Verification 1; Release Verification 2; Release Verification 3; Release Verification 7 | Full real-path checks run; named documents agree with the candidate; asset, raw-image, and prompt hashes match their recorded provenance | Full-suite result retained; finalized-document/provenance recheck passed in prechange-01/documents/receipt.json; corrected-commit CI passed in landing-d174536/receipt.json; post-version checks remain pending |
 | M4 / T1, M4 / T2, M4 / T3, M4 / T4, M4 / T5, M4 / T6 | Replay-clock correction or later weather/UI change | HQ cache/API, calendar, replay, accessibility, and live delivery | Release Verification 1 | Real suite and both replay viewport widths pass | Passed: clock-recheck.xml and full-final.xml |
-| M4 / T7 | Final documentation, package, or deployment change | Manual images/links, installed package, and actual service | Release Verification 3; Release Verification 4 | Built manual and installed runtime match their checked inputs | book-verification.json; installed-proof/receipt.json |
+| M4 / T7 | Final documentation, package, or deployment change | Manual images/links, installed package, and actual service | Release Verification 3; Release Verification 4 | Built manual and installed runtime match their checked inputs | prechange-01/documents/receipt.json; prechange-01/installed-proof/receipt.json |
 | M1 / T8; M2 / T7; M2 / T8; M4 / T6 | Version-only commit | Combined package and supported CI environments | Release Verification 7 | Combined local suite and every required CI job pass on the version commit | Pending |
 
 For M2 / T8, changed runtime/test inputs invalidate Release Verification 1 and the applicable CI result in Release Verification 2. Changed documentation, screenshots, or provenance inputs invalidate Release Verification 3. The version commit requires Release Verification 7. Preserve earlier observations with their original source identities instead of treating unchanged runtime hashes as new execution.
@@ -711,7 +711,7 @@ For M2 / T8, changed runtime/test inputs invalidate Release Verification 1 and t
 
 | Release Verification Label | Timing | System | Version | Architecture | Deployment Path | Method | Expected Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Release Verification 4 | pre-change | Actual Debian 13 user services | 0.3.0 package with 3f1a25b runtime | x86_64 | Existing user installation | Inspect actual processes, installed/served bytes, real HTTP/WebSocket, forecast, and Chromium | HQ/Collector active; package identity, configuration retention, forecast, and live delivery agree | installed-proof/receipt.json |
+| Release Verification 4 | pre-change | Actual Debian 13 user services | 0.3.0 package with 3f1a25b runtime | x86_64 | Existing user installation | Inspect actual processes, installed/served bytes, real HTTP/WebSocket, forecast, and Chromium | HQ/Collector active; package identity, configuration retention, forecast, and live delivery agree | prechange-01/installed-proof/receipt.json |
 | Release Verification 10 | post-release | Clean Ubuntu CI runner or owner-selected equivalent host | Released 0.4.0 | x86_64 | Fresh user's documented install.sh path | Run released install.sh --hq --no-start --ref 0.4.0, then both CLI version commands; retain logs and tag identity | Released install succeeds and both commands report 0.4.0 | Pending actual tag installation |
 | Release Verification 11 | post-release | Actual Debian 13 user services | Released 0.4.0 | x86_64 | Existing user installation | Back up package/config/unit state, install the verified released wheel, restart, and inspect real processes/API/WebSocket/browser | Released bytes served; settings, data, Branch and colleague identities preserved | Pending released-service receipt |
 
@@ -727,8 +727,8 @@ The clean installation is required. Observe tag-triggered CI using the actual re
 
 | Step | Action | Authorization | Expected Result | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | Commit and push tests/browser/test_weather.py, preparation documentation, and curated changelog | Separate Commit and Push scopes | Exact reviewed paths land on origin/master; unrelated prototype notes excluded | Pending |
-| 2 | Finalize the CHANGELOG.md heading to 0.4.0 - Office Release, regenerate curated notes, rerun Release Verification 3, run Release Verification 5, then commit and push the changelog, M4 closure, and pre-change evidence | Separate Commit and Push scopes | No Unreleased marker in the release section; notes match; completed work and pre-change evidence land before version mutation | Pending |
+| 1 | Commit and push tests/browser/test_weather.py, preparation documentation, and curated changelog | Commit and Push scopes explicitly delegated on 2026-10-28 | Exact reviewed paths land on origin/master; unrelated prototype notes excluded | d174536869e41a5a200212d21fa0cf58532bab06; landing observed 2026-10-28T16:32:06.004774+00:00 in landing-d174536/receipt.json; both CI runs passed; unrelated M2 notes remain unstaged |
+| 2 | Finalize the CHANGELOG.md heading to 0.4.0 - Office Release, regenerate curated notes, rerun Release Verification 3, run Release Verification 5, then commit and push the changelog, M4 closure, and pre-change evidence | Preparation authorized by the accepted plan; separate Commit and Push scopes required | No Unreleased marker in the release section; notes match; completed work and pre-change evidence land before version mutation | Documents and pre-change checks complete on 2026-10-28 in prechange-01/; commit/push and landing remain pending |
 | 3 | Commit and push only pyproject.toml at 0.4.0 | Separate Commit and Push scopes | Version-only commit on origin/master | Pending |
 | 4 | Commit and push readiness evidence after post-change checks | Separate Commit and Push scopes | Immutable release-candidate ID recorded | Pending |
 | 5 | Create annotated refs/tags/0.4.0 at the recorded candidate | Tag create scope after exact preview and preflight | Numeric annotated tag resolves to the authorized candidate | Pending |
@@ -761,29 +761,31 @@ Release from master directly; no merge or branch deletion is needed. Remote trac
 | Label | Observed At | Environment | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | Release Verification 1 | 2026-10-28T07:55:27.132679+00:00 | Debian 13, Python 3.13, Chromium | Pass | work/release-040-prep-20261028/full-final.xml and full-final.json: 426 passed, zero failures/errors/skips; 391 tracked runtime/test files unchanged during execution; original failures retained separately |
-| Release Verification 2 | 2026-10-28 | Current origin/master 3f1a25b | Fail | work/release-040-prep-20261028/ci-observation.json; https://github.com/jeonghanlee/agentville/actions/runs/40648350368 ; Python matrix/install pass, browser has 95 passes and 2 replay-date failures; corrected commit CI not run |
-| Release Verification 3 | 2026-10-28T08:40:22.358011+00:00 | mdBook 0.4.40, Chromium 156, actual asset/raw/prompt files and named documents | Pass | work/release-040-prep-20261028/corrections-03/receipt.json; manual-build.log and review-build.log. Three asset and three prompt hashes match provenance; raw/runtime office bytes match; named documents were rechecked against shipped behavior; eight manual images match captures; setup and M5 links work without page/HTTP errors. Original evidence remains retained. |
-| Release Verification 4 | 2026-10-28T07:48:15.231849+00:00 | Actual user HQ/Collector, Chromium, MET Norway | Pass | work/release-040-prep-20261028/installed-proof/receipt.json; 76 package and 48 served files equal the verified wheel; settings/unit preserved |
-| Release Verification 5 | 2026-10-28T07:52:25.757711+00:00 | Source, actual package, origin, GitHub, and draft prose | Pending | work/release-040-prep-20261028/remote-version.json retains the passing 0.3.0 version and remote-object observations. The draft CHANGELOG.md still correctly says Unreleased. Finalize its heading and refresh the version/remote checks at Release Execution 2 before recording Pass. |
-| Release Verification 6 | Not run | Version-only candidate | Pending | No version mutation authorized or performed |
-| Release Verification 7 | Not run | Version-only candidate and supported CI | Pending | Requires accepted plan and version commit |
+| Release Verification 2 | 2026-10-28T16:32:06.004774+00:00 | Landed d174536; Python 3.12/3.13, required Chromium, installation, and documentation CI | Pass | work/release-040-prep-20261028/landing-d174536/receipt.json and completed job logs; https://github.com/jeonghanlee/agentville/actions/runs/40714222039 ; Python jobs each 329 passed with 12 optional-browser skips, required browser job 97 passed without skips, installation passed; documentation build/deploy passed at https://github.com/jeonghanlee/agentville/actions/runs/40714222368 . The earlier failure remains in ci-observation.json and run 40648350368. |
+| Release Verification 3 | 2026-10-28T16:43:35.329524+00:00 | Finalized CHANGELOG.md, named documents, mdBook 0.4.40, Chromium 156, actual asset/raw/prompt files | Pass | work/release-040-prep-20261028/prechange-01/documents/receipt.json; actual manual-build.log and review-build.log. Three asset and three prompt hashes match provenance; raw/runtime office bytes match; named documents match shipped behavior; eight manual images match captures; setup and M5 links work without page/HTTP errors. Earlier observations remain retained separately. |
+| Release Verification 4 | 2026-10-28T16:44:15.808665+00:00 | Actual user HQ/Collector, Chromium, MET Norway | Pass | work/release-040-prep-20261028/prechange-01/installed-proof/receipt.json; active/running services, reachable Collector, 76 package and 48 served files equal the verified wheel, valid forecast and two actual WebSocket frames; settings/unit preserved; no page/HTTP errors |
+| Release Verification 5 | 2026-10-28T16:43:20.524558+00:00 | Source, installed CLIs, origin tags, GitHub releases, finalized changelog and curated notes | Pass | work/release-040-prep-20261028/prechange-01/receipt.json and actual remote inventories; source and both CLIs report 0.3.0; no local/remote 0.4.0 tag or GitHub release; exact heading is 0.4.0 - Office Release without Unreleased; notes match that section; all 391 runtime/test input hashes unchanged |
+| Release Verification 6 | Not run | Version-only candidate | Pending | Pre-change evidence awaits its commit and landing; source and installed version remain 0.3.0 |
+| Release Verification 7 | Not run | Version-only candidate and supported CI | Pending | Plan accepted; version commit and its combined checks remain pending |
 | Release Verification 8 | Not run | Actual released tag | Pending | No tag created |
 | Release Verification 9 | Not run | Actual GitHub release | Pending | No release created |
 | Release Verification 10 | Not run | Clean equivalent host | Pending | Requires actual released tag |
 | Release Verification 11 | Not run | Actual local released service | Pending | Current installed package remains 0.3.0 |
-| Release Verification 12 | Not run | Final closure candidate | Pending | G2 Open; M4 correction and CI pending; no future release assigned |
+| Release Verification 12 | Not run | Final closure candidate | Pending | M1, M2, M4, and G2 Complete; no release objects or future release assigned |
 
 ##### Closure Evidence
 
-- Preparation only. No version mutation, commit, push, tag, release publication, or future-line creation is authorized by this draft.
-- Existing failed evidence is retained separately from corrected results. Local passing checks do not establish fresh remote CI success or post-release acceptance.
+- Release preparation is authorized under the accepted plan. Release Execution 1 was separately authorized and landed in d174536. Further commit/push, tag, and release publication require their separate git-workflow authority; no future release line is assigned or opened.
+- Existing failed evidence is retained separately from corrected results. Actual completed CI at d174536 establishes Release Verification 2; neither that result nor the local passing suite establishes post-release acceptance.
 - On 2026-10-28 the owner authorized both review corrections: connect M2 / T8 to final verification and require changelog finalization before the version change with a tagged-source check after release. These corrections leave the overall release plan draft and do not close G2 or authorize publication.
+- Decision Date: 2026-10-28. The complete current M5 plan was subsequently accepted and its implementation explicitly authorized. G2 is Complete; publication retains its separate authority and post-release checks remain pending.
+- Release Execution 2 preparation is complete: finalized changelog, matching curated notes, refreshed document/provenance checks, actual installed-service checks, and remote/version baseline. The pre-change evidence commit and its landing precede the separate version-only change. No version, tag, release, or installation mutation has occurred.
 
 #### G2 - Release Plan Acceptance
 
 Origin: 0.4.0 / G2
 GitHub Issue: none
-Status: Open
+Status: Complete
 
 ##### Summary
 
@@ -797,11 +799,11 @@ The owner accepts the M5 draft and explicitly authorizes its implementation. Git
 
 | Observed At | Result | Evidence |
 | --- | --- | --- |
-| 2026-10-28 | Pending | M5 draft prepared under the instruction to proceed with 0.4.0 closing preparation; final release plan not yet accepted |
+| 2026-10-28 | Accepted and authorized | Explicit acceptance of the current M5 plan and instruction to proceed with implementation, including clean released installation and the unassigned next-line state |
 
 ##### Closure Evidence
 
-- none
+- Decision Date: 2026-10-28. The current M5 plan is accepted and implementation is authorized. Git and GitHub actions require their separate scopes.
 
 
 ## Backlog
