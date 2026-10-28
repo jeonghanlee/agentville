@@ -9,6 +9,7 @@ export const CAT_WIDTH = 4 * ACTOR_SCALE;
 export const PROJECTS_PER_PAGE = 4;
 export const WALK_PERIOD = .56;
 export const WALK_SPEED = [5.2, 6.4].map((value) => value * ACTOR_SCALE);
+export const WALK_STRIDE = (WALK_SPEED[0] + WALK_SPEED[1]) / 2 * WALK_PERIOD;
 
 export const actorPixels = () => ARTWORK.width * ACTOR_WIDTH / 100;
 export const actorHeightPixels = () => actorPixels() * ACTOR_VIEW.height / ACTOR_VIEW.width;

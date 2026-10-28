@@ -1,7 +1,7 @@
 import { distance, FLOOR_ASPECT } from "./floor.js";
 import { walkerDepth, updateWalkerOcclusion } from "./furniture.js";
 
-import { WALK_SPEED } from "./layout.js";
+import { WALK_SPEED, WALK_STRIDE } from "./layout.js";
 
 // Colleagues walk between places along floor.js routes; placement data stays authoritative.
 const SPEED = WALK_SPEED;
@@ -40,6 +40,7 @@ export function createWalkers(root, { motionAllowed, changed }) {
     node.style.zIndex = String(walkerDepth(x, y));
     node.dataset.coffeeFacing = walk.facing;
     node.dataset.walkView = walk.view;
+    node.style.setProperty("--walk-phase", walk.phase.toFixed(5));
     updateWalkerOcclusion(node, x, y);
   }
   function finish(walk) {
@@ -63,7 +64,9 @@ export function createWalkers(root, { motionAllowed, changed }) {
     if (!document.hidden && !root.closest("[hidden]")) {
       let arrived = false;
       for (const walk of [...walks.values()]) {
-        walk.travelled += walk.speed * delta / 1000;
+        const step = walk.speed * delta / 1000;
+        walk.travelled += step;
+        walk.phase = (walk.phase + step / WALK_STRIDE) % 1;
         while (walk.index < walk.path.length - 1 && walk.travelled >= distance(walk.path[walk.index], walk.path[walk.index + 1])) {
           walk.travelled -= distance(walk.path[walk.index], walk.path[walk.index + 1]);
           walk.index++;
@@ -80,7 +83,7 @@ export function createWalkers(root, { motionAllowed, changed }) {
     // Start walking along path (floor points); arrive runs once at the end.
     start(key, path, arrive, carrying = false) {
       const old = walks.get(key);
-      const walk = { key, path, index: 0, travelled: 0, arrive, carrying,
+      const walk = { key, path, index: 0, travelled: 0, phase: old?.phase ?? 0, arrive, carrying,
         speed: old?.speed || SPEED[0] + Math.random() * (SPEED[1] - SPEED[0]), facing: old?.facing || "right" };
       walk.goal = path[path.length - 1];
       // A level first stretch takes its view from the overall heading.
@@ -96,7 +99,8 @@ export function createWalkers(root, { motionAllowed, changed }) {
       if (!walk) return null;
       const [x, y] = position(walk);
       const stretch = [walk.path[walk.index], walk.path[walk.index + 1] || walk.path[walk.index]];
-      return { x, y, goal: walk.goal, stretch, facing: facing(walk), view: view(walk), carrying: walk.carrying, depth: walkerDepth(x, y) };
+      return { x, y, goal: walk.goal, stretch, facing: facing(walk), view: view(walk), carrying: walk.carrying,
+        phase: walk.phase, depth: walkerDepth(x, y) };
     },
     stop(key) { walks.delete(key); },
     active() { return walks.size > 0; },

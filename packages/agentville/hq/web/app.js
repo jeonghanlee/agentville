@@ -615,6 +615,7 @@ function renderCharacters(ctx) {
       node.dataset.coffeePhase = visit?.phase || (walk ? "walking" : "");
       node.dataset.coffeeFacing = walk?.facing || (counter ? "right" : "");
       node.dataset.walkView = walk?.view || "";
+      node.style.setProperty("--walk-phase", String(walk?.phase ?? 0));
       node.dataset.queuePosition = spot ? String(waiting.indexOf(row.key)+1) : "";
       node.dataset.seatIndex = index === null ? "" : String(index);
       node.dataset.team = away.has(row.key) ? teamAt.get(row.key).kind : teamAt.has(row.key) ? "desk" : "";

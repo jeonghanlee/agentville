@@ -222,16 +222,20 @@ function coffeeSprite(look, state, detail, cup) {
   return svg;
 }
 
-// One leg-split view of a standing frame: the whole figure steps with a small bob while the leg that carries the
-// weight is held on the floor, so the other foot lifts. Legs only ever move down against the body, which the full
-// figure underneath covers, so no copy or gap shows at the part edges.
+// The original legs rotate and translate as complete painted parts, preserving their lengths. A narrow overlap
+// at the hips covers antialiased seams; the body underlay excludes the free legs so no stationary feet remain.
 function steppingFigure(file, frame, [split, top], id) {
   const art = viewport(file, frame, PEOPLE_SIZE, 32, 43);
   const legTop = frame[1] + frame[3] * top, bottom = frame[1] + frame[3];
   const legs = [[frame[0], legTop, split - frame[0], bottom - legTop], [split, legTop, frame[0] + frame[2] - split, bottom - legTop]]
     .map((region) => localRect(frame, region));
-  return '<defs>' + legs.map((leg,i) => '<clipPath id="' + id + '-leg' + i + '">' + rect(leg) + '</clipPath>').join("") + '</defs>'
-    + '<g class="walk-figure">' + art + legs.map((_,i) => '<g class="walk-leg walk-leg-' + (i ? "far" : "near") + '" clip-path="url(#' + id + '-leg' + i + ')">' + art + '</g>').join("") + '</g>';
+  return '<defs><mask id="' + id + '-body" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="43">'
+    + rect([0,0,32,43],"white") + legs.map(([x,y,w,h]) => rect([x,y+.7,w,h],"black")).join("") + '</mask>'
+    + legs.map((leg,i) => '<clipPath id="' + id + '-leg' + i + '">' + rect(leg) + '</clipPath>').join("") + '</defs>'
+    + '<g class="walk-figure"><g class="walk-body" mask="url(#' + id + '-body)">' + art + '</g>'
+    + legs.map(([x,y,w],i) => '<g class="walk-leg walk-leg-' + (i ? "far" : "near")
+      + '" style="transform-origin:' + (x+w/2) + 'px ' + y + 'px" clip-path="url(#' + id + '-leg' + i + ')">'
+      + art + '</g>').join("") + '</g>';
 }
 
 // A walking colleague: the rear coffee-standing frame while heading up-screen, the front standing frame while heading

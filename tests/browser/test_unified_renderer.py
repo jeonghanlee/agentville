@@ -75,10 +75,10 @@ def test_walking_sole_contact_strips_fit_the_retained_foot_envelope(tmp_path):
         page.goto(hq.url + "/walking-contacts")
         rows = page.evaluate("""async patches => {
           const {character,prepareAppearances}=await import('/art.js');
-          const {applyLayoutMetrics,WALK_PERIOD}=await import('/layout.js');
+          const {applyLayoutMetrics}=await import('/layout.js');
           const world=document.querySelector('#world');world.style.width='1536px';applyLayoutMetrics(world);
           const seeds=Array.from({length:12},(_,i)=>'sole-'+i);prepareAppearances(seeds);const rows=[];
-          for(const seed of seeds)for(const view of ['front','back'])for(const facing of ['left','right'])for(let phase=0;phase<8;phase++){
+          for(const seed of seeds)for(const view of ['front','back'])for(const facing of ['left','right'])for(let phase=0;phase<16;phase++){
             const index=rows.length,x=index%16*80+40,y=Math.floor(index/16)*110+92;
             const node=document.createElement('div');node.className='agent coffee-standing walking';
             node.dataset.walkView=view;node.dataset.coffeeFacing=facing;
@@ -87,8 +87,11 @@ def test_walking_sole_contact_strips_fit_the_retained_foot_envelope(tmp_path):
             rows.push({node,view,facing,phase,x,y,look:Number(sprite.dataset.look)});
           }
           await new Promise(requestAnimationFrame);
-          for(const row of rows)for(const animation of row.node.getAnimations({subtree:true})){
-            animation.pause();animation.currentTime=row.phase/8*WALK_PERIOD*1000;
+          for(const row of rows){
+            row.node.style.setProperty('--walk-phase',String(row.phase/16));
+            for(const animation of row.node.getAnimations({subtree:true})){
+              animation.pause();animation.currentTime=0;
+            }
           }
           await new Promise(requestAnimationFrame);
           const origin=world.getBoundingClientRect();
@@ -99,12 +102,17 @@ def test_walking_sole_contact_strips_fit_the_retained_foot_envelope(tmp_path):
               for(const [u,v] of [[px,py],[px+w,py],[px+w,py+h],[px,py+h]]){
                 const p=new DOMPoint(u,v).matrixTransform(image.getScreenCTM());points.push([p.x-origin.x-x,p.y-origin.y-y]);
               }
-            return {look,view,facing,phase,points};
+            return {look,view,facing,phase,points,
+              bounds:[Math.min(...points.map(p=>p[0])),Math.max(...points.map(p=>p[0])),
+                Math.min(...points.map(p=>p[1])),Math.max(...points.map(p=>p[1]))]};
           });
         }""", annotations["sole_patches"])
         assert not errors
         browser.close()
-    assert len(rows) == 384 and len({row["look"] for row in rows}) == 12
+    assert len(rows) == 768 and len({row["look"] for row in rows}) == 12
     for row in rows:
         assert row["points"], row
-        assert all(-20.736 <= x <= 20.736 and -7.168 <= y <= 1.536 for x, y in row["points"]), row
+    outside = [row for row in rows if not all(
+        -20.736 <= x <= 20.736 and -7.168 <= y <= 1.536 for x, y in row["points"])]
+    assert not outside, [(row["look"], row["view"], row["facing"], row["phase"], row["bounds"])
+                         for row in outside[:5]]
