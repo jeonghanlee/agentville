@@ -74,7 +74,8 @@ def test_seasons_settings_languages_and_replay(tmp_path, monkeypatch, width):
         service = Weather({"b1": Location(60, 11), "b2": Location(-33, 18)},
                           str(tmp_path / "weather.sqlite3"), lambda: met.now[0])
         service.refresh()
-        with HQ(tmp_path / "hq.sqlite3", weather=service) as hq, playwright.sync_playwright() as driver:
+        hq_clock = [datetime.fromtimestamp(met.now[0], UTC)]
+        with HQ(tmp_path / "hq.sqlite3", clock=hq_clock, weather=service) as hq, playwright.sync_playwright() as driver:
             hq.send()
             hq.send(branch="b2")
             hq.advance()

@@ -7,13 +7,15 @@ Canonical branch or ref: master
 Git upstream: origin/master
 Remote tracker: none
 
-Next session entry point: M4 implementation and local verification are complete under D16/D17; inspect work/weather-20261027/verification-summary.json and prepare the verified code/documentation for commit when requested. All 424 current test identities have actual passing results, including permission rechecks. The actual user HQ and Collector have been updated and restarted; installed/served bytes, Collector reachability, HTTP, live WebSocket, and browser settings passed. The owner-selected city is configured; the actual installed HQ forecast endpoint and browser show a valid MET Norway forecast, attribution, and northern calendar season. Recheck work/weather-20261027/local-deployment-ofu_opuh/berkeley/receipt.json. Keep M4 In progress until upstream landing is verified. G1 is Complete; M3 remains Deferred outside 0.4.0. Preserve original painted artwork and unrelated prototype notes.
+Next session entry point: In docs/milestone-0.4.0.md, inspect the corrected replay verification and M5 release draft. Land the replay clock correction under separate commit/push authority, observe its CI, and complete M4 before version readiness. G2 awaits acceptance and implementation authority for M5. Preserve unrelated M2 prototype notes and original painted artwork; M3 remains last in the Backlog, outside 0.4.0 with no future version assigned.
 
 ## Scope
 
 This document tracks Branch and Project lifecycle, meeting rooms, and seasonal presentation for 0.4.0. The Town map is deferred to the end of the Backlog, without an assigned release.
 
-Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
+The final release detail records the proposed checks and publication sequence. Publication requires acceptance of that plan and separate git-workflow authority.
+
+Out of scope: Town map implementation and automatic creation of a future release line.
 
 ## Milestone
 
@@ -25,8 +27,10 @@ Out of scope: implementing 0.4.0 during the 0.3.0 work, and release publication.
 | M2 | Meeting rooms | Milestone | Complete | No | M1, D1 | Concurrent colleagues of one Project share the intended presentation; [detail](#m2---meeting-rooms) |
 | M4 | Seasons and weather | Milestone | In progress | No | M2, D15, D16, G1 | Visual settings and regional forecasts affect presentation consistently; [detail](#m4---seasons-and-weather) |
 | G1 | Seasons and weather plan acceptance | External gate | Complete | No | | Accept location, season, and replay rules; [detail](#g1---seasons-and-weather-plan-acceptance) |
+| M5 | Final release | Milestone | Blocked | No | M1, M2, M4, G2 | Verified 0.4.0 release and actual installation; [detail](#m5---final-release) |
+| G2 | Release plan acceptance | External gate | Open | No | | Accept and authorize the concrete release plan; [detail](#g2---release-plan-acceptance) |
 
-Status totals: Complete 3; In progress 1. Nearest Ready work: none; M4 implementation is active. Backlog: Deferred 1; excluded from the release tally.
+Status totals: Complete 3; In progress 1; Blocked 1; Open 1. Nearest Ready work: none; M4 verification is active and M5 awaits G2. Backlog: Deferred 1; excluded from the release tally.
 
 ### Decisions
 
@@ -606,7 +610,7 @@ Provider premises, checked 2026-10-27: Locationforecast supplies global model fo
 
 The full first run recorded 403 passes and 12 failures under sandbox restrictions. The two affected existing suites passed all 13 cases with the required permissions. The expanded weather matrix passed 46 cases, and the added persistence assertions passed at both widths. The final coverage check matches actual results to all 424 current collected identities; it does not relabel the first run as a clean full-suite pass. No tests are skipped.
 
-The wheel is built from a fresh explicit package-source inventory, excluding historical prototype files and unrelated untracked annex.js. Installation evidence covers a separate local test HQ using a public Oslo coordinate and a fictional colleague. The actual user services were subsequently updated under the owner instruction to continue. City configuration remains absent pending the owner choice. The manual uses fictional captures; no production roster is published.
+The wheel is built from a fresh explicit package-source inventory, excluding historical prototype files and unrelated untracked annex.js. Installation evidence covers a separate local test HQ using a public Oslo coordinate and a fictional colleague. The actual user services were subsequently updated under the owner instruction to continue. The later actual-user city setup and its observed result are recorded below. The manual uses fictional captures; no production roster is published.
 
 
 Actual user-service verification observed at 2026-10-28T01:22:20.182137+00:00: the verified wheel was installed in the existing environment and HQ/Collector were restarted. Both remained active/running with real PIDs and zero automatic restarts; all 76 installed package files and 48 served web files matched the wheel. The actual local Collector was reachable, and Chromium observed a live WebSocket frame, the season/weather settings, and no page or HTTP errors. The forecast endpoint and page correctly report unconfigured; no city was inferred and production weather retrieval is not enabled. Package and unit backups plus the private browser captures are retained in work/weather-20261027/local-deployment-ofu_opuh/; receipt.json is the observed result, and work/weather-20261027/verify-local-service.py repeats the checks.
@@ -615,8 +619,8 @@ Subsequent city setup observed at 2026-10-28T01:24:52.028010+00:00: the owner-se
 
 ##### Closure Evidence
 
-- Implementation and local verification are complete for the accepted plan. M4 remains In progress until the source and documentation are committed and upstream landing is verified under separate authorization. Version remains 0.3.0; no release or tag is created.
-- Final evidence: work/weather-20261027/verification-summary.json; recheck with work/weather-20261027/aggregate-verification.py.
+- Runtime and documentation landed in 034aa31fa6caefbf1fa7ee0a611cbcf8dd41c604, followed by walking in 3f1a25b7afbd2bc7597deede7987873862ee2088; fetched origin/master equals the latter on 2026-10-28. Release preparation exposed a replay-test clock mismatch in CI and the complete local run. The bounded correction passes both browser widths and the independent outside-repository unit case. Keep M4 In progress until this test correction lands and required combined/CI verification passes. Version remains 0.3.0; no release or tag is created.
+- Original evidence: work/weather-20261027/verification-summary.json; recheck with work/weather-20261027/aggregate-verification.py. Combined release-preparation verification completed at 2026-10-28T07:55:27.132679+00:00: all 426 cases passed in the real full suite with zero skips/errors/failures. work/release-040-prep-20261028/full-final.xml and full-final.json retain the result and unchanged source identities. The corrected replay test still awaits landing; current remote CI is not relabeled as passing.
 
 #### G1 - Seasons and Weather Plan Acceptance
 
@@ -642,6 +646,163 @@ D17 accepts the M4 location, calendar-season, and replay policies. D16 selects t
 ##### Closure Evidence
 
 - Decision Date: 2026-10-27. The owner accepted the current M4 plan and explicitly authorized implementation. HQ owns city coordinates; calendar seasons follow latitude and Branch date; replay hides weather.
+
+#### M5 - Final Release
+
+Origin: 0.4.0 / M5
+Identity History: none
+GitHub Issue: none
+Status: Blocked
+
+##### Summary
+
+Release the combined lifecycle, meeting-room, painted-office, walking, and seasonal-weather implementation as 0.4.0 from master.
+
+##### Scope
+
+Integrated verification, release notes, version consistency, immutable release objects, documented installation, and actual local service verification.
+
+Out of scope: Town map implementation, new artwork, prototype publication, and assigning a future release number.
+
+##### Completion Criteria
+
+- M1, M2, and M4 are Complete with source landing evidence.
+- Every required Release Verification result is Pass for its specified candidate or released object.
+- An annotated 0.4.0 tag and published GitHub release identify the accepted immutable candidate.
+- The tagged CHANGELOG.md uses the finalized 0.4.0 Office Release heading without Unreleased; published notes match that section.
+- The documented installation works on a clean equivalent host; the actual local service runs the released version with retained settings and identities.
+- Canonical closure records actual release objects and the next entry point, with Town map last in the unassigned Backlog.
+
+##### Dependencies And Decisions
+
+- M1, M2, and M4 precede release readiness. M4 remains In progress while its replay-test correction awaits landing and fresh CI.
+- G2 requires acceptance and implementation authority for this draft; resume as Not started when G2 closes.
+- D15 excludes the Town map. No future line or version is assigned by this draft.
+- Git and GitHub actions require their separate git-workflow authority. Acceptance of this draft does not authorize publication.
+
+##### Implementation Plan
+
+Plan Status: draft
+Plan Acceptance: none
+Implementation Authorization: none
+Superseded Plan Artifacts: none
+
+1. Release Execution 1 uses Release Verification 1, 2, 3, and 4. Land the replay clock correction and release-preparation records under separate commit/push authority. Observe CI at that exact commit; retain the original failed run.
+2. Complete M4 only after required checks and source landing are verified. Before the version change, replace the exact CHANGELOG.md heading `0.4.0 - Office Release - Unreleased` with `0.4.0 - Office Release`, regenerate work/release-notes-0.4.0.md from that section, rerun Release Verification 3 for the finalized documents, and run Release Verification 5. Release Execution 2 commits and pushes the finalized changelog, notes source, M4 closure, and pre-change evidence under separate authority. No current draft heading is presented as a published release.
+3. Release Execution 3 changes the version; Release Verification 6 proves consistency. Change only pyproject.toml from 0.3.0 to 0.4.0 in a clean checkout, preserving unrelated prototype work. Create a separately authorized version-only commit.
+4. Release Execution 4 records Release Verification 7 and the candidate. Build and inspect the release wheel, rerun the combined suite and supported CI, and commit readiness evidence. Resolve and record the immutable candidate before creating release objects.
+5. Release Execution 5 to 7 creates and publishes objects; Release Verification 8 and 9 prove their identities. Create the annotated numeric tag, push that exact tag, and publish curated notes using individually authorized actions and immutable targets. Checkpoint observed results before the next dependent action.
+6. Release Execution 8 and 9 covers installation and closure; Release Verification 10 and 11 observe installation. Release Verification 12 checks canonical closure. Verify the released tag, GitHub object, clean installation, and actual local service. Preserve configuration, Branch/colleague identities, and data. Record final closure in a separately authorized commit; do not move the release tag.
+
+##### Integrated Verification
+
+| Source Check | Re-run Trigger | Shared Surface | Release Verification Label | Expected Result | Result Evidence |
+| --- | --- | --- | --- | --- | --- |
+| M1 / T1, M1 / T2, M1 / T3, M1 / T4, M1 / T5, M1 / T6, M1 / T7, M1 / T8 | Final combined candidate or later HQ/history change | HQ authorization, store, history, notifications, and browser | Release Verification 1 | Real repository suite passes without skips or errors | Passed: full-final.xml |
+| M2 / T1, M2 / T2, M2 / T3, M2 / T4, M2 / T5, M2 / T6, M2 / T7 | Final combined candidate or later scene/gait change | Painted office, seats, routes, meetings, and Contractor teams | Release Verification 1 | Real browser regressions pass; original PNGs retained | Passed: full-final.xml |
+| M2 / T8 | Later runtime, version, documentation, screenshot, or artwork-input change | Complete suite, CI, named documentation, screenshots, and artwork provenance | Release Verification 1; Release Verification 2; Release Verification 3; Release Verification 7 | Full real-path checks run; named documents agree with the candidate; asset, raw-image, and prompt hashes match their recorded provenance | Full-suite result retained; provenance/manual recheck passed in corrections-03/receipt.json; corrected-commit CI and post-version checks remain pending |
+| M4 / T1, M4 / T2, M4 / T3, M4 / T4, M4 / T5, M4 / T6 | Replay-clock correction or later weather/UI change | HQ cache/API, calendar, replay, accessibility, and live delivery | Release Verification 1 | Real suite and both replay viewport widths pass | Passed: clock-recheck.xml and full-final.xml |
+| M4 / T7 | Final documentation, package, or deployment change | Manual images/links, installed package, and actual service | Release Verification 3; Release Verification 4 | Built manual and installed runtime match their checked inputs | book-verification.json; installed-proof/receipt.json |
+| M1 / T8; M2 / T7; M2 / T8; M4 / T6 | Version-only commit | Combined package and supported CI environments | Release Verification 7 | Combined local suite and every required CI job pass on the version commit | Pending |
+
+For M2 / T8, changed runtime/test inputs invalidate Release Verification 1 and the applicable CI result in Release Verification 2. Changed documentation, screenshots, or provenance inputs invalidate Release Verification 3. The version commit requires Release Verification 7. Preserve earlier observations with their original source identities instead of treating unchanged runtime hashes as new execution.
+
+##### Production Environment Tests
+
+| Release Verification Label | Timing | System | Version | Architecture | Deployment Path | Method | Expected Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Release Verification 4 | pre-change | Actual Debian 13 user services | 0.3.0 package with 3f1a25b runtime | x86_64 | Existing user installation | Inspect actual processes, installed/served bytes, real HTTP/WebSocket, forecast, and Chromium | HQ/Collector active; package identity, configuration retention, forecast, and live delivery agree | installed-proof/receipt.json |
+| Release Verification 10 | post-release | Clean Ubuntu CI runner or owner-selected equivalent host | Released 0.4.0 | x86_64 | Fresh user's documented install.sh path | Run released install.sh --hq --no-start --ref 0.4.0, then both CLI version commands; retain logs and tag identity | Released install succeeds and both commands report 0.4.0 | Pending actual tag installation |
+| Release Verification 11 | post-release | Actual Debian 13 user services | Released 0.4.0 | x86_64 | Existing user installation | Back up package/config/unit state, install the verified released wheel, restart, and inspect real processes/API/WebSocket/browser | Released bytes served; settings, data, Branch and colleague identities preserved | Pending released-service receipt |
+
+The clean installation is required. Observe tag-triggered CI using the actual released commit and immutable tag; if its install method does not exercise the documented tag selection, run that documented method on a separate clean equivalent host. Do not report a pre-release local wheel installation as this result.
+
+##### Version Changes
+
+| Field | File | Before | Planned After | Pre-check | Pre-check Label | Post-check | Post-check Label |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| project.version | pyproject.toml | 0.3.0 | 0.4.0 | Read source and installed metadata; confirm tag/release absence | Release Verification 5 | Inspect source, wheel METADATA, both CLI versions, and actual outgoing MET User-Agent | Release Verification 6 |
+
+##### Release Execution
+
+| Step | Action | Authorization | Expected Result | Evidence |
+| --- | --- | --- | --- | --- |
+| 1 | Commit and push tests/browser/test_weather.py, preparation documentation, and curated changelog | Separate Commit and Push scopes | Exact reviewed paths land on origin/master; unrelated prototype notes excluded | Pending |
+| 2 | Finalize the CHANGELOG.md heading to 0.4.0 - Office Release, regenerate curated notes, rerun Release Verification 3, run Release Verification 5, then commit and push the changelog, M4 closure, and pre-change evidence | Separate Commit and Push scopes | No Unreleased marker in the release section; notes match; completed work and pre-change evidence land before version mutation | Pending |
+| 3 | Commit and push only pyproject.toml at 0.4.0 | Separate Commit and Push scopes | Version-only commit on origin/master | Pending |
+| 4 | Commit and push readiness evidence after post-change checks | Separate Commit and Push scopes | Immutable release-candidate ID recorded | Pending |
+| 5 | Create annotated refs/tags/0.4.0 at the recorded candidate | Tag create scope after exact preview and preflight | Numeric annotated tag resolves to the authorized candidate | Pending |
+| 6 | Push only refs/tags/0.4.0 to origin | Tag push scope after preflight | Remote tag object and peeled target match local accepted objects | Pending |
+| 7 | Create GitHub release 0.4.0 with work/release-notes-0.4.0.md | Release scope after exact preview and preflight | Published, non-prerelease object uses the verified tag and curated notes | Pending |
+| 8 | Install the verified released package on the actual local service | Explicit installation authority for the released target | Real service passes Release Verification 11 | Pending |
+| 9 | Commit and push final canonical closure after post-release checks | Separate Commit and Push scopes | Committed canonical bytes match checked closure; tag remains unchanged | Pending |
+
+Release from master directly; no merge or branch deletion is needed. Remote tracker is none, so no issue or milestone mutation applies. Each release-object action is followed by its required canonical checkpoint commit/push before a dependent action. Resolve every target explicitly; later checkpoints never change the selected candidate. Opening a future line remains an owner decision; retain this file and the unassigned Backlog until then.
+
+##### Release Verification Plan
+
+| Label | Layer | Timing | Method | Environment | Expected Result | Evidence Target |
+| --- | --- | --- | --- | --- | --- | --- |
+| Release Verification 1 | Integrated | pre-change | Run the complete real suite with browser required and a fresh temporary directory outside Git; verify source digests unchanged | Debian 13, Python 3.13, Chromium | 426 collected cases pass, zero skips/errors/failures | full-final.json, full-final.xml |
+| Release Verification 2 | CI | pre-change | Read jobs for the exact landed replay correction | GitHub Python 3.12/3.13, Chromium, installation | All required test jobs pass | Exact commit/run URL and job observations |
+| Release Verification 3 | Documentation | pre-change | Recheck M2 / T8: read architecture.md, using.md, design/artwork.md, and the current CHANGELOG.md against shipped behavior; compare office-modern-assets.json asset and prompt hashes plus its raw office image; build the clean manual with mdBook 0.4.40 and open its images, setup link, and README reference in Chromium | Candidate documents, recorded artwork provenance, CI-version manual, and browser | Named documents match the candidate; raw/runtime/prompt hashes match recorded provenance; eight captured images match; no broken setup link or HTTP/page error | Provenance receipt, manual build log, and browser receipt |
+| Release Verification 4 | Production | pre-change | Execute the production test above; inspect actual installed and served source identity | Actual user services and provider | Runtime, Collector reachability, live frames, forecast validity, and configuration retention pass | installed-proof/receipt.json |
+| Release Verification 5 | Version and release text | pre-change | Before Release Execution 3, inspect source/installed versions and remote tag/release inventory; require the exact finalized CHANGELOG.md heading 0.4.0 - Office Release and compare curated notes with its section | Source, actual install, origin, GitHub, and finalized release prose | Before value 0.3.0; no conflicting 0.4.0 objects; no Unreleased marker in the section heading; notes match | Baseline, fresh remote observations, and changelog/notes comparison |
+| Release Verification 6 | Version | post-change | Build actual wheel; execute both CLIs and actual weather client through outer HTTP capture | Version-only commit | Source, metadata, CLI, and User-Agent agree on 0.4.0 | Wheel digest and actual command/transport receipts |
+| Release Verification 7 | Integrated | post-change | Repeat combined suite, docs build, M2 / T8 provenance/document checks, and supported CI on the version commit | Python 3.12/3.13 and Chromium | Every required case/job passes with version-consistent package and matching artwork/document provenance | Version commit, JUnit, CI URLs, manual and provenance receipts |
+| Release Verification 8 | Tag identity | post-release | Read local annotated object and remote tag plus peeled commit | Local Git and origin | Tag object and candidate identities match authorized immutable targets | Tag IDs and observed time |
+| Release Verification 9 | Release identity | post-release | Read actual GitHub release fields and tag resolution; read CHANGELOG.md from tag 0.4.0 and compare its finalized section with the published notes | GitHub and actual tagged source | Tag matches; draft=false, prerelease=false; tagged heading is 0.4.0 - Office Release without Unreleased; published notes match | Release URL, tag identity, tagged changelog, and actual field/notes receipt |
+| Release Verification 10 | Clean installation | post-release | Execute the documented released-tag install on a clean equivalent host | Clean production-equivalent user environment | Actual released installer succeeds; both CLI versions are 0.4.0 | Native output, environment, tag and command identities |
+| Release Verification 11 | Production | post-release | Execute the released production test above through actual installed service | Actual user services | Released version serves correctly with retained configuration/data/identities | Released installation and browser receipt |
+| Release Verification 12 | Canonical closure | post-release | Recheck complete milestone rows, real results, release objects, tracker mode, and checked/committed canonical bytes | Released candidate and later closure commit | Truthful closure; Town map still last and unassigned; next-line decision recorded | Register check, release IDs, closure commit and byte comparison |
+
+##### Release Verification Results
+
+| Label | Observed At | Environment | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| Release Verification 1 | 2026-10-28T07:55:27.132679+00:00 | Debian 13, Python 3.13, Chromium | Pass | work/release-040-prep-20261028/full-final.xml and full-final.json: 426 passed, zero failures/errors/skips; 391 tracked runtime/test files unchanged during execution; original failures retained separately |
+| Release Verification 2 | 2026-10-28 | Current origin/master 3f1a25b | Fail | work/release-040-prep-20261028/ci-observation.json; https://github.com/jeonghanlee/agentville/actions/runs/40648350368 ; Python matrix/install pass, browser has 95 passes and 2 replay-date failures; corrected commit CI not run |
+| Release Verification 3 | 2026-10-28T08:40:22.358011+00:00 | mdBook 0.4.40, Chromium 156, actual asset/raw/prompt files and named documents | Pass | work/release-040-prep-20261028/corrections-03/receipt.json; manual-build.log and review-build.log. Three asset and three prompt hashes match provenance; raw/runtime office bytes match; named documents were rechecked against shipped behavior; eight manual images match captures; setup and M5 links work without page/HTTP errors. Original evidence remains retained. |
+| Release Verification 4 | 2026-10-28T07:48:15.231849+00:00 | Actual user HQ/Collector, Chromium, MET Norway | Pass | work/release-040-prep-20261028/installed-proof/receipt.json; 76 package and 48 served files equal the verified wheel; settings/unit preserved |
+| Release Verification 5 | 2026-10-28T07:52:25.757711+00:00 | Source, actual package, origin, GitHub, and draft prose | Pending | work/release-040-prep-20261028/remote-version.json retains the passing 0.3.0 version and remote-object observations. The draft CHANGELOG.md still correctly says Unreleased. Finalize its heading and refresh the version/remote checks at Release Execution 2 before recording Pass. |
+| Release Verification 6 | Not run | Version-only candidate | Pending | No version mutation authorized or performed |
+| Release Verification 7 | Not run | Version-only candidate and supported CI | Pending | Requires accepted plan and version commit |
+| Release Verification 8 | Not run | Actual released tag | Pending | No tag created |
+| Release Verification 9 | Not run | Actual GitHub release | Pending | No release created |
+| Release Verification 10 | Not run | Clean equivalent host | Pending | Requires actual released tag |
+| Release Verification 11 | Not run | Actual local released service | Pending | Current installed package remains 0.3.0 |
+| Release Verification 12 | Not run | Final closure candidate | Pending | G2 Open; M4 correction and CI pending; no future release assigned |
+
+##### Closure Evidence
+
+- Preparation only. No version mutation, commit, push, tag, release publication, or future-line creation is authorized by this draft.
+- Existing failed evidence is retained separately from corrected results. Local passing checks do not establish fresh remote CI success or post-release acceptance.
+- On 2026-10-28 the owner authorized both review corrections: connect M2 / T8 to final verification and require changelog finalization before the version change with a tagged-source check after release. These corrections leave the overall release plan draft and do not close G2 or authorize publication.
+
+#### G2 - Release Plan Acceptance
+
+Origin: 0.4.0 / G2
+GitHub Issue: none
+Status: Open
+
+##### Summary
+
+The owner accepts the M5 draft and explicitly authorizes its implementation. Git and GitHub publication actions retain their separate scopes.
+
+##### Completion Criteria
+
+- Record acceptance and implementation authority for the concrete M5 plan, including clean released installation and the unassigned next-line state.
+
+##### Verification Results
+
+| Observed At | Result | Evidence |
+| --- | --- | --- |
+| 2026-10-28 | Pending | M5 draft prepared under the instruction to proceed with 0.4.0 closing preparation; final release plan not yet accepted |
+
+##### Closure Evidence
+
+- none
+
 
 ## Backlog
 

@@ -6,7 +6,11 @@ This document lists the user-visible changes of each AgentVille release.
 
 **Out of scope:** internal refactoring and test-only changes.
 
-## 0.4.0 - Unreleased
+## 0.4.0 - Office Release - Unreleased
+
+### HQ
+
+- A distinct administrator token permits closing Branches and Projects without stopping their agents or deleting their history. A newly accepted on-duty report or snapshot reopens the record, including idle colleagues; heartbeat-only polls and duplicate reports leave it closed. Live state, replay, and notifications include lifecycle transitions.
 
 ### Web UI
 
@@ -14,6 +18,7 @@ This document lists the user-visible changes of each AgentVille release.
 - One enlarged office contains 20 desks in four Project areas of 4, 4, 4, and 8 places, two six-chair meeting rooms, and 28 Fika places at two tables, two sofas, and three high tables. Project navigation pages by four. Colleagues take their Project's desks first, then vacancies shared with other Projects and Common Office; Fika colleagues sit before joining a waiting line. The infirmary is removed: colleagues in error stay at their desks.
 - Same-Project colleagues meet after 60 seconds of observed concurrent work, with up to two meetings of different Projects per Branch. Participants retain identity, selection, and held desks; meetings follow immediate exits or a 30-second grace period, survive reconnects, and are excluded from replay.
 - Walking, furniture occlusion, seated poses, gestures, lighting, and decoration follow the office artwork. Colleagues seated with their backs to the viewer rest their feet under the table, and their Contractors stand on the free side of the chair. The full-seat and meeting demonstrations expose all 60 seat ids.
+- Walking colleagues and Contractors alternate their legs with distance travelled, using the original painted figures. Hidden views pause movement; reduced motion places figures directly at their destination.
 - Contractor teams: a colleague that has had Contractors for 10 seconds works with them at a free meeting-room table, otherwise at a free Fika table or sofa, with its desk reserved; they walk there together, and Contractors sit at Contractor size in hard hats. A meeting keeps its room when a team forms and a team keeps its room when a meeting could start. Meeting members bring their Contractors to free chairs. Contractors without a chair show as "+N". The team ends 10 seconds after its last Contractor, or at once on waiting, error, limit, or going off duty. Replay shows teams without walking, and the demo shows one fixed team.
 - Contractors standing beside a desk keep clear of other colleagues and of each other's tags, using nearby floor spots when the chair has no free side.
 - Colleagues on the rear sofa are no longer covered by the coffee table.
