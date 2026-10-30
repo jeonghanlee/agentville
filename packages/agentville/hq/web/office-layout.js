@@ -53,11 +53,8 @@ export const WALK_SURFACES = Object.entries(GEOMETRY.tabletops).map(([name, poly
   const drop = GEOMETRY.table_floor_drop[kind], [a,b,c,d] = polygon;
   return { footprint: name + "-table", polygon: [a,b,c,[c[0],c[1]+drop],[d[0],d[1]+drop],[a[0],a[1]+drop]] };
 }).concat([
-  { footprint: "north-meeting-west", polygon: [[974,185],[1110,106],[1114,213],[984,293],[974,293]] },
-  { footprint: "north-meeting-back", polygon: [[1106,106],[1326,231],[1326,312],[1319,318],[1106,201]] },
-  { footprint: "meeting-separator", polygon: [[1177,336],[1337,228],[1353,239],[1348,324],[1197,434],[1177,434]] },
-  { footprint: "east-meeting-back", polygon: [[1340,232],[1519,333],[1519,435],[1510,441],[1340,337]] },
-  { footprint: "meeting-kitchen", polygon: [[1033,387],[1046,381],[1386,568],[1386,665],[1373,673],[1033,485]] },
+  ...GEOMETRY.surfaces.filter((surface) => surface.name === "north-meeting-west" || surface.name === "meeting-separator")
+    .map((surface) => ({ footprint: surface.name, polygon: surface.polygon })),
   { footprint: "work-fika-divider", polygon: [[636,503],[650,496],[749,552],[749,599],[736,607],[636,550]] },
   { footprint: "kitchen", polygon: [[1038,448],[1061,430],[1424,633],[1424,685],[1401,703],[1038,495]] },
   { footprint: "fridge", polygon: [[1382,614],[1415,589],[1451,612],[1465,736],[1418,768],[1382,745]] },
@@ -66,17 +63,14 @@ export const WALK_SURFACES = Object.entries(GEOMETRY.tabletops).map(([name, poly
 export const WINDOWS = [
   "54,268 242,160 242,206 54,314", "342,104 437,50 437,96 342,151",
   "485,65 583,119 583,157 485,103", "686,118 801,52 801,100 686,166",
-  "842,64 938,117 938,153 842,102", "994,100 1072,55 1072,99 994,145",
-  "1120,60 1305,163 1305,202 1120,100", "1366,271 1479,333 1479,377 1366,315",
+  "842,64 938,117 938,153 842,102", "1118,65 1480,273 1480,348 1338,266 1338,213 1324,205 1282,234 1118,139",
 ];
 export const LAMPS = [[181,247,28],[193,300,28],[249,337,28],[425,112,28],[480,139,28],
   [436,165,28],[493,196,28],[791,107,28],[850,138,28],[800,161,28],[855,196,28],
   [557,307,28],[619,342,28],[684,378,28],[750,417,28],[664,327,28],[727,364,28],[794,401,28],
-  [1084,183,35],[1284,330,35],[315,493,35]];
+  [315,493,35]];
 export const FRAMES = [
   { name: "window-west", quad: [[299,149],[320,137],[320,172],[299,185]], depth: 1 },
-  { name: "meeting-north", quad: [[1021,188],[1045,174],[1045,205],[1021,219]], depth: 1 },
-  { name: "meeting-east", quad: [[1221,350],[1242,337],[1242,367],[1221,381]], depth: 1 },
   { name: "lounge", quad: [[249,482],[283,463],[283,501],[249,521]], depth: 1 },
 ];
 

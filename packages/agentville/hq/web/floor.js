@@ -5,6 +5,7 @@ export { FLOOR, FOOTPRINTS, NODES, LINKS };
 export const FLOOR_ASPECT = ARTWORK.height / ARTWORK.width;
 export const FOOT = { half: 1.35, back: .7, front: .15 };
 export const COFFEE_SPOT = NODES[COFFEE_NODE];
+const GEOMETRY_EPSILON = 1e-10;
 
 export function distance(a, b) {
   return Math.hypot(b[0]-a[0], (b[1]-a[1]) * FLOOR_ASPECT);
@@ -19,7 +20,10 @@ function inside(point, polygon) {
   return hit;
 }
 function crosses(a, b, c, d) {
-  const side = (p, q, r) => Math.sign((q[0]-p[0]) * (r[1]-p[1]) - (q[1]-p[1]) * (r[0]-p[0]));
+  const side = (p, q, r) => {
+    const value = (q[0]-p[0]) * (r[1]-p[1]) - (q[1]-p[1]) * (r[0]-p[0]);
+    return Math.abs(value) <= GEOMETRY_EPSILON ? 0 : Math.sign(value);
+  };
   return side(a,b,c) !== side(a,b,d) && side(c,d,a) !== side(c,d,b);
 }
 function bounds(polygon) {
@@ -28,7 +32,8 @@ function bounds(polygon) {
 }
 function overlaps(shape, area) {
   const [x0,y0,x1,y1] = bounds(shape), [u0,v0,u1,v1] = area.bounds;
-  if (x1 < u0 || u1 < x0 || y1 < v0 || v1 < y0) return false;
+  if (x1 + GEOMETRY_EPSILON < u0 || u1 + GEOMETRY_EPSILON < x0
+    || y1 + GEOMETRY_EPSILON < v0 || v1 + GEOMETRY_EPSILON < y0) return false;
   const other = area.polygon;
   for (let i = 0; i < shape.length; i++) for (let j = 0; j < other.length; j++)
     if (crosses(shape[i], shape[(i+1) % shape.length], other[j], other[(j+1) % other.length])) return true;

@@ -1,0 +1,71 @@
+{
+  "source": "packages/agentville/hq/web/office-meeting-av.png",
+  "source_sha256": "0b646f81b1b3707a9d595ba8d3a5f346f6de1aab7d356d5e233302b94bf26fc1",
+  "dimensions": [
+    1536,
+    1024
+  ],
+  "display_parts": [
+    {
+      "id": "av-upper-controller",
+      "bounds": [
+        1133,
+        229,
+        23,
+        19
+      ]
+    },
+    {
+      "id": "av-lower-controller",
+      "bounds": [
+        1325,
+        364,
+        23,
+        19
+      ]
+    },
+    {
+      "id": "av-upper-camera",
+      "bounds": [
+        1026,
+        103,
+        43,
+        35
+      ]
+    },
+    {
+      "id": "av-lower-camera",
+      "bounds": [
+        1237,
+        249,
+        48,
+        35
+      ]
+    }
+  ],
+  "controller_centers": [
+    [
+      1144,
+      238
+    ],
+    [
+      1336,
+      373
+    ]
+  ],
+  "controller_width_limit_pixels": 20,
+  "camera_centers": [
+    [
+      1046,
+      120
+    ],
+    [
+      1260,
+      265
+    ]
+  ],
+  "reference_pages": [
+    "https://neat.no/pad-2/",
+    "https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0068512"
+  ]
+}

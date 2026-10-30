@@ -2,7 +2,7 @@ import { FOOTPRINTS } from "./floor.js";
 import { mirroredFacing } from "./seats.js";
 
 import { SURFACES, WALK_SURFACES } from "./office-layout.js";
-import { ARTWORK, ACTOR_WIDTH, ACTOR_VIEW, floorDepth, actorPixels, pointPixels } from "./layout.js";
+import { ARTWORK, ARTWORK_PATCHES, ACTOR_WIDTH, ACTOR_VIEW, floorDepth, actorPixels, pointPixels, artworkPatch, artworkImages, displayArtwork } from "./layout.js";
 const NS = "http://www.w3.org/2000/svg";
 
 // Furniture and actors share floor depth; foreground pixels match the source artwork.
@@ -68,11 +68,20 @@ export function updateWalkerOcclusion(node, x, y) {
   const id = "walking-foreground-" + node.querySelector(":scope > .character").dataset.occlusionId;
   layer.innerHTML = '<defs><clipPath id="' + id + '">'
     + shapes.map(({ polygon }) => '<polygon points="' + local(polygon) + '"/>').join("")
-    + '</clipPath></defs><image href="' + ARTWORK.file + '" x="' + (-origin[0]/pixels) + '" y="' + (-origin[1]/pixels)
-    + '" width="' + ARTWORK.width/pixels + '" height="' + ARTWORK.height/pixels + '" clip-path="url(#' + id + ')"/>';
+    + '</clipPath></defs><g clip-path="url(#' + id + ')"><g transform="translate(' + (-origin[0]/pixels) + ' ' + (-origin[1]/pixels)
+    + ') scale(' + 1/pixels + ')">' + artworkImages(id, shapes.map((shape) => shape.polygon)) + '</g></g>';
 }
 
 export function mountFurniture(world) {
+  for (const edit of ARTWORK_PATCHES) {
+    const patch = document.createElementNS(NS, "svg");
+    patch.setAttribute("viewBox", `0 0 ${ARTWORK.width} ${ARTWORK.height}`);
+    patch.setAttribute("class", "artwork-patch");
+    patch.setAttribute("aria-hidden", "true");
+    patch.style.zIndex = "0";
+    patch.innerHTML = artworkPatch("base-" + edit.id, [edit]);
+    world.append(patch);
+  }
   for (const { name, depth, shapes } of SURFACES) {
     const layer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const id = "furniture-" + name;
@@ -83,8 +92,18 @@ export function mountFurniture(world) {
     layer.style.zIndex = depth;
     layer.innerHTML = '<defs><clipPath id="' + id + '">'
       + shapes.map((points) => '<polygon points="' + points + '"/>').join("")
-      + '</clipPath></defs><image href="' + ARTWORK.file + '" width="' + ARTWORK.width + '" height="' + ARTWORK.height + '" clip-path="url(#' + id + ')"/>';
+      + '</clipPath></defs><g clip-path="url(#' + id + ')">' + artworkImages(id, shapes, false) + '</g>';
     world.append(layer);
+    // Display updates leave the static source-image layer and its raster sampling intact.
+    const displays = document.createElementNS(NS, "svg"), displayId = id + "-displays";
+    displays.setAttribute("viewBox", `0 0 ${ARTWORK.width} ${ARTWORK.height}`);
+    displays.setAttribute("class", "artwork-patch display-front");
+    displays.setAttribute("aria-hidden", "true");
+    displays.style.zIndex = String(depth);
+    displays.innerHTML = '<defs><clipPath id="' + displayId + '">'
+      + shapes.map((points) => '<polygon points="' + points + '"/>').join("")
+      + '</clipPath></defs><g clip-path="url(#' + displayId + ')">' + displayArtwork(displayId, shapes) + '</g>';
+    world.append(displays);
   }
   const outline = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   outline.setAttribute("viewBox",`0 0 ${ARTWORK.width} ${ARTWORK.height}`);

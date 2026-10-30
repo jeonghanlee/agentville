@@ -1,0 +1,112 @@
+{
+  "tool": "OpenAI built-in image_gen",
+  "intent": "precise-object-edit",
+  "inputs": [
+    {
+      "role": "edit target and furniture registration reference",
+      "path": "packages/agentville/hq/web/office-meeting-open.png",
+      "sha256": "58c4b4a739de9470a1e9b9200ea31ce883128ad949e58de0978f6b6c936cea26"
+    }
+  ],
+  "edits": [
+    {
+      "prompt": "docs/design/meeting-divider.prompt.txt",
+      "prompt_sha256": "f0d7c8c8f407ece54246fd826c58d05b71f9810d0b37252d4c0b5ba4b9b13a74",
+      "output_sha256": "bafab1f9320af853eb9c17a03174e182a4b16966bb0c8d0da113d5fdbddbba93"
+    },
+    {
+      "prompt": "docs/design/meeting-divider-02.prompt.txt",
+      "prompt_sha256": "b4a66f00f83251ce51fbcd8783322b159e12d108c37dcf9bcfb2afa9bdac6d0c",
+      "target_sha256": "bafab1f9320af853eb9c17a03174e182a4b16966bb0c8d0da113d5fdbddbba93",
+      "furniture_reference_sha256": "58c4b4a739de9470a1e9b9200ea31ce883128ad949e58de0978f6b6c936cea26",
+      "output_sha256": "95b65799ccec00e9f555e689810973d47e7e354104f4735c7e80cc601e370b17"
+    }
+  ],
+  "output": {
+    "path": "packages/agentville/hq/web/office-meeting-divider.png",
+    "sha256": "95b65799ccec00e9f555e689810973d47e7e354104f4735c7e80cc601e370b17"
+  },
+  "display_polygon": [
+    [
+      1164,
+      311
+    ],
+    [
+      1325,
+      205
+    ],
+    [
+      1338,
+      213
+    ],
+    [
+      1338,
+      288
+    ],
+    [
+      1237,
+      358
+    ],
+    [
+      1237,
+      390
+    ],
+    [
+      1219,
+      403
+    ],
+    [
+      1220,
+      418
+    ],
+    [
+      1224,
+      422
+    ],
+    [
+      1224,
+      428
+    ],
+    [
+      1213,
+      435
+    ],
+    [
+      1194,
+      435
+    ],
+    [
+      1185,
+      429
+    ],
+    [
+      1185,
+      420
+    ],
+    [
+      1190,
+      414
+    ],
+    [
+      1190,
+      411
+    ],
+    [
+      1172,
+      427
+    ],
+    [
+      1172,
+      395
+    ],
+    [
+      1164,
+      388
+    ]
+  ],
+  "office_seats": 60,
+  "meeting_groups": 2,
+  "chairs_per_group": 6,
+  "presentation_displays": 2,
+  "display_floor_stands": 0
+}

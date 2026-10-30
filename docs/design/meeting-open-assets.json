@@ -1,0 +1,47 @@
+{
+  "tool": "OpenAI built-in image_gen",
+  "intent": "precise-object-edit",
+  "input_composition": "Original office plus the bounded Fika edit through layout.js artworkImages().",
+  "input_sha256": "172b64ba1a472b8ee1a113caa5431e2814c7e0a402ec7827f205335034c01f3d",
+  "prompt": "docs/design/meeting-open.prompt.txt",
+  "prompt_sha256": "31799647bee74af0e014e3244edaa79a5b57b06280ce5a37d72bee3c6ec081ad",
+  "output": {
+    "path": "packages/agentville/hq/web/office-meeting-open.png",
+    "sha256": "58c4b4a739de9470a1e9b9200ea31ce883128ad949e58de0978f6b6c936cea26"
+  },
+  "display_polygon": [
+    [
+      950,
+      60
+    ],
+    [
+      1118,
+      60
+    ],
+    [
+      1536,
+      297
+    ],
+    [
+      1536,
+      488
+    ],
+    [
+      1340,
+      600
+    ],
+    [
+      1030,
+      424
+    ],
+    [
+      950,
+      378
+    ]
+  ],
+  "meeting_groups": 2,
+  "chairs_per_group": 6,
+  "presentation_displays": 2,
+  "drawer_cabinets": 0,
+  "office_seats": 60
+}

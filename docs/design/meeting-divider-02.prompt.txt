@@ -1,0 +1,9 @@
+Use case: precise-object-edit / compositing.
+Image 1 is the EDIT TARGET: the office with the restored meeting divider and wall-mounted lower monitor.
+Image 2 is the AUTHORITATIVE REFERENCE for all existing furniture positions and for recovering the clean floor and the upper meeting chairs behind the current divider. Do not copy its freestanding monitor.
+
+Make one targeted correction: translate ONLY the newly restored divider, together with its wall-mounted monitor, EXACTLY 60 source pixels right and 34 source pixels down. Its southwest floor end is currently near (1122,368); move it to near (1182,402). Its northeast floor junction is currently near (1297,262); move it to near (1357,296), following the perimeter window sill. Keep the divider's size, height, thickness, angle, materials and monitor size unchanged. It must remain between the two meeting groups and leave an open aisle around its southwest end. It must not cover the upper meeting group's front three chairs in the picture. Recover the table, chairs and floor revealed at the old divider location from image 2 at their EXACT image-2 coordinates. Do not translate any other object to accommodate the divider.
+
+Keep all twelve meeting chairs and both meeting tables at their exact IMAGE-2 pixel positions and sizes. Keep the upper-left solid wall and its monitor untouched. The old lower freestanding monitor from image 2 must remain absent, including its pole, floor base and shadow. Exactly two presentation monitors total: one on the upper-left wall, one on the translated divider. No cabinets, no extra furniture, no added decoration.
+
+Preserve the exact 1536 x 1024 framing, detailed original illustrated style, camera, warm colors, alpha and all other office pixels and object positions, including all four southern high stools. No new 3D scene, no style transfer, no people, animals, labels, measurements or text. Output the complete existing office with only the divider position corrected.

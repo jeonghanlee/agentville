@@ -1,0 +1,217 @@
+{
+  "source": "packages/agentville/hq/web/office-meeting-divider.png",
+  "source_sha256": "95b65799ccec00e9f555e689810973d47e7e354104f4735c7e80cc601e370b17",
+  "dimensions": [
+    1536,
+    1024
+  ],
+  "measurement": "Manual source-pixel registration from native Chromium grid inspection of the selected generated image. The mounted black display frame occupies x1226..1290, y257..350.",
+  "restore_source": "office-meeting-open.png",
+  "display_polygon": [
+    [
+      1164,
+      311
+    ],
+    [
+      1325,
+      205
+    ],
+    [
+      1338,
+      213
+    ],
+    [
+      1338,
+      288
+    ],
+    [
+      1237,
+      358
+    ],
+    [
+      1237,
+      390
+    ],
+    [
+      1219,
+      403
+    ],
+    [
+      1220,
+      418
+    ],
+    [
+      1224,
+      422
+    ],
+    [
+      1224,
+      428
+    ],
+    [
+      1213,
+      435
+    ],
+    [
+      1194,
+      435
+    ],
+    [
+      1185,
+      429
+    ],
+    [
+      1185,
+      420
+    ],
+    [
+      1190,
+      414
+    ],
+    [
+      1190,
+      411
+    ],
+    [
+      1172,
+      427
+    ],
+    [
+      1172,
+      395
+    ],
+    [
+      1164,
+      388
+    ]
+  ],
+  "divider_contact": [
+    [
+      1166,
+      386
+    ],
+    [
+      1178,
+      396
+    ],
+    [
+      1336,
+      286
+    ],
+    [
+      1324,
+      277
+    ]
+  ],
+  "divider_face": [
+    [
+      1166,
+      313
+    ],
+    [
+      1324,
+      207
+    ],
+    [
+      1336,
+      214
+    ],
+    [
+      1336,
+      286
+    ],
+    [
+      1178,
+      396
+    ],
+    [
+      1166,
+      386
+    ]
+  ],
+  "divider_depth": 3364,
+  "mounted_display": [
+    [
+      1226,
+      296
+    ],
+    [
+      1290,
+      257
+    ],
+    [
+      1290,
+      315
+    ],
+    [
+      1226,
+      350
+    ]
+  ],
+  "removed_contact": "meeting-east-display",
+  "perimeter_glass": [
+    [
+      1118,
+      65
+    ],
+    [
+      1480,
+      273
+    ],
+    [
+      1480,
+      348
+    ],
+    [
+      1338,
+      266
+    ],
+    [
+      1338,
+      213
+    ],
+    [
+      1324,
+      205
+    ],
+    [
+      1282,
+      234
+    ],
+    [
+      1118,
+      139
+    ]
+  ],
+  "solid_wall_samples": [
+    [
+      1035,
+      155
+    ],
+    [
+      1315,
+      250
+    ]
+  ],
+  "glass_sample": [
+    1300,
+    207
+  ],
+  "depth_reference": {
+    "point": [
+      1251,
+      336.25
+    ],
+    "rule": "Rounded mean floor-contact y in source pixels, multiplied by ten, plus one."
+  },
+  "removed_stand_samples": [
+    [
+      1194,
+      417
+    ],
+    [
+      1215,
+      416
+    ]
+  ]
+}

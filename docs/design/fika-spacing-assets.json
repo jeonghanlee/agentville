@@ -1,0 +1,41 @@
+{
+  "tool": "OpenAI built-in image_gen",
+  "intent": "precise-object-edit",
+  "dimensions": [
+    1536,
+    1024
+  ],
+  "source": {
+    "path": "packages/agentville/hq/web/office-modern.png",
+    "sha256": "329fdfd71eeafdb3369d116609ca23d1feb599fa0b689b59531b8efbc6f5bd04"
+  },
+  "output": {
+    "path": "packages/agentville/hq/web/office-fika-spacing.png",
+    "sha256": "3a4ebe1b002ae14ed18e16ba817c4f615219b689cd193dab9153ee45a69bf005"
+  },
+  "display_bounds": [
+    1034,
+    672,
+    345,
+    184
+  ],
+  "seating": {
+    "tables": 2,
+    "stools_per_table": 2,
+    "stools": 4,
+    "total_office_seats": 60
+  },
+  "edits": [
+    {
+      "prompt": "docs/design/fika-spacing-edit.prompt.txt",
+      "prompt_sha256": "423275b7f87fe502a081781e5df1a4682644855ef044d66a0405454c338a1c10",
+      "output_sha256": "0ec9760ce880c0122c6e1a04b0c125c86b5a815d6b4c958c2a02c40ab7148554"
+    },
+    {
+      "prompt": "docs/design/fika-spacing-edit-02.prompt.txt",
+      "prompt_sha256": "8a4ab6b2ac14f2eab9f8d6fdad41e7effeb5e3d3f86f6400669137d83c7f5df8",
+      "output_sha256": "3a4ebe1b002ae14ed18e16ba817c4f615219b689cd193dab9153ee45a69bf005"
+    }
+  ],
+  "composition": "Original office pixels outside the displayed rectangle; edited pixels inside the rectangle. Foreground and walking masks use the same composite."
+}

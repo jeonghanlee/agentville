@@ -1,0 +1,81 @@
+{
+  "tool": "OpenAI built-in image_gen",
+  "intent": "precise-object-edit",
+  "input": {
+    "path": "Native installed artworkImages() composition",
+    "sha256": "f9cbada5a8740c7d0b0cd3baff076113df77ec290d8d7c26bab812a81202a200",
+    "dimensions": [
+      1536,
+      1024
+    ]
+  },
+  "reference": {
+    "url": "https://cdn.neat.no/v3/content/web3-tests/img/pad-2/webp-q-70/tap-in--2x.webp",
+    "product": "Neat Pad Generation 2",
+    "product_page": "https://neat.no/pad-2/",
+    "zoom_controller_reference": "https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0068512",
+    "sha256": "e657638e2b2e102661c76d6d7a848ed64e4bdbca20e188bb7adee90cceb9fb4d"
+  },
+  "edits": [
+    {
+      "prompt": "docs/design/meeting-av.prompt.txt",
+      "prompt_sha256": "d02adad7549771b71eebec5a06d20a9e2da4b1c24ce465175cf7d6e135a19f93",
+      "output_sha256": "83b2accccac4e70b4c85b697469b5cf81833585ed0028d0bc9a0d3d76c2339b1"
+    },
+    {
+      "prompt": "docs/design/meeting-av-02.prompt.txt",
+      "prompt_sha256": "c13342ef2f0a4e1fcb23d94795729754897235ed807cb64f0ec0db47bd0a06a7",
+      "output_sha256": "80a57603fb375ed9863d2cd2876a4d117ebea8942c6fc780683c52d5070fd1f1"
+    },
+    {
+      "prompt": "docs/design/meeting-av-03.prompt.txt",
+      "prompt_sha256": "2db750d214f8e29c75f80c518a3bb6f11b9264abe1d60ac13b5f97e1e9f2097b",
+      "output_sha256": "0b646f81b1b3707a9d595ba8d3a5f346f6de1aab7d356d5e233302b94bf26fc1"
+    }
+  ],
+  "output": {
+    "path": "packages/agentville/hq/web/office-meeting-av.png",
+    "sha256": "0b646f81b1b3707a9d595ba8d3a5f346f6de1aab7d356d5e233302b94bf26fc1"
+  },
+  "display_parts": [
+    {
+      "id": "av-upper-controller",
+      "bounds": [
+        1133,
+        229,
+        23,
+        19
+      ]
+    },
+    {
+      "id": "av-lower-controller",
+      "bounds": [
+        1325,
+        364,
+        23,
+        19
+      ]
+    },
+    {
+      "id": "av-upper-camera",
+      "bounds": [
+        1026,
+        103,
+        43,
+        35
+      ]
+    },
+    {
+      "id": "av-lower-camera",
+      "bounds": [
+        1237,
+        249,
+        48,
+        35
+      ]
+    }
+  ],
+  "controllers": 2,
+  "camera_microphone_bars": 2,
+  "runtime": "Only the four measured equipment areas are displayed. All other generated pixels are unused."
+}

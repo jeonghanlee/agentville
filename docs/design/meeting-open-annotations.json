@@ -1,0 +1,732 @@
+{
+  "source": "packages/agentville/hq/web/office-meeting-open.png",
+  "source_sha256": "58c4b4a739de9470a1e9b9200ea31ce883128ad949e58de0978f6b6c936cea26",
+  "dimensions": [
+    1536,
+    1024
+  ],
+  "display_polygon": [
+    [
+      950,
+      60
+    ],
+    [
+      1118,
+      60
+    ],
+    [
+      1536,
+      297
+    ],
+    [
+      1536,
+      488
+    ],
+    [
+      1340,
+      600
+    ],
+    [
+      1030,
+      424
+    ],
+    [
+      950,
+      378
+    ]
+  ],
+  "measurement": "Manual source-pixel registration with native coordinate-grid inspection and independent cushion-color component bounds.",
+  "upper_left_wall": [
+    [
+      956,
+      231
+    ],
+    [
+      964,
+      235
+    ],
+    [
+      1113,
+      149
+    ],
+    [
+      1105,
+      144
+    ]
+  ],
+  "upper_left_wall_face": [
+    [
+      956,
+      150
+    ],
+    [
+      1105,
+      65
+    ],
+    [
+      1113,
+      74
+    ],
+    [
+      1113,
+      149
+    ],
+    [
+      964,
+      235
+    ],
+    [
+      956,
+      231
+    ]
+  ],
+  "lower_display_surface": [
+    [
+      1174,
+      365
+    ],
+    [
+      1235,
+      331
+    ],
+    [
+      1235,
+      388
+    ],
+    [
+      1211,
+      402
+    ],
+    [
+      1211,
+      418
+    ],
+    [
+      1220,
+      423
+    ],
+    [
+      1212,
+      431
+    ],
+    [
+      1197,
+      431
+    ],
+    [
+      1189,
+      425
+    ],
+    [
+      1198,
+      419
+    ],
+    [
+      1198,
+      410
+    ],
+    [
+      1174,
+      423
+    ]
+  ],
+  "removed_contacts": [
+    "north-meeting-back",
+    "meeting-separator",
+    "east-meeting-back",
+    "meeting-kitchen",
+    "north-meeting-cabinet",
+    "east-meeting-cabinet",
+    "north-entry-column",
+    "shared-entry-column",
+    "east-front-column"
+  ],
+  "tabletops": {
+    "meeting-north": [
+      [
+        1066,
+        225
+      ],
+      [
+        1108,
+        196
+      ],
+      [
+        1212,
+        257
+      ],
+      [
+        1171,
+        286
+      ]
+    ],
+    "meeting-east": [
+      [
+        1250,
+        354
+      ],
+      [
+        1293,
+        322
+      ],
+      [
+        1400,
+        389
+      ],
+      [
+        1360,
+        420
+      ]
+    ]
+  },
+  "seats": {
+    "meeting-north.0": {
+      "hip": [
+        1078,
+        253
+      ],
+      "ground_y": 287,
+      "support_y": 287,
+      "floor_center": [
+        1075,
+        281
+      ],
+      "floor_radii": [
+        16,
+        11
+      ],
+      "cushion_highlight_bounds": [
+        1062,
+        222,
+        1082,
+        236
+      ]
+    },
+    "meeting-north.1": {
+      "hip": [
+        1112,
+        275
+      ],
+      "ground_y": 309,
+      "support_y": 309,
+      "floor_center": [
+        1109,
+        303
+      ],
+      "floor_radii": [
+        16,
+        11
+      ],
+      "cushion_highlight_bounds": [
+        1096,
+        244,
+        1115,
+        257
+      ]
+    },
+    "meeting-north.2": {
+      "hip": [
+        1146,
+        297
+      ],
+      "ground_y": 331,
+      "support_y": 331,
+      "floor_center": [
+        1143,
+        325
+      ],
+      "floor_radii": [
+        16,
+        11
+      ],
+      "cushion_highlight_bounds": [
+        1130,
+        266,
+        1150,
+        279
+      ]
+    },
+    "meeting-north.3": {
+      "hip": [
+        1134,
+        217
+      ],
+      "ground_y": 251,
+      "support_y": 251,
+      "floor_center": [
+        1131,
+        246
+      ],
+      "floor_radii": [
+        16,
+        9
+      ],
+      "cushion_highlight_bounds": [
+        1122,
+        180,
+        1143,
+        197
+      ]
+    },
+    "meeting-north.4": {
+      "hip": [
+        1167,
+        237
+      ],
+      "ground_y": 271,
+      "support_y": 271,
+      "floor_center": [
+        1164,
+        266
+      ],
+      "floor_radii": [
+        16,
+        9
+      ],
+      "cushion_highlight_bounds": [
+        1153,
+        200,
+        1176,
+        215
+      ]
+    },
+    "meeting-north.5": {
+      "hip": [
+        1202,
+        258
+      ],
+      "ground_y": 292,
+      "support_y": 292,
+      "floor_center": [
+        1199,
+        287
+      ],
+      "floor_radii": [
+        16,
+        9
+      ],
+      "cushion_highlight_bounds": [
+        1188,
+        221,
+        1211,
+        240
+      ]
+    },
+    "meeting-east.0": {
+      "hip": [
+        1267,
+        389
+      ],
+      "ground_y": 423,
+      "support_y": 423,
+      "floor_center": [
+        1263,
+        419
+      ],
+      "floor_radii": [
+        18,
+        12
+      ],
+      "cushion_highlight_bounds": [
+        1247,
+        351,
+        1268,
+        366
+      ]
+    },
+    "meeting-east.1": {
+      "hip": [
+        1302,
+        413
+      ],
+      "ground_y": 447,
+      "support_y": 447,
+      "floor_center": [
+        1298,
+        443
+      ],
+      "floor_radii": [
+        18,
+        12
+      ],
+      "cushion_highlight_bounds": [
+        1282,
+        376,
+        1303,
+        390
+      ]
+    },
+    "meeting-east.2": {
+      "hip": [
+        1338,
+        437
+      ],
+      "ground_y": 471,
+      "support_y": 471,
+      "floor_center": [
+        1334,
+        467
+      ],
+      "floor_radii": [
+        18,
+        12
+      ],
+      "cushion_highlight_bounds": [
+        1318,
+        400,
+        1339,
+        414
+      ]
+    },
+    "meeting-east.3": {
+      "hip": [
+        1321,
+        345
+      ],
+      "ground_y": 379,
+      "support_y": 379,
+      "floor_center": [
+        1318,
+        375
+      ],
+      "floor_radii": [
+        16,
+        10
+      ],
+      "cushion_highlight_bounds": [
+        1309,
+        307,
+        1333,
+        329
+      ]
+    },
+    "meeting-east.4": {
+      "hip": [
+        1354,
+        368
+      ],
+      "ground_y": 402,
+      "support_y": 402,
+      "floor_center": [
+        1351,
+        398
+      ],
+      "floor_radii": [
+        16,
+        10
+      ],
+      "cushion_highlight_bounds": [
+        1341,
+        329,
+        1366,
+        349
+      ]
+    },
+    "meeting-east.5": {
+      "hip": [
+        1388,
+        391
+      ],
+      "ground_y": 425,
+      "support_y": 425,
+      "floor_center": [
+        1385,
+        421
+      ],
+      "floor_radii": [
+        16,
+        10
+      ],
+      "cushion_highlight_bounds": [
+        1375,
+        352,
+        1399,
+        377
+      ]
+    }
+  },
+  "floor_outline": [
+    [
+      42,
+      344
+    ],
+    [
+      457,
+      105
+    ],
+    [
+      598,
+      184
+    ],
+    [
+      637,
+      166
+    ],
+    [
+      672,
+      187
+    ],
+    [
+      820,
+      105
+    ],
+    [
+      954,
+      179
+    ],
+    [
+      978,
+      164
+    ],
+    [
+      1089,
+      102
+    ],
+    [
+      1105,
+      149
+    ],
+    [
+      1496,
+      374
+    ],
+    [
+      1519,
+      444
+    ],
+    [
+      1519,
+      452
+    ],
+    [
+      1337,
+      561
+    ],
+    [
+      1473,
+      641
+    ],
+    [
+      1494,
+      748
+    ],
+    [
+      1252,
+      904
+    ],
+    [
+      1143,
+      842
+    ],
+    [
+      1116,
+      855
+    ],
+    [
+      1075,
+      832
+    ],
+    [
+      886,
+      964
+    ],
+    [
+      766,
+      867
+    ],
+    [
+      741,
+      882
+    ],
+    [
+      585,
+      795
+    ],
+    [
+      542,
+      818
+    ],
+    [
+      501,
+      795
+    ],
+    [
+      444,
+      828
+    ],
+    [
+      151,
+      669
+    ],
+    [
+      151,
+      633
+    ],
+    [
+      101,
+      606
+    ],
+    [
+      101,
+      478
+    ],
+    [
+      89,
+      465
+    ],
+    [
+      89,
+      439
+    ],
+    [
+      136,
+      412
+    ],
+    [
+      40,
+      355
+    ]
+  ],
+  "perimeter_glass": [
+    [
+      1118,
+      65
+    ],
+    [
+      1480,
+      273
+    ],
+    [
+      1480,
+      348
+    ],
+    [
+      1118,
+      139
+    ]
+  ],
+  "solid_wall_sample": [
+    1035,
+    155
+  ],
+  "upper_left_wall_depth": 1491,
+  "display_depth": 4341,
+  "windows": [
+    [
+      [
+        54,
+        268
+      ],
+      [
+        242,
+        160
+      ],
+      [
+        242,
+        206
+      ],
+      [
+        54,
+        314
+      ]
+    ],
+    [
+      [
+        342,
+        104
+      ],
+      [
+        437,
+        50
+      ],
+      [
+        437,
+        96
+      ],
+      [
+        342,
+        151
+      ]
+    ],
+    [
+      [
+        485,
+        65
+      ],
+      [
+        583,
+        119
+      ],
+      [
+        583,
+        157
+      ],
+      [
+        485,
+        103
+      ]
+    ],
+    [
+      [
+        686,
+        118
+      ],
+      [
+        801,
+        52
+      ],
+      [
+        801,
+        100
+      ],
+      [
+        686,
+        166
+      ]
+    ],
+    [
+      [
+        842,
+        64
+      ],
+      [
+        938,
+        117
+      ],
+      [
+        938,
+        153
+      ],
+      [
+        842,
+        102
+      ]
+    ],
+    [
+      [
+        1118,
+        65
+      ],
+      [
+        1480,
+        273
+      ],
+      [
+        1480,
+        348
+      ],
+      [
+        1118,
+        139
+      ]
+    ]
+  ],
+  "painting_frames": [
+    "window-west",
+    "lounge"
+  ],
+  "glass_sample": [
+    1300,
+    207
+  ]
+}

@@ -36,8 +36,11 @@ def roster(hq, counts=DESK_COUNTS, state="waiting"):
 STATE_FRAMES = {}
 
 
-def open_page(driver, url, width=1440, motion="reduce"):
-    browser = driver.chromium.launch(**launch_options())
+def open_page(driver, url, width=1440, motion="reduce", *, launch_args=None):
+    options = launch_options()
+    if launch_args:
+        options["args"] = launch_args
+    browser = driver.chromium.launch(**options)
     page = browser.new_page(viewport={"width": width, "height": 1100}, reduced_motion=motion, locale="en-US")
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -81,8 +84,9 @@ def test_all_sixty_seats_match_independent_image_measurements(tmp_path, width):
                 if seen["room"].startswith("meeting"):
                     assert not seen["working"] and not seen["hands"]
             assert page.locator(".flower").count() == 0
-            assert page.locator(".painting").count() == 4
-            assert len(set(page.locator(".painting").evaluate_all("nodes=>nodes.map(n=>n.dataset.painting)"))) == 4
+            expected_frames = ANNOTATIONS["painting_frames"]
+            assert sorted(page.locator(".painting").evaluate_all("nodes=>nodes.map(n=>n.dataset.frame)")) == sorted(expected_frames)
+            assert len(set(page.locator(".painting").evaluate_all("nodes=>nodes.map(n=>n.dataset.painting)"))) == len(expected_frames)
             for period in ["morning", "day", "evening", "night"]:
                 page.locator("#setting-daylight").select_option(period, force=True)
                 playwright.expect(page.locator("#scene")).to_have_attribute("data-daylight", period)

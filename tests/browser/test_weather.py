@@ -1,6 +1,8 @@
 """Actual HQ/client/browser integration across weather, seasons, and replay."""
 
 from datetime import UTC, datetime
+import json
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +13,7 @@ from tests.lifecycle_support import HQ, activity
 from tests.weather_support import MetServer
 
 playwright = playwright_sync()
+ANNOTATIONS = json.loads((Path(__file__).parent / "fixtures/modern-image-annotations.json").read_text())
 
 
 def open_weather(driver, hq, met, width=1440, motion="reduce"):
@@ -55,7 +58,15 @@ def test_real_forecast_reaches_window_effects(tmp_path, monkeypatch, symbol, con
             assert page.evaluate("weatherAnnouncements") == 0
             assert page.locator(".weather-layer").evaluate("n=>getComputedStyle(n).pointerEvents") == "none"
             assert page.locator('.weather-layer > g').get_attribute("clip-path") == "url(#weather-window-glass)"
-            assert page.locator(".weather-layer clipPath polygon").count() == 8
+            expected_windows = [" ".join(",".join(map(str,point)) for point in polygon) for polygon in ANNOTATIONS["windows"]]
+            assert page.locator(".weather-layer clipPath polygon").evaluate_all(
+                "nodes=>nodes.map(n=>n.getAttribute('points'))") == expected_windows
+            glass = page.evaluate("""() => {
+              const polygons=[...document.querySelectorAll('.weather-layer clipPath polygon')];
+              const contains=point=>polygons.some(node=>node.isPointInFill(new DOMPoint(...point)));
+              return {solid:contains([1035,155]),divider:contains([1315,250]),glass:contains([1300,207])};
+            }""")
+            assert glass == {"solid":False,"divider":False,"glass":True}
             if condition in {"rain", "snow", "sleet"}:
                 selector = ".weather-snow" if condition == "snow" else ".weather-rain"
                 assert page.locator(selector).evaluate("n=>getComputedStyle(n).animationName") == "none"

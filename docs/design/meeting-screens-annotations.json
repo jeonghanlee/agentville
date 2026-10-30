@@ -1,0 +1,45 @@
+{
+  "measurement": "Manual source-pixel registration inside the existing dark monitor frames. Upper frame dark-pixel bounds: x1010..1074, y113..202. Lower frame: x1226..1290, y257..350.",
+  "screens": {
+    "meeting": [
+      [
+        1016,
+        153
+      ],
+      [
+        1068,
+        123
+      ],
+      [
+        1068,
+        161
+      ],
+      [
+        1016,
+        191
+      ]
+    ],
+    "meeting-east": [
+      [
+        1232,
+        299
+      ],
+      [
+        1284,
+        268
+      ],
+      [
+        1284,
+        310
+      ],
+      [
+        1232,
+        341
+      ]
+    ]
+  },
+  "sources": {
+    "office-meeting-open.png": "58c4b4a739de9470a1e9b9200ea31ce883128ad949e58de0978f6b6c936cea26",
+    "office-meeting-divider.png": "95b65799ccec00e9f555e689810973d47e7e354104f4735c7e80cc601e370b17"
+  }
+}

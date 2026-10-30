@@ -12,6 +12,8 @@ import { updateWorkGestures, WORK_MOTION_INTERVAL } from "./motion.js";
 import { createOfficeCats } from "./cats.js";
 import { mountFurniture } from "./furniture.js";
 import { mountDecor } from "./decor.js";
+import { mountPresentations } from "./presentations.js";
+import { mountDesktops } from "./desktops.js";
 import { createDaylight, branchZone } from "./daylight.js";
 import { createWeather } from "./weather.js";
 import { SEATED_WIDTH, screenOffSprite } from "./sprites.js";
@@ -63,6 +65,8 @@ let daylight = null;
 let weather = null;
 let furniture = null;
 let decor = null;
+let presentations = null;
+let deskDisplays = null;
 let coffee = null;
 let lounge = null;
 const meetingLounges = new Map();
@@ -561,7 +565,7 @@ function renderCharacters(ctx) {
     .filter((row) => (members.get(row.key)?.room || (members.has(row.key) ? "meeting" : "")) === room)
     .map((row) => [row.key, row.agent.agent_id]));
   const seatedContractors = contractorSeats(members, teamAt, shown);
-  const used = new Set(), hired = new Set(), dark = new Set(), helpers = [];
+  const used = new Set(), hired = new Set(), dark = new Set(), darkDesks = new Set(), helpers = [];
   $("characters").querySelectorAll(".room-overflow").forEach((n) => n.remove());
   for (const [room, people] of groups) {
     const layout = ROOM_LAYOUT[room], seats = roomSeats(room);
@@ -633,6 +637,7 @@ function renderCharacters(ctx) {
         : counter ? (visit.phase === "waiting" ? "coffee-wait" : "coffee-walk") : row.detail;
       // Limited Employees switch off the visible desk screen, or show a small dark monitor when none is visible.
       const glass = row.state === "limited" && !visit && !spot ? place.screen : null;
+      if (row.state === "limited" && !visit && !spot && place?.kind === "desk") darkDesks.add(place.sourceId);
       if (glass) {
         dark.add(row.key);
         let screen = screensOff.get(row.key);
@@ -701,6 +706,7 @@ function renderCharacters(ctx) {
   for (const [key,node] of screensOff) {
     if (!dark.has(key)) { node.remove(); screensOff.delete(key); }
   }
+  deskDisplays?.update(darkDesks);
   updateWorkGestures($("characters"));
   shownBranch = branchId;
 }
@@ -1017,6 +1023,7 @@ function render() {
     ["folder", projects.size, "summary.projects"], ["branches", current.branches.length, "summary.branches"]].map(([symbol,n,label]) =>
     el("span", { class: "summary-item" }, icon(symbol), el("strong", {}, n), t(label))));
   decor?.update(branchId);
+  presentations?.update(branchId);
   renderFilters(ctx); renderRooms(ctx); renderCharacters(ctx); renderTeam(ctx);
   $("scene-empty").hidden = ctx.present.length > 0;
   $("scene").classList.toggle("is-empty", ctx.present.length === 0);
@@ -1428,6 +1435,8 @@ cats = createOfficeCats($("characters"));
 applyLanguage();
 decor = mountDecor($("world"));
 furniture = mountFurniture($("world"));
+presentations = mountPresentations($("world"), { motionAllowed, paused: () => Boolean(replay?.active) });
+deskDisplays = mountDesktops($("world"), { motionAllowed, paused: () => Boolean(replay?.active) });
 // Tags keep their pixel size while the floor scales with the window and zoom, so separate them again.
 if (typeof ResizeObserver === "function") new ResizeObserver(() => separateContractorTags()).observe($("world"));
 furniture.update();
@@ -1441,9 +1450,12 @@ setInterval(() => {
   updateMeetings();
   if (JSON.stringify([branchMeetings, branchTeams]) !== previous) render();
 }, 1000);
-setInterval(updateClock, 1000);
+setInterval(() => { updateClock(); presentations?.tick(); deskDisplays?.tick(); }, 1000);
+document.addEventListener("visibilitychange", () => { presentations?.pause(); deskDisplays?.pause(); });
 setInterval(() => { updateWorkGestures($("characters")); furniture.update(); }, WORK_MOTION_INTERVAL);
 window.addEventListener("pagehide", () => {
+  presentations?.pause();
+  deskDisplays?.pause();
   clearTimeout(reconnectTimer);
   const socket = activeSocket;
   activeSocket = null;

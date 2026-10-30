@@ -1,5 +1,6 @@
 """Sixty-seat audit (M2 post-closure, D13): routes from every seat, simultaneous occupancy, and depth layers."""
 
+import base64
 import json
 from pathlib import Path
 
@@ -15,9 +16,6 @@ playwright = playwright_sync()
 ANNOTATIONS = Path(__file__).parent / "fixtures" / "modern-image-annotations.json"
 # Share of the smaller silhouette two seated figures may cover of each other.
 OVERLAP_TOLERANCE = .1
-# Artwork-side: the stools high-west.1 and high-east.0 of neighbouring high tables stand one behind the other in the
-# picture, so their sitters cover each other (open item in the M2 record); no code placement can separate them.
-KNOWN = {("fika.25", "fika.26")}
 # Rendered figures without labels, signals, cats, artwork or furniture layers, so screenshots hold one silhouette.
 HIDE = """() => { const style = document.createElement('style');
   style.textContent = '#world > :not(#characters){visibility:hidden!important}'
@@ -65,11 +63,12 @@ def full_tables(hq):
 
 
 @pytest.mark.parametrize("scenario", ["seats", "teams"])
-def test_simultaneous_seats_keep_figures_apart(tmp_path, scenario):
+@pytest.mark.parametrize("width", [1440, 720])
+def test_simultaneous_seats_keep_figures_apart(tmp_path, scenario, width):
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
         if scenario == "teams":
             full_tables(hq)
-        browser, page, errors = open_page(driver, hq.url + ("/?demo=seats" if scenario == "seats" else ""))
+        browser, page, errors = open_page(driver, hq.url + ("/?demo=seats" if scenario == "seats" else ""), width)
         if scenario == "seats":
             playwright.expect(page.locator("#characters .agent.seated")).to_have_count(60)
         else:
@@ -81,8 +80,207 @@ def test_simultaneous_seats_keep_figures_apart(tmp_path, scenario):
         assert len(figures) == (60 if scenario == "seats" else 34)
         assert all(figure["pixels"] for figure in figures)
         found = overlaps(figures)
-        assert not [item for item in found if item[0] > OVERLAP_TOLERANCE and item[1:] not in KNOWN], found[:10]
+        assert not [item for item in found if item[0] > OVERLAP_TOLERANCE], found[:10]
         assert not errors
+        browser.close()
+
+
+@pytest.mark.parametrize("width", [1440, 720])
+@pytest.mark.parametrize("edit", ["fika", "meeting", "divider"])
+def test_artwork_edits_keep_pixels_outside_approved_regions(tmp_path, width, edit):
+    inputs = {"fika":"fika-spacing-annotations.json","meeting":"meeting-open-annotations.json",
+              "divider":"meeting-divider-annotations.json"}
+    polygons = []
+    for name in inputs.values():
+        annotation = json.loads((Path(__file__).parents[2] / "docs/design" / name).read_text())
+        polygon = annotation.get("display_polygon")
+        if polygon is None:
+            x, y, width_source, height_source = annotation["display_bounds"]
+            polygon = [[x,y],[x+width_source,y],[x+width_source,y+height_source],[x,y+height_source]]
+        polygons.append(polygon)
+    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
+        browser, page, errors = open_page(driver, hq.url + "/?demo=seats", width)
+        playwright.expect(page.locator("#characters .agent.seated")).to_have_count(60)
+        page.locator("#setting-daylight").select_option("day", force=True)
+        page.add_style_tag(content="#characters { visibility:hidden!important }")
+        world = page.locator("#world")
+        edited = world.screenshot(animations="disabled")
+        playwright.expect(page.locator(f'.artwork-patch [data-artwork-edit="{edit}"]')).to_have_count(1)
+        page.locator(f'[data-artwork-edit="{edit}"]').evaluate_all("""async (nodes, source) => {
+          const original=new Image();original.src='/'+source;await original.decode();
+          nodes.forEach(node=>node.querySelector('image').setAttribute('href',source));
+        }""", "office-meeting-open.png" if edit == "divider" else "office-modern.png")
+        original = world.screenshot(animations="disabled")
+        result = page.evaluate("""async ({edited,original,polygons,subject}) => {
+          const decode = async text => createImageBitmap(new Blob([Uint8Array.from(atob(text),c=>c.charCodeAt(0))]));
+          const first = await decode(edited), second = await decode(original);
+          const canvas = document.createElement('canvas'); canvas.width=first.width; canvas.height=first.height;
+          const context = canvas.getContext('2d');
+          context.drawImage(first,0,0); const a=context.getImageData(0,0,first.width,first.height).data;
+          context.clearRect(0,0,first.width,first.height); context.drawImage(second,0,0);
+          const b=context.getImageData(0,0,first.width,first.height).data;
+          const sx=first.width/1536, sy=first.height/1024;
+          const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+          svg.style.cssText='position:absolute;width:0;height:0;pointer-events:none';
+          document.body.append(svg);
+          const regions=polygons.map(points=>{
+            const region=document.createElementNS(svg.namespaceURI,'polygon');
+            region.setAttribute('points',points.map(p=>p.join(',')).join(' '));
+            // Fractional SVG clipping can cover the raster pixel along the measured boundary.
+            region.setAttribute('stroke-width',3/Math.min(sx,sy));svg.append(region);return region;
+          });
+          let inside=0,other=0,outside=0;const outside_sample=[];
+          for(let row=0;row<first.height;row++)for(let col=0;col<first.width;col++) {
+            const i=(row*first.width+col)*4;
+            if(a[i]===b[i]&&a[i+1]===b[i+1]&&a[i+2]===b[i+2]&&a[i+3]===b[i+3])continue;
+            const point=new DOMPoint((col+.5)/sx,(row+.5)/sy);
+            const contains=region=>region.isPointInFill(point)||region.isPointInStroke(point);
+            if(contains(regions[subject]))inside++;
+            else if(regions.some(contains))other++;
+            else {outside++;if(outside_sample.length<24)outside_sample.push({x:col,y:row,
+              a:[...a.slice(i,i+4)],b:[...b.slice(i,i+4)]});}
+          }
+          svg.remove();first.close();second.close();return {inside,other,outside,outside_sample};
+        }""", {"edited": base64.b64encode(edited).decode(), "original": base64.b64encode(original).decode(),
+                "polygons": polygons,"subject":list(inputs).index(edit)})
+        assert result["inside"] > 1000, result
+        if result["outside"]:
+            (tmp_path / "edited.png").write_bytes(edited)
+            (tmp_path / "original.png").write_bytes(original)
+            (tmp_path / "pixel-difference.json").write_text(json.dumps(result,indent=2)+"\n")
+        assert result["outside"] == 0, result
+        assert not errors
+        browser.close()
+
+
+def test_wall_display_has_no_floor_stand_remnants(tmp_path):
+    annotation = json.loads((Path(__file__).parents[2] / "docs/design/meeting-divider-annotations.json").read_text())
+    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
+        browser, page, errors = open_page(driver, hq.url + "/?demo=seats", 1900)
+        playwright.expect(page.locator("#characters .agent.seated")).to_have_count(60)
+        page.locator("#setting-daylight").select_option("day", force=True)
+        page.add_style_tag(content="#world {position:fixed!important;left:0!important;top:0!important;"
+                           "width:1536px!important;transform:none!important}"
+                           "#world > :not(.office-art):not(.artwork-patch){visibility:hidden!important}")
+        world = page.locator("#world")
+        assert world.bounding_box()["width"] == 1536
+        screenshot = world.screenshot(animations="disabled")
+        result = page.evaluate("""async ({rendered,samples,source}) => {
+          const png=await createImageBitmap(new Blob([Uint8Array.from(atob(rendered),c=>c.charCodeAt(0))]));
+          const expected=new Image();expected.src='/'+source;await expected.decode();
+          const canvas=document.createElement('canvas');canvas.width=1536;canvas.height=1024;
+          const ctx=canvas.getContext('2d');ctx.drawImage(png,0,0);
+          const actual=samples.map(([x,y])=>[...ctx.getImageData(x,y,1,1).data]);
+          ctx.clearRect(0,0,1536,1024);ctx.drawImage(expected,0,0);
+          const wanted=samples.map(([x,y])=>[...ctx.getImageData(x,y,1,1).data]);
+          png.close();return actual.map((pixel,i)=>({point:samples[i],actual:pixel,expected:wanted[i],
+            error:Math.max(...pixel.map((value,c)=>Math.abs(value-wanted[i][c])))}));
+        }""", {"rendered":base64.b64encode(screenshot).decode(),
+                 "samples":annotation["removed_stand_samples"],"source":Path(annotation["source"]).name})
+        (tmp_path / "stand-pixels.json").write_text(json.dumps(result,indent=2)+"\n")
+        if any(row["error"] > 3 for row in result):
+            (tmp_path / "stand-remnants.png").write_bytes(screenshot)
+        assert all(row["error"] <= 3 for row in result), result
+        assert not errors
+        browser.close()
+
+
+def test_empty_office_fades_original_and_edited_artwork_together(tmp_path):
+    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
+        browser, page, errors = open_page(driver, hq.url)
+        playwright.expect(page.locator("#scene.is-empty")).to_have_count(1)
+        page.locator("#setting-daylight").select_option("day",force=True)
+        page.clock.pause_at(page.evaluate("Date.now()+100"))
+        page.add_style_tag(content="#characters,#characters *,.office-cat,.office-cat *,.scene-empty,.scene-empty * {visibility:hidden!important}")
+        world = page.locator("#world")
+        empty = world.screenshot(animations="disabled")
+        rect = world.bounding_box()
+        hidden = page.add_style_tag(content="#world,#world * {visibility:hidden!important}")
+        backdrop = page.screenshot(clip=rect,animations="disabled")
+        hidden.evaluate("node=>node.remove()")
+        hq.send(payload=roster(hq,[("alpha",1)],"working"))
+        playwright.expect(page.locator("#characters .agent")).to_have_count(1)
+        playwright.expect(page.locator("#scene.is-empty")).to_have_count(0)
+        occupied = world.screenshot(animations="disabled")
+        result = page.evaluate("""async ({empty,backdrop,occupied}) => {
+          const images=await Promise.all([empty,backdrop,occupied].map(async text=>
+            createImageBitmap(new Blob([Uint8Array.from(atob(text),c=>c.charCodeAt(0))]))));
+          const [first]=images,canvas=document.createElement('canvas');canvas.width=first.width;canvas.height=first.height;
+          const ctx=canvas.getContext('2d'),data=images.map(image=>{
+            ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);
+            return ctx.getImageData(0,0,canvas.width,canvas.height).data;
+          });
+          // Static wall, Fika and floor samples measure the complete scene opacity.
+          const samples=[[1015,265],[1190,360],[1300,285],[1128,760],[600,600]];
+          const screens=[...document.querySelectorAll(".presentation-layer [data-presentation-screen]")]
+            .map(node=>document.getElementById(node.getAttribute("clip-path").slice(5,-1)).querySelector("polygon"));
+          if(samples.some(point=>screens.some(screen=>screen.isPointInFill(new DOMPoint(...point)))))
+            throw new Error("Static fade samples intersect a presentation screen");
+          const rows=samples.map(([x,y])=>{
+            const col=Math.floor(x/1536*first.width),row=Math.floor(y/1024*first.height),i=(row*first.width+col)*4;
+            const actual=[...data[0].slice(i,i+3)],normal=[...data[2].slice(i,i+3)],background=[...data[1].slice(i,i+3)];
+            const expected=normal.map((v,c)=>.45*v+.55*background[c]);
+            return {source:[x,y],error:Math.max(...actual.map((v,c)=>Math.abs(v-expected[c])))};
+          });
+          images.forEach(image=>image.close());return rows;
+        }""", {name:base64.b64encode(value).decode() for name,value in
+               [("empty",empty),("backdrop",backdrop),("occupied",occupied)]})
+        maximum = max(row["error"] for row in result)
+        if maximum > 3:
+            for name,value in [("empty",empty),("backdrop",backdrop),("occupied",occupied)]:
+                (tmp_path / (name+".png")).write_bytes(value)
+        # Three 8-bit channel levels accommodate native raster and compositing quantization.
+        assert maximum <= 3, result
+        assert not errors
+        browser.close()
+
+
+def test_meeting_geometry_matches_image_annotations(tmp_path):
+    annotation = json.loads((Path(__file__).parents[2] / "docs/design/meeting-open-annotations.json").read_text())
+    divider = json.loads((Path(__file__).parents[2] / "docs/design/meeting-divider-annotations.json").read_text())
+    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(**launch_options())
+        page = browser.new_page()
+        page.goto(hq.url + "/favicon.svg")
+        actual = page.evaluate("""async () => {
+          const {GEOMETRY}=await import('/office-modern-data.js');
+          const {SEATS,WALK_SURFACES,FRAMES,LAMPS}=await import('/office-layout.js');
+          return {contacts:GEOMETRY.contacts,surfaces:GEOMETRY.surfaces,tabletops:GEOMETRY.tabletops,
+            seats:Object.fromEntries(SEATS.filter(s=>s.kind==='meeting').map(s=>[s.sourceId,
+              {hip:s.hip,ground_y:s.groundY,support_y:s.supportY}])),
+            walking:WALK_SURFACES.map(s=>s.footprint),frames:FRAMES.map(f=>f.name),lamps:LAMPS};
+        }""")
+        assert actual["contacts"].get("meeting-separator") == divider["divider_contact"]
+        assert divider["removed_contact"] not in actual["contacts"]
+        surface = next(item for item in actual["surfaces"] if item["name"] == "meeting-separator")
+        assert surface["polygon"] == divider["divider_face"]
+        assert surface["depth"] == divider["divider_depth"]
+        assert "meeting-separator" in actual["walking"]
+        assert divider["removed_contact"] not in actual["walking"]
+        for name in set(annotation["removed_contacts"]) - {"meeting-separator"}:
+            assert name not in actual["contacts"], name
+            assert name not in actual["walking"], name
+        assert actual["contacts"]["north-meeting-west"] == annotation["upper_left_wall"]
+        assert len(actual["seats"]) == 12
+        for key, seat in annotation["seats"].items():
+            assert actual["seats"][key] == {name:seat[name] for name in ("hip","ground_y","support_y")}
+        for name, polygon in annotation["tabletops"].items():
+            assert actual["tabletops"][name] == polygon
+        assert not {"meeting-north","meeting-east"}.intersection(actual["frames"])
+        assert [1084,183,35] not in actual["lamps"] and [1284,330,35] not in actual["lamps"]
+        page.goto(hq.url + "/?demo=seats")
+        playwright.expect(page.locator("#characters .agent.seated")).to_have_count(60)
+        page.locator("#setting-daylight").select_option("night",force=True)
+        glass = page.evaluate("""sample => {
+          const polygons=[...document.querySelectorAll('#office-window-glass polygon')];
+          return {last:polygons.at(-1).getAttribute('points'),
+            solid:polygons.some(node=>node.isPointInFill(new DOMPoint(...sample))),
+            period:document.querySelector('#scene').dataset.daylight,
+            stars:Number(getComputedStyle(document.querySelector('.night-sky')).opacity)};
+        }""",divider["solid_wall_samples"][1])
+        assert glass["last"] == " ".join(",".join(map(str,point)) for point in divider["perimeter_glass"])
+        assert not glass["solid"]
+        assert glass["period"] == "night" and glass["stars"] > 0
         browser.close()
 
 
@@ -129,7 +327,8 @@ def test_figures_follow_furniture_depth_layers(tmp_path, scenario):
         if scenario == "teams":
             full_tables(hq)
         if scenario == "desks":
-            payload = roster(hq, state="working")
+            # Three Projects exercise standing Contractors behind foreground furniture as well as clear spots.
+            payload = roster(hq, [("alpha", 8), ("bravo", 8), ("charlie", 4)], "working")
             for agent in payload["agents"]:
                 hire(hq, payload, agent["agent_id"], 2)
             hq.send(payload=payload)
