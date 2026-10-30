@@ -2,8 +2,8 @@
 const NS = "http://www.w3.org/2000/svg";
 const WIDTH = 100, HEIGHT = 60;
 const SCREENS = [
-  { id: "meeting", quad: [[1016,153],[1068,123],[1068,161],[1016,191]], interval: [16000,24000] },
-  { id: "meeting-east", quad: [[1232,299],[1284,268],[1284,310],[1232,341]], interval: [25000,33000] },
+  { id: "meeting", quad: [[1016,152],[1070,118],[1070,162],[1016,196]], interval: [16000,24000] },
+  { id: "meeting-east", quad: [[1232,298],[1286,262],[1286,307],[1232,343]], interval: [25000,33000] },
 ];
 const HEADER = '<rect width="100" height="60" fill="#edf1ed"/><rect width="100" height="8" fill="#536d7c"/>'
   + '<rect x="6" y="3" width="22" height="2" fill="#edf1ed"/>';

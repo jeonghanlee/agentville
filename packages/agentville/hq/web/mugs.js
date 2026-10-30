@@ -31,6 +31,16 @@ export const DRINKS = ["coffee", "tea", "juice", "water", "soda", "milk"];
 export const HOT_DRINKS = new Set(["coffee", "tea"]);
 const GLASS = '<path d="M2.4 1.6h6.2L8 12.2q-2.5 1-5 0Z" fill="#eef4ef" fill-opacity=".55" stroke="#9fb0a6" stroke-width=".6"/>';
 const GLINT = '<path d="M3.4 3v7" stroke="#ffffff" stroke-opacity=".7" stroke-width=".55"/>';
+const FOODS = {
+  spaghetti: '<ellipse cx="6" cy="7" rx="4.4" ry="3" fill="#f3d894"/><path d="M3 6q4-3 6 1M3 8q4-3 6 1" fill="none" stroke="#c8783c" stroke-width=".8"/>',
+  pasta: '<ellipse cx="6" cy="7" rx="4.4" ry="3" fill="#e7bb67"/><path d="M3 6h2v2H3Zm3-1h2v2H6Zm1 3h2v2H7Z" fill="#d96f4c"/>',
+  pizza: '<path d="M2 3h8L6 11Z" fill="#e9b65e" stroke="#b97836" stroke-width=".5"/><circle cx="5" cy="5" r=".8" fill="#bc4f41"/><circle cx="7" cy="6" r=".8" fill="#bc4f41"/>',
+  hamburger: '<path d="M2 6q0-4 4-4t4 4Z" fill="#db9d52"/><path d="M2 7h8v2H2Z" fill="#76503b"/><path d="M2 9h8v2H2Z" fill="#d89c54"/><path d="M2 8h8" stroke="#79a454"/>',
+  danish: '<circle cx="6" cy="7" r="4" fill="#d49a55"/><circle cx="6" cy="7" r="2" fill="#eab95c"/><circle cx="6" cy="7" r="1" fill="#c85e52"/>',
+  croissant: '<path d="M2 5q1-3 4-2t4 2q-1 5-4 5T2 5Z" fill="#d8a056" stroke="#b5793d" stroke-width=".5"/><path d="M4 4 3 8M6 3 6 10M8 4l1 4" stroke="#f1c37f" stroke-width=".6"/>',
+  gimbap: '<circle cx="4" cy="7" r="2.5" fill="#34463d"/><circle cx="8" cy="7" r="2.5" fill="#34463d"/><circle cx="4" cy="7" r="1.6" fill="#f4e9cb"/><circle cx="8" cy="7" r="1.6" fill="#f4e9cb"/><path d="M4 6h1v2H4Zm4 0h1v2H8Z" fill="#e79055"/>',
+  ramen: '<path d="M1 6h10q-1 5-5 5T1 6Z" fill="#e4ddd0" stroke="#a48e7e" stroke-width=".5"/><ellipse cx="6" cy="6" rx="5" ry="2" fill="#dfb56b"/><path d="M3 6q2-2 4 0t2 0" fill="none" stroke="#f6e2aa" stroke-width=".7"/>',
+};
 
 function glassArtwork(kind) {
   if (kind === "juice") return GLASS + '<path d="M2.7 4.2h5.6L8 12q-2.5.9-5 0Z" fill="#f0a238"/><path d="M2.8 4.2h5.4" stroke="#f7c66a" stroke-width=".6"/>'
@@ -52,6 +62,7 @@ function sodaArtwork() {
 // One drink artwork, either a mug design index or a { kind, mug } lounge drink.
 export function drinkArtwork(cup, x, y) {
   if (typeof cup !== "object" || cup === null) return mugArtwork(cup, x, y);
+  if (cup.kind === "food" && FOODS[cup.food]) return '<svg class="coffee-cup" data-food="' + cup.food + '" x="' + x + '" y="' + y + '" width="5.5" height="5.5" viewBox="0 0 12 14">' + FOODS[cup.food] + '</svg>';
   const kind = DRINKS.includes(cup.kind) ? cup.kind : "coffee";
   if (kind === "coffee" || kind === "tea") {
     const mug = mugArtwork(cup.mug, x, y).replace('data-cup="', 'data-drink="' + kind + '" data-cup="');

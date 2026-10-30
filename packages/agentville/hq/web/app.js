@@ -1,5 +1,5 @@
 // Branch-provided strings are rendered through text nodes, never as markup.
-import { icon, character, avatarColor, prepareAppearances } from "./art.js";
+import { icon, character, catArtwork, avatarColor, prepareAppearances } from "./art.js";
 import { applyLayoutMetrics, RECLINING_WIDTH, ACTOR_SCALE, ACTOR_WIDTH, ACTOR_VIEW, CONTRACTOR_WIDTH, PROJECTS_PER_PAGE,
   floorDepth } from "./layout.js";
 import { ROOM_LAYOUT, WAITING_SPOTS, SEATS, MEETING_ROOMS, ENTRANCE } from "./office-layout.js";
@@ -52,7 +52,7 @@ const MIN_ZOOM = 100, MAX_ZOOM = 175, ZOOM_STEP = 25;
 const $ = (id) => document.getElementById(id);
 const keyOf = (branch, id) => JSON.stringify([branch, id]);
 let current = EMPTY, connected = false, view = "office", branchId = "", floor = 0;
-let stateFilter = "all", roomFilter = "", selected = "", zoom = 100;
+let stateFilter = "all", roomFilter = "", selected = "", selectedCat = null, zoom = 100;
 let events = [], eventKeys = new Set(), reconnectTimer = null, activeSocket = null, everOpened = false, failedOpens = 0;
 const actors = new Map();
 const companions = new Map();
@@ -318,6 +318,8 @@ function avatar(row) {
     character(row.key, "idle", "", row.agent.condition));
 }
 function selectEmployee(key) {
+  selectedCat = null;
+  cats?.select("");
   const all = rows();
   const row = all.find((r) => r.key === key);
   if (row && !["common", "fika"].includes(roomOf(row))) {
@@ -325,6 +327,11 @@ function selectEmployee(key) {
     if (index >= 0) floor = Math.floor(index / PROJECTS_PER_PAGE);
   }
   selected = key;
+  render();
+}
+function selectCat(name, coat) {
+  selectedCat = { name, coat };
+  cats?.select(name);
   render();
 }
 function focusKey() { return document.activeElement?.dataset?.focusKey; }
@@ -462,7 +469,7 @@ function moveWalker(key, target) {
     ...(target.approach ? [target.foot] : [])].filter((point, i, all) => i === 0 || distance(point, all[i-1]) > .01);
   if (path.length < 2) return null;
   const visit = coffee?.get(key);
-  walkers.start(key, path, () => coffee?.arrived(key), visit?.phase === "walking-back");
+  walkers.start(key, path, () => coffee?.arrived(key), visit?.phase === "walking-back" && visit.carry);
   return walkers.get(key);
 }
 // Where each shown colleague's Contractors go: seats at the colleague's meeting or team table (with "+N" for those
@@ -592,7 +599,7 @@ function renderCharacters(ctx) {
       const visible = passes(row);
       const condition = CONDITIONS.includes(row.agent.condition) ? row.agent.condition : "normal";
       node.className = ["agent", row.state, row.detail, condition, row.verified ? "" : "unverified",
-        selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
+        !selectedCat && selected === row.key ? "selected" : "", visible ? "" : "filtered"].join(" ");
       const reset = resetLabel(row), done = showsDone(row);
       // Contractors without a chair at the colleague's table are counted on the colleague or its last seated Contractor.
       const table = seatedContractors.get(row.key);
@@ -600,7 +607,7 @@ function renderCharacters(ctx) {
       node.setAttribute("aria-label", row.name + ", " + stateName(row.state) + (row.verified ? "" : t("state.unverifiedSuffix"))
         + (done && row.state !== "completed" ? ", " + stateName("completed") : "") + (reset ? ", " + reset : "") + ", " + row.project
         + (unseated ? t("contractor.more", { n: unseated }) : ""));
-      node.setAttribute("aria-pressed", String(row.key === selected));
+      node.setAttribute("aria-pressed", String(!selectedCat && row.key === selected));
       node.tabIndex = visible ? 0 : -1;
       const visit = coffee?.get(row.key);
       const waitingIndex = shownWaiting.indexOf(row.key);
@@ -617,6 +624,7 @@ function renderCharacters(ctx) {
       node.dataset.room = room;
       node.dataset.seatFacing = desk;
       node.dataset.coffeePhase = visit?.phase || (walk ? "walking" : "");
+      node.dataset.kitchenAction = visit?.action || "";
       node.dataset.coffeeFacing = walk?.facing || (counter ? "right" : "");
       node.dataset.walkView = walk?.view || "";
       node.style.setProperty("--walk-phase", String(walk?.phase ?? 0));
@@ -634,7 +642,7 @@ function renderCharacters(ctx) {
       const drink = row.detail === "fika" && lounge ? lounge.drink(row.key, row.agent.agent_id) : null;
       const cup = visit?.drink || drink || coffee?.cup(row.key);
       const detail = walk ? (walk.carrying ? "coffee-cup" : "coffee-walk")
-        : counter ? (visit.phase === "waiting" ? "coffee-wait" : "coffee-walk") : row.detail;
+        : counter ? (visit.phase === "waiting" ? "coffee-wait-" + visit.action : "coffee-walk") : row.detail;
       // Limited Employees switch off the visible desk screen, or show a small dark monitor when none is visible.
       const glass = row.state === "limited" && !visit && !spot ? place.screen : null;
       if (row.state === "limited" && !visit && !spot && place?.kind === "desk") darkDesks.add(place.sourceId);
@@ -656,7 +664,7 @@ function renderCharacters(ctx) {
         screen.style.zIndex = String(seat[3] - 1);
       }
       const atTable = room.startsWith("meeting") || away.has(row.key);
-      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, room, place?.id, row.activity?.tool, node.dataset.queuePosition,
+      const appearance = JSON.stringify([currentLanguage(), row.state, detail, condition, desk, workstation, cup, room, place?.id, row.activity?.tool, node.dataset.queuePosition, visit?.action,
         row.name, row.agent.provider, row.branchName, row.agent.branch_id === branchId, reset, done, Boolean(glass), atTable, unseated]);
       if (node.dataset.appearance !== appearance) {
         const name = el("span", { class: "agent-name" }, badge(row.agent.provider), row.name,
@@ -673,7 +681,8 @@ function renderCharacters(ctx) {
         if (row.state === "limited" && !glass) children.push(screenOffSprite());
         if (done) children.push(el("span", { class: "done-check", title: stateName("completed") }, icon("check")));
         if (counter && visit.phase === "waiting") children.push(el("span", { class: "coffee-status" },
-          t({ coffee: "coffee.brewing", tea: "drink.steeping" }[visit.drink?.kind || "coffee"] || "drink.pouring")));
+          t({ water: "kitchen.water", sink: "kitchen.wash", fridge: "kitchen.fridge", microwave: "kitchen.microwave" }[visit.action]
+            || { coffee: "coffee.brewing", tea: "drink.steeping" }[visit.drink?.kind || "coffee"] || "drink.pouring")));
         if (spot) children.push(el("span", { class: "queue-status" },
           t(room === "infirmary" ? "queue.bed" : "queue.seat") + " / " + node.dataset.queuePosition));
         node.replaceChildren(...children);
@@ -762,7 +771,7 @@ function renderContractors(helpers, hired) {
       const walk = chair ? moveWalker(id, placeOf(chair, null)) : null;
       const sitting = chair && !walk;
       companion.className = ["contractor", state, row.verified ? "" : "unverified", visible ? "" : "filtered",
-        sitting ? "seated-contractor" : ""].join(" ");
+        sitting ? "seated-contractor" : "", walk ? "walking" : ""].join(" ");
       companion.dataset.seat = sitting ? chair.id : "";
       companion.dataset.seatFacing = sitting ? chair.facing : "standing";
       companion.setAttribute("aria-label", t("contractor.label", { provider: providerName(contractor.provider), name: row.name, state: stateName(state) })
@@ -801,6 +810,7 @@ function renderContractors(helpers, hired) {
       : free || followingFoot(seatFoot(place), i);
     // A Contractor returning from a table walks back beside the desk.
     const back = moveWalker(id, { foot, approach: null });
+    companion.classList.toggle("walking", Boolean(back));
     show(companion, back ? [back.x, back.y] : foot, back ? back.depth : walkerDepth(...foot));
     if (measured) standingPlaced.push(contractorBoxes(companion, foot, world));
   }
@@ -808,6 +818,7 @@ function renderContractors(helpers, hired) {
     companion.style.left = foot[0] + "%";
     companion.style.top = foot[1] + "%";
     companion.style.zIndex = String(depth);
+    updateWalkerOcclusion(companion, foot[0], foot[1]);
   }
 }
 
@@ -820,8 +831,18 @@ function renderTeam(ctx) {
       el("span", { class: "teammate-project" }, row.project + (row.agent.branch_id === branchId ? "" : " / " + row.branchName))),
     el("span", { class: "teammate-state" }, stateLabel(row), el("time", { datetime: row.since }, age(row.since)))],
     "teammate", () => selectEmployee(row.key),
-    { "aria-pressed": String(row.key === selected), "data-focus-key": "team-" + row.key }))
+    { "aria-pressed": String(!selectedCat && row.key === selected), "data-focus-key": "team-" + row.key }))
     : [el("div", { class: "empty-list" }, t(ctx.present.length ? "team.noMatch" : "team.none"))]));
+  if (selectedCat) {
+    const { name, coat } = selectedCat;
+    $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, t("cat.detail")),
+      el("div", { class: "detail-top" }, el("span", { class: "cat-detail-avatar" }, catArtwork(coat)),
+        el("div", {}, el("strong", {}, t("cat." + name)), el("small", {}, t("cat.office")))),
+      el("p", { class: "detail-note" }, t("cat." + name + ".description")),
+      el("dl", { class: "detail-grid" }, el("div", {}, el("dt", {}, t("cat.likes")),
+        el("dd", {}, t("cat." + name + ".likes")))));
+    return;
+  }
   const row = ctx.present.find((r) => r.key === selected);
   if (!row) {
     $("employee-detail").replaceChildren(el("p", { class: "detail-eyebrow" }, t("detail.eyebrow")),
@@ -1410,7 +1431,7 @@ lounge = createLounge($("characters"), { motionAllowed });
 for (const { id } of MEETING_ROOMS) meetingLounges.set(id,
   createLounge($("characters"), { motionAllowed, room: id, conversationOnly: true }));
 walkers = createWalkers($("characters"), { motionAllowed, changed: render });
-coffee = createCoffeeBreaks($("characters"),render,lounge);
+coffee = createCoffeeBreaks($("characters"),render,lounge,displayZone);
 notifications = createNotifications({ toggle: $("setting-notify"), status: $("setting-notify-status"), demo: DEMO, open: openNotified });
 lifecycleControls = createLifecycle({ canClose: () => !DEMO && connected && !replay?.active,
   refresh: async () => {
@@ -1431,7 +1452,7 @@ if (DEMO) {
   $("demo-note").hidden = false;
 }
 changeZoom(100);
-cats = createOfficeCats($("characters"));
+cats = createOfficeCats($("characters"), selectCat);
 applyLanguage();
 decor = mountDecor($("world"));
 furniture = mountFurniture($("world"));

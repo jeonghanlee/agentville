@@ -67,8 +67,10 @@ export function createLounge(root, { motionAllowed, room = "fika", conversationO
   // A counter visit sometimes switches drinks; coffee and tea get a different mug.
   function refill(key) {
     const current = drink(key);
-    const kind = Math.random() < DRINK_CHANGE ? pick(DRINKS.filter((name) => name !== current.kind)) : current.kind;
-    const mug = (current.mug + 1 + Math.floor(Math.random() * (MUGS.length - 1))) % MUGS.length;
+    const previousKind = DRINKS.includes(current.kind) ? current.kind : "coffee";
+    const kind = Math.random() < DRINK_CHANGE ? pick(DRINKS.filter((name) => name !== previousKind)) : previousKind;
+    const previous = Number.isInteger(current.mug) ? current.mug : profile(key, key).drink.mug;
+    const mug = (previous + 1 + Math.floor(Math.random() * (MUGS.length - 1))) % MUGS.length;
     return { kind, mug };
   }
   function nodeOf(key) {

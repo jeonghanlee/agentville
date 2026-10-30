@@ -4,7 +4,11 @@ import { GRAPH } from "./office-modern-graph.js";
 import { pointPercent } from "./layout.js";
 
 export const FLOOR = GEOMETRY.floor.map(pointPercent);
-export const FOOTPRINTS = Object.fromEntries(Object.entries(GEOMETRY.contacts).map(([name, points]) => [name, points.map(pointPercent)]));
+export const FOOTPRINTS = Object.fromEntries(Object.entries({ ...GEOMETRY.contacts,
+  "cat-bed-cheese": [[448,723],[456,713],[476,710],[489,718],[492,733],[483,748],[464,751],[450,742]],
+  "cat-bed-pepper": [[488,753],[495,742],[516,739],[529,747],[532,762],[522,777],[503,780],[490,771]],
+  "cat-bowls": [[441,770],[459,769],[483,774],[486,784],[483,797],[459,798],[441,790]],
+}).map(([name, points]) => [name, points.map(pointPercent)]));
 export const NODES = GRAPH.nodes;
 export const LINKS = GRAPH.links;
 export const COFFEE_NODE = "coffee";
@@ -65,10 +69,7 @@ export const WINDOWS = [
   "485,65 583,119 583,157 485,103", "686,118 801,52 801,100 686,166",
   "842,64 938,117 938,153 842,102", "1118,65 1480,273 1480,348 1338,266 1338,213 1324,205 1282,234 1118,139",
 ];
-export const LAMPS = [[181,247,28],[193,300,28],[249,337,28],[425,112,28],[480,139,28],
-  [436,165,28],[493,196,28],[791,107,28],[850,138,28],[800,161,28],[855,196,28],
-  [557,307,28],[619,342,28],[684,378,28],[750,417,28],[664,327,28],[727,364,28],[794,401,28],
-  [315,493,35]];
+export const LAMPS = [[315,493,35]];
 export const FRAMES = [
   { name: "window-west", quad: [[299,149],[320,137],[320,172],[299,185]], depth: 1 },
   { name: "lounge", quad: [[249,482],[283,463],[283,501],[249,521]], depth: 1 },

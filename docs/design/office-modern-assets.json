@@ -2,14 +2,15 @@
   "tool": "OpenAI built-in image generation and editing",
   "assets": {
     "office-modern.png": {
-      "sha256": "329fdfd71eeafdb3369d116609ca23d1feb599fa0b689b59531b8efbc6f5bd04",
+      "sha256": "5613f6e7ac060b3332970a3123315521dad8ca2dd22c0ed05bc5f50ae5d7164e",
       "dimensions": [
         1536,
         1024
       ],
       "mode": "RGBA",
       "prompt": "office-modern-artwork.prompt.txt",
-      "prompt_sha256": "6b89c633adc06b3851abaa3d52c9d5032d0d75c0aa2835306a588d5de24def83"
+      "prompt_sha256": "6b89c633adc06b3851abaa3d52c9d5032d0d75c0aa2835306a588d5de24def83",
+      "composition": "Browser-rendered static office composition at native dimensions"
     },
     "seated-lower-parts.png": {
       "sha256": "16641a40d7e0d14ea706a6e4af58de11877b56b5ea9690304b7b9373c135877c",
@@ -36,8 +37,6 @@
     "office-c-09-unified-seating.png": "e6aee11447d7c2ce5f21767bb457a3f6f7590f87a1080988f2a186a19915883b",
     "office-c-11-expanded-meeting-scale.png": "544834d307b72c895caf85c7273fba663b8337f8b028e3a0d1f807dd8b550af9"
   },
-  "raw_office": "sources/office-modern.png",
-  "raw_runtime_identical": true,
   "capacity": {
     "desk": 20,
     "meeting": 12,

@@ -1,6 +1,6 @@
 {
-  "source": "docs/design/sources/office-modern.png",
-  "sha256": "329fdfd71eeafdb3369d116609ca23d1feb599fa0b689b59531b8efbc6f5bd04",
+  "source": "packages/agentville/hq/web/office-modern.png",
+  "sha256": "5613f6e7ac060b3332970a3123315521dad8ca2dd22c0ed05bc5f50ae5d7164e",
   "dimensions": [
     1536,
     1024
@@ -4175,68 +4175,68 @@
     ],
     "high-east.1-chair": [
       [
-        1373.0,
-        804.0
+        1358.0,
+        820.0
       ],
       [
-        1371.478,
-        807.444
+        1356.478,
+        823.444
       ],
       [
-        1367.142,
-        810.364
+        1352.142,
+        826.364
       ],
       [
-        1360.654,
-        812.315
+        1345.654,
+        828.315
       ],
       [
-        1353.0,
-        813.0
+        1338.0,
+        829.0
       ],
       [
-        1345.346,
-        812.315
+        1330.346,
+        828.315
       ],
       [
-        1338.858,
-        810.364
+        1323.858,
+        826.364
       ],
       [
-        1334.522,
-        807.444
+        1319.522,
+        823.444
       ],
       [
-        1333.0,
-        804.0
+        1318.0,
+        820.0
       ],
       [
-        1334.522,
-        800.556
+        1319.522,
+        816.556
       ],
       [
-        1338.858,
-        797.636
+        1323.858,
+        813.636
       ],
       [
-        1345.346,
-        795.685
+        1330.346,
+        811.685
       ],
       [
-        1353.0,
-        795.0
+        1338.0,
+        811.0
       ],
       [
-        1360.654,
-        795.685
+        1345.654,
+        811.685
       ],
       [
-        1367.142,
-        797.636
+        1352.142,
+        813.636
       ],
       [
-        1371.478,
-        800.556
+        1356.478,
+        816.556
       ]
     ],
     "plant-0": [
@@ -4717,6 +4717,104 @@
       [
         1324,
         277
+      ]
+    ],
+    "cat-bed-cheese": [
+      [
+        448,
+        723
+      ],
+      [
+        456,
+        713
+      ],
+      [
+        476,
+        710
+      ],
+      [
+        489,
+        718
+      ],
+      [
+        492,
+        733
+      ],
+      [
+        483,
+        748
+      ],
+      [
+        464,
+        751
+      ],
+      [
+        450,
+        742
+      ]
+    ],
+    "cat-bed-pepper": [
+      [
+        488,
+        753
+      ],
+      [
+        495,
+        742
+      ],
+      [
+        516,
+        739
+      ],
+      [
+        529,
+        747
+      ],
+      [
+        532,
+        762
+      ],
+      [
+        522,
+        777
+      ],
+      [
+        503,
+        780
+      ],
+      [
+        490,
+        771
+      ]
+    ],
+    "cat-bowls": [
+      [
+        441,
+        770
+      ],
+      [
+        459,
+        769
+      ],
+      [
+        483,
+        774
+      ],
+      [
+        486,
+        784
+      ],
+      [
+        483,
+        797
+      ],
+      [
+        459,
+        798
+      ],
+      [
+        441,
+        790
       ]
     ]
   },
@@ -5984,24 +6082,24 @@
       "id": "fika.27",
       "source_id": "high-east.1",
       "anchor": [
-        1353,
-        744
+        1338,
+        760
       ],
       "facing": "side-left",
       "workstation": null,
       "kind": "high",
-      "support_y": 775,
-      "ground_y": 807,
+      "support_y": 791,
+      "ground_y": 823,
       "own": [
         "high-east-table",
         "high-east.1-chair"
       ]
     }
   ],
-  "patch_source": "packages/agentville/hq/web/office-fika-spacing.png",
-  "patch_sha256": "3a4ebe1b002ae14ed18e16ba817c4f615219b689cd193dab9153ee45a69bf005",
-  "meeting_patch_source": "packages/agentville/hq/web/office-meeting-open.png",
-  "meeting_patch_sha256": "58c4b4a739de9470a1e9b9200ea31ce883128ad949e58de0978f6b6c936cea26",
+  "patch_source": "packages/agentville/hq/web/office-modern.png",
+  "patch_sha256": "5613f6e7ac060b3332970a3123315521dad8ca2dd22c0ed05bc5f50ae5d7164e",
+  "meeting_patch_source": "packages/agentville/hq/web/office-modern.png",
+  "meeting_patch_sha256": "5613f6e7ac060b3332970a3123315521dad8ca2dd22c0ed05bc5f50ae5d7164e",
   "windows": [
     [
       [

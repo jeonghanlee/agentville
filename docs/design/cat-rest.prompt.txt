@@ -1,0 +1,3 @@
+Use case: precise-object-edit
+Asset: office-modern.png
+Move the two existing cat beds and food and water bowls inside the office near the sofa plant. Leave a visible gap between the beds and keep the entrance and main aisle clear. Preserve the office layout, furniture, monitors, image dimensions, style, and transparent background. The selected objects are incorporated into the single office image.

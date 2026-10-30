@@ -10,6 +10,7 @@ from tests.lifecycle_support import HQ
 playwright = playwright_sync()
 SCREENS = ".desk-display-layer [data-desk-screen]"
 ANNOTATIONS = json.loads((Path(__file__).parents[2]/"docs/design/desk-screens-annotations.json").read_text())
+VISIBLE = [f"{area}.{index}" for area in ("window-left", "window-middle", "window-right") for index in (0, 1)] + [f"center.{index}" for index in range(4)]
 
 
 def state(page):
@@ -18,19 +19,19 @@ def state(page):
 
 def check_copies(page):
     rows=page.locator("[data-desk-screen]").evaluate_all("nodes=>nodes.map(n=>({id:n.dataset.deskScreen,slide:n.dataset.slide,power:n.dataset.power,revision:n.dataset.revision,art:n.querySelector('[data-desk-content]').innerHTML}))")
-    for name in ANNOTATIONS["screens"]:
+    for name in VISIBLE:
         copies=[row for row in rows if row["id"]==name]
         assert copies and all(row==copies[0] for row in copies),name
 
 
 @pytest.mark.parametrize("width",[1440,720])
-def test_twenty_desktop_monitors_change_without_repeating(tmp_path,width):
+def test_visible_desktop_monitors_change_without_repeating(tmp_path,width):
     with HQ(tmp_path/"hq.sqlite3") as hq,playwright.sync_playwright() as driver:
         hq.send(payload=roster(hq,[("alpha",1)],"working"))
         browser,page,errors=open_page(driver,hq.url,width,"no-preference")
-        playwright.expect(page.locator(SCREENS)).to_have_count(20)
+        playwright.expect(page.locator(SCREENS)).to_have_count(10)
         polygons=page.locator(SCREENS).evaluate_all("nodes=>Object.fromEntries(nodes.map(n=>[n.dataset.deskScreen,document.getElementById(n.getAttribute('clip-path').slice(5,-1)).querySelector('polygon').getAttribute('points')]))")
-        assert polygons=={name:" ".join(",".join(map(str,p)) for p in quad) for name,quad in ANNOTATIONS["screens"].items()}
+        assert polygons=={name:" ".join(",".join(map(str,p)) for p in ANNOTATIONS["screens"][name]) for name in VISIBLE}
         first=state(page);observed=[first]
         for _ in range(4):
             page.clock.run_for(5000)
@@ -51,9 +52,15 @@ def test_limited_desk_stays_off_until_reported_work_resumes(tmp_path,index):
     with HQ(tmp_path/"hq.sqlite3") as hq,playwright.sync_playwright() as driver:
         hq.send(payload=roster(hq,[("alpha",3)],"working"))
         browser,page,errors=open_page(driver,hq.url,motion="no-preference")
-        playwright.expect(page.locator(SCREENS)).to_have_count(20)
+        playwright.expect(page.locator(SCREENS)).to_have_count(10)
         hq.advance();payload=roster(hq,[("alpha",3)],"working");payload["activities"][index]["state"]="limited";payload["activities"][index]["tool"]="";hq.send(payload=payload)
         screen=page.locator(SCREENS+f'[data-desk-screen="window-left.{index}"]')
+        if index==2:
+            playwright.expect(screen).to_have_count(0)
+            playwright.expect(page.locator(".screen-off-glass")).to_have_count(1)
+            assert not errors
+            browser.close()
+            return
         playwright.expect(screen).to_have_attribute("data-power","off")
         before=screen.get_attribute("data-revision")
         check_copies(page)
@@ -77,7 +84,7 @@ def test_desktop_monitors_pause_for_motion_settings_and_hidden_office(tmp_path):
     with HQ(tmp_path/"hq.sqlite3") as hq,playwright.sync_playwright() as driver:
         hq.send(payload=roster(hq,[("alpha",1)],"working"))
         browser,page,errors=open_page(driver,hq.url)
-        playwright.expect(page.locator(SCREENS)).to_have_count(20)
+        playwright.expect(page.locator(SCREENS)).to_have_count(10)
         before=state(page);page.clock.run_for(20000);assert state(page)==before
         page.emulate_media(reduced_motion="no-preference")
         page.locator("#settings-button").click();page.locator("#setting-motion").uncheck();page.locator(".dialog-done").click()
@@ -97,14 +104,14 @@ def test_desktop_changes_preserve_pixels_outside_measured_glass(tmp_path,width):
     with HQ(tmp_path/"hq.sqlite3") as hq,playwright.sync_playwright() as driver:
         hq.send(payload=roster(hq,[("alpha",1)],"working"))
         browser,page,errors=open_page(driver,hq.url,width,"no-preference",launch_args=["--disable-partial-raster","--disable-gpu-rasterization"])
-        playwright.expect(page.locator(SCREENS)).to_have_count(20)
+        playwright.expect(page.locator(SCREENS)).to_have_count(10)
         page.locator("#setting-daylight").select_option("day",force=True)
         page.add_style_tag(content="#world > :not(.office-art):not(.artwork-patch):not(.furniture-front),[data-presentation-screen]{visibility:hidden!important}")
         before,frame=capture_artwork(page)
         page.clock.run_for(16000)
         after,final_frame=capture_artwork(page)
         assert frame==final_frame
-        result=compare_artwork(page,before,after,list(ANNOTATIONS["screens"].values()),frame)
+        result=compare_artwork(page,before,after,[ANNOTATIONS["screens"][name] for name in VISIBLE],frame)
         (tmp_path/"capture-frame.json").write_text(json.dumps(frame,indent=2)+"\n")
         (tmp_path/"desk-pixels.json").write_text(json.dumps(result,indent=2)+"\n")
         if result["outside"]:

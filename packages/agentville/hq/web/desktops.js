@@ -18,7 +18,10 @@ const VIEWS = [
     + '<rect x="49" y="46" width="5" height="5" fill="#d1bb83"/>',
 ];
 const OFF = '<rect width="100" height="60" fill="#2a312e"/>';
-const states = new Map(DESK_SCREENS.map((screen) => [screen.id, { slide: 0, revision: 0, next: 0, power: true }]));
+const visibleIds = new Set(GEOMETRY.seats.filter((seat) => seat.kind === "desk" && seat.facing === "back")
+  .map((seat) => seat.id));
+const visibleScreens = DESK_SCREENS.filter((screen) => visibleIds.has(screen.id));
+const states = new Map(visibleScreens.map((screen) => [screen.id, { slide: 0, revision: 0, next: 0, power: true }]));
 const depths = new Map(GEOMETRY.seats.filter((seat) => seat.kind === "desk")
   .map((seat) => [seat.id, seat.hip[1] * 10 + (seat.facing === "front" ? 2 : -1)]));
 const delay = () => INTERVAL[0] + Math.random() * (INTERVAL[1] - INTERVAL[0]);
@@ -38,13 +41,13 @@ export function deskArtwork(scope, clips = null) {
     area = [Math.min(...points.map(([x]) => x)), Math.min(...points.map(([,y]) => y)),
       Math.max(...points.map(([x]) => x)), Math.max(...points.map(([,y]) => y))];
   }
-  return DESK_SCREENS.filter((screen) => !area || !(Math.max(...screen.quad.map(([x]) => x)) < area[0]
+  return visibleScreens.filter((screen) => !area || !(Math.max(...screen.quad.map(([x]) => x)) < area[0]
     || Math.min(...screen.quad.map(([x]) => x)) > area[2] || Math.max(...screen.quad.map(([,y]) => y)) < area[1]
     || Math.min(...screen.quad.map(([,y]) => y)) > area[3])).map((screen) => markup(scope, screen)).join("");
 }
 
 export function mountDesktops(world, { motionAllowed, paused }) {
-  for (const screen of DESK_SCREENS) {
+  for (const screen of visibleScreens) {
     const state = states.get(screen.id);
     state.slide = Math.floor(Math.random() * VIEWS.length);
     state.next = Date.now() + delay();

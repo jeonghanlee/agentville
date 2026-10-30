@@ -1,6 +1,6 @@
 {
  "observed_at": "2026-10-24T08:48:38.082780+00:00",
- "source": "docs/design/sources/office-unified.png",
+ "source": "Historical office artwork",
  "source_sha256": "f52a6e68745e0008c74ea1bf85117e1cac4c4e3a010296e13bf40af96a4864b2",
  "units": "original artwork pixels",
  "status": "Independent measurements from the raw artwork; production coordinates are not the annotation source",

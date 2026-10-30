@@ -1,0 +1,15 @@
+{
+  "tool": "OpenAI built-in image_gen",
+  "intent": "precise-object-edit",
+  "input_composition_sha256": "9a31569730c7fbdc82f4a2b26ab1bce6f7e32f5c52fcd3a38bcef2393e580adb",
+  "prompt": "docs/design/lounge-books.prompt.txt",
+  "prompt_sha256": "70cc33f7a680f4d2926bc58c782f7c619bb5a450f58e682dce6ffcec27816db0",
+  "output": "packages/agentville/hq/web/office-lounge-books.png",
+  "output_sha256": "8697abf4aa0f617049281297e9205c9d1cac3b3b9a7e02919561adc829237ce9",
+  "display_bounds": [
+    386,
+    606,
+    66,
+    48
+  ]
+}

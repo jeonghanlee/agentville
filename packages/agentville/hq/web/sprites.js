@@ -218,7 +218,8 @@ function coffeeSprite(look, state, detail, cup) {
   svg.innerHTML = '<g class="coffee-person">' + viewport("coffee-standing" + (look.suffix || "") + ".png",COFFEE_STANDING[look.style],PEOPLE_SIZE,32,43)
     + (detail === "coffee-cup" ? drinkArtwork(cup,21,20) : '') + '</g>';
   const hot = typeof cup !== "object" || cup === null || HOT_DRINKS.has(cup.kind);
-  if (detail === "coffee-wait" && hot) svg.insertAdjacentHTML("beforeend",'<g class="brewing-steam" fill="none" stroke="#f4dfb4" stroke-width=".7" stroke-linecap="round"><path d="M26 15q-2-2 0-4t0-4M29 16q-2-2 0-4"/></g>');
+  if (detail === "coffee-wait-coffee" && hot) svg.insertAdjacentHTML("beforeend",'<g class="brewing-steam" fill="none" stroke="#f4dfb4" stroke-width=".7" stroke-linecap="round"><path d="M26 15q-2-2 0-4t0-4M29 16q-2-2 0-4"/></g>');
+  if (detail === "coffee-wait-sink") svg.insertAdjacentHTML("beforeend",'<g class="washing-dishes"><ellipse cx="24" cy="21" rx="3" ry="2" fill="#f2e8d5" stroke="#a7aaa1" stroke-width=".5"/><path d="M23 17v2m2-3v3" stroke="#a8d7e4" stroke-width=".7"/></g>');
   return svg;
 }
 

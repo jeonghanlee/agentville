@@ -2,35 +2,12 @@
 import { presentationArtwork } from "./presentations.js";
 import { deskArtwork } from "./desktops.js";
 export const ARTWORK = { file: "office-modern.png", width: 1536, height: 1024 };
-export const ARTWORK_PATCHES = [
-  { id: "fika", file: "office-fika-spacing.png", bounds: [1034, 672, 345, 184] },
-  { id: "meeting", file: "office-meeting-open.png", bounds: [950, 60, 586, 540],
-    polygon: [[950,60],[1118,60],[1536,297],[1536,488],[1340,600],[1030,424],[950,378]] },
-  { id: "divider", file: "office-meeting-divider.png", bounds: [1164, 205, 174, 230],
-    polygon: [[1164,311],[1325,205],[1338,213],[1338,288],[1237,358],[1237,390],[1219,403],[1220,418],[1224,422],[1224,428],[1213,435],[1194,435],[1185,429],[1185,420],[1190,414],[1190,411],[1172,427],[1172,395],[1164,388]] },
-  { id: "av-upper-controller", file: "office-meeting-av.png", bounds: [1133, 229, 23, 19] },
-  { id: "av-lower-controller", file: "office-meeting-av.png", bounds: [1325, 364, 23, 19] },
-  { id: "av-upper-camera", file: "office-meeting-av.png", bounds: [1026, 103, 43, 35] },
-  { id: "av-lower-camera", file: "office-meeting-av.png", bounds: [1237, 249, 48, 35] },
-];
-
-// Each measured edit clips its source pixels in every background and furniture layer.
-export function artworkPatch(scope = "base", edits = ARTWORK_PATCHES) {
-  return edits.map((edit) => {
-    const [x, y, width, height] = edit.bounds, id = `${scope}-edit-${edit.id}`;
-    const shape = edit.polygon ? `<polygon points="${edit.polygon.map((p) => p.join(",")).join(" ")}"/>`
-      : `<rect x="${x}" y="${y}" width="${width}" height="${height}"/>`;
-    return `<g data-artwork-edit="${edit.id}"><defs><clipPath id="${id}" clipPathUnits="userSpaceOnUse">${shape}</clipPath></defs>`
-      + `<image href="${edit.file}" width="${ARTWORK.width}" height="${ARTWORK.height}" clip-path="url(#${id})"/></g>`;
-  }).join("");
-}
-
 export function displayArtwork(scope, clips = null) {
   return presentationArtwork(scope) + deskArtwork(scope, clips);
 }
 
 export function artworkImages(scope = "base", clips = null, displays = true) {
-  return `<image href="${ARTWORK.file}" width="${ARTWORK.width}" height="${ARTWORK.height}"/>` + artworkPatch(scope)
+  return `<image href="${ARTWORK.file}" width="${ARTWORK.width}" height="${ARTWORK.height}"/>`
     + (displays ? displayArtwork(scope, clips) : "");
 }
 export const ACTOR_WIDTH = 3.2;

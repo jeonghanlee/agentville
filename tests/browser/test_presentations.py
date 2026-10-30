@@ -1,9 +1,9 @@
 """Real meeting-monitor presentation changes, suspension and shared artwork copies."""
-import base64
 import json
 from pathlib import Path
 import pytest
 from tests.browser.test_seats import open_page, roster
+from tests.browser.paint_compare import capture_artwork, compare_artwork
 from tests.browser_support import playwright_sync
 from tests.lifecycle_support import HQ
 
@@ -106,7 +106,7 @@ def test_meeting_monitors_pause_during_replay(tmp_path):
         page.clock.run_for(24000)
         assert all(a["revision"] > b["revision"] for a,b in zip(state(page),before))
         desk_after = page.locator(".desk-display-layer [data-desk-screen]").evaluate_all("nodes=>nodes.map(n=>n.dataset.revision)")
-        assert len(desk_after) == 20 and all(int(a)>int(b) for a,b in zip(desk_after,desk_before))
+        assert len(desk_after) == 10 and all(int(a)>int(b) for a,b in zip(desk_after,desk_before))
         assert not errors
         browser.close()
 
@@ -116,33 +116,17 @@ def test_changing_slides_preserve_pixels_outside_monitor_interiors(tmp_path, wid
     annotation = json.loads((Path(__file__).parents[2] / "docs/design/meeting-screens-annotations.json").read_text())
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
         hq.send(payload=roster(hq, [("alpha",1)], "working"))
-        browser, page, errors = open_page(driver, hq.url, width, "no-preference")
+        browser, page, errors = open_page(driver, hq.url, width, "no-preference", launch_args=["--disable-partial-raster", "--disable-gpu-rasterization"])
         playwright.expect(page.locator(SCREENS)).to_have_count(2)
         page.locator("#setting-daylight").select_option("day",force=True)
         page.add_style_tag(content="#world > :not(.office-art):not(.artwork-patch):not(.furniture-front),[data-desk-screen]{visibility:hidden!important}")
         polygons = page.locator(SCREENS).evaluate_all("nodes=>nodes.map(n=>document.getElementById(n.getAttribute('clip-path').slice(5,-1)).querySelector('polygon').getAttribute('points'))")
         assert polygons == [" ".join(",".join(map(str,p)) for p in q) for q in annotation["screens"].values()]
-        world = page.locator("#world")
-        before = world.screenshot(animations="disabled")
+        before, frame = capture_artwork(page)
         page.clock.run_for(24500)
-        after = world.screenshot(animations="disabled")
-        result = page.evaluate("""async ({before,after,polygons}) => {
-          const decode=async value=>createImageBitmap(new Blob([Uint8Array.from(atob(value),c=>c.charCodeAt(0))]));
-          const [first,last]=await Promise.all([decode(before),decode(after)]);
-          const canvas=document.createElement('canvas');canvas.width=first.width;canvas.height=first.height;
-          const ctx=canvas.getContext('2d');ctx.drawImage(first,0,0);const a=ctx.getImageData(0,0,first.width,first.height).data;
-          ctx.clearRect(0,0,first.width,first.height);ctx.drawImage(last,0,0);const b=ctx.getImageData(0,0,first.width,first.height).data;
-          const sx=first.width/1536,sy=first.height/1024,ns='http://www.w3.org/2000/svg';
-          const svg=document.createElementNS(ns,'svg');svg.style.cssText='width:0;height:0;position:absolute';document.body.append(svg);
-          const shapes=polygons.map(points=>{const p=document.createElementNS(ns,'polygon');p.setAttribute('points',points.map(v=>v.join(',')).join(' '));p.setAttribute('stroke-width',3/Math.min(sx,sy));svg.append(p);return p;});
-          let inside=0,outside=0;
-          for(let y=0;y<first.height;y++)for(let x=0;x<first.width;x++){
-            const i=(y*first.width+x)*4;if(a[i]===b[i]&&a[i+1]===b[i+1]&&a[i+2]===b[i+2]&&a[i+3]===b[i+3])continue;
-            const point=new DOMPoint((x+.5)/sx,(y+.5)/sy);
-            if(shapes.some(p=>p.isPointInFill(point)||p.isPointInStroke(point)))inside++;else outside++;
-          }
-          svg.remove();first.close();last.close();return {inside,outside};
-        }""", {"before":base64.b64encode(before).decode(),"after":base64.b64encode(after).decode(),"polygons":list(annotation["screens"].values())})
+        after, final_frame = capture_artwork(page)
+        assert frame == final_frame
+        result = compare_artwork(page, before, after, list(annotation["screens"].values()), frame)
         (tmp_path / "monitor-pixels.json").write_text(json.dumps(result,indent=2)+"\n")
         if result["outside"]:
             (tmp_path / "before.png").write_bytes(before)

@@ -85,74 +85,6 @@ def test_simultaneous_seats_keep_figures_apart(tmp_path, scenario, width):
         browser.close()
 
 
-@pytest.mark.parametrize("width", [1440, 720])
-@pytest.mark.parametrize("edit", ["fika", "meeting", "divider"])
-def test_artwork_edits_keep_pixels_outside_approved_regions(tmp_path, width, edit):
-    inputs = {"fika":"fika-spacing-annotations.json","meeting":"meeting-open-annotations.json",
-              "divider":"meeting-divider-annotations.json"}
-    polygons = []
-    for name in inputs.values():
-        annotation = json.loads((Path(__file__).parents[2] / "docs/design" / name).read_text())
-        polygon = annotation.get("display_polygon")
-        if polygon is None:
-            x, y, width_source, height_source = annotation["display_bounds"]
-            polygon = [[x,y],[x+width_source,y],[x+width_source,y+height_source],[x,y+height_source]]
-        polygons.append(polygon)
-    with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
-        browser, page, errors = open_page(driver, hq.url + "/?demo=seats", width)
-        playwright.expect(page.locator("#characters .agent.seated")).to_have_count(60)
-        page.locator("#setting-daylight").select_option("day", force=True)
-        page.add_style_tag(content="#characters { visibility:hidden!important }")
-        world = page.locator("#world")
-        edited = world.screenshot(animations="disabled")
-        playwright.expect(page.locator(f'.artwork-patch [data-artwork-edit="{edit}"]')).to_have_count(1)
-        page.locator(f'[data-artwork-edit="{edit}"]').evaluate_all("""async (nodes, source) => {
-          const original=new Image();original.src='/'+source;await original.decode();
-          nodes.forEach(node=>node.querySelector('image').setAttribute('href',source));
-        }""", "office-meeting-open.png" if edit == "divider" else "office-modern.png")
-        original = world.screenshot(animations="disabled")
-        result = page.evaluate("""async ({edited,original,polygons,subject}) => {
-          const decode = async text => createImageBitmap(new Blob([Uint8Array.from(atob(text),c=>c.charCodeAt(0))]));
-          const first = await decode(edited), second = await decode(original);
-          const canvas = document.createElement('canvas'); canvas.width=first.width; canvas.height=first.height;
-          const context = canvas.getContext('2d');
-          context.drawImage(first,0,0); const a=context.getImageData(0,0,first.width,first.height).data;
-          context.clearRect(0,0,first.width,first.height); context.drawImage(second,0,0);
-          const b=context.getImageData(0,0,first.width,first.height).data;
-          const sx=first.width/1536, sy=first.height/1024;
-          const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-          svg.style.cssText='position:absolute;width:0;height:0;pointer-events:none';
-          document.body.append(svg);
-          const regions=polygons.map(points=>{
-            const region=document.createElementNS(svg.namespaceURI,'polygon');
-            region.setAttribute('points',points.map(p=>p.join(',')).join(' '));
-            // Fractional SVG clipping can cover the raster pixel along the measured boundary.
-            region.setAttribute('stroke-width',3/Math.min(sx,sy));svg.append(region);return region;
-          });
-          let inside=0,other=0,outside=0;const outside_sample=[];
-          for(let row=0;row<first.height;row++)for(let col=0;col<first.width;col++) {
-            const i=(row*first.width+col)*4;
-            if(a[i]===b[i]&&a[i+1]===b[i+1]&&a[i+2]===b[i+2]&&a[i+3]===b[i+3])continue;
-            const point=new DOMPoint((col+.5)/sx,(row+.5)/sy);
-            const contains=region=>region.isPointInFill(point)||region.isPointInStroke(point);
-            if(contains(regions[subject]))inside++;
-            else if(regions.some(contains))other++;
-            else {outside++;if(outside_sample.length<24)outside_sample.push({x:col,y:row,
-              a:[...a.slice(i,i+4)],b:[...b.slice(i,i+4)]});}
-          }
-          svg.remove();first.close();second.close();return {inside,other,outside,outside_sample};
-        }""", {"edited": base64.b64encode(edited).decode(), "original": base64.b64encode(original).decode(),
-                "polygons": polygons,"subject":list(inputs).index(edit)})
-        assert result["inside"] > 1000, result
-        if result["outside"]:
-            (tmp_path / "edited.png").write_bytes(edited)
-            (tmp_path / "original.png").write_bytes(original)
-            (tmp_path / "pixel-difference.json").write_text(json.dumps(result,indent=2)+"\n")
-        assert result["outside"] == 0, result
-        assert not errors
-        browser.close()
-
-
 def test_wall_display_has_no_floor_stand_remnants(tmp_path):
     annotation = json.loads((Path(__file__).parents[2] / "docs/design/meeting-divider-annotations.json").read_text())
     with HQ(tmp_path / "hq.sqlite3") as hq, playwright.sync_playwright() as driver:
@@ -176,7 +108,7 @@ def test_wall_display_has_no_floor_stand_remnants(tmp_path):
           png.close();return actual.map((pixel,i)=>({point:samples[i],actual:pixel,expected:wanted[i],
             error:Math.max(...pixel.map((value,c)=>Math.abs(value-wanted[i][c])))}));
         }""", {"rendered":base64.b64encode(screenshot).decode(),
-                 "samples":annotation["removed_stand_samples"],"source":Path(annotation["source"]).name})
+                 "samples":annotation["removed_stand_samples"],"source":"office-modern.png"})
         (tmp_path / "stand-pixels.json").write_text(json.dumps(result,indent=2)+"\n")
         if any(row["error"] > 3 for row in result):
             (tmp_path / "stand-remnants.png").write_bytes(screenshot)

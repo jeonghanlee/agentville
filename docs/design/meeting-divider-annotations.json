@@ -1,12 +1,11 @@
 {
-  "source": "packages/agentville/hq/web/office-meeting-divider.png",
-  "source_sha256": "95b65799ccec00e9f555e689810973d47e7e354104f4735c7e80cc601e370b17",
+  "source": "packages/agentville/hq/web/office-modern.png",
+  "source_sha256": "5613f6e7ac060b3332970a3123315521dad8ca2dd22c0ed05bc5f50ae5d7164e",
   "dimensions": [
     1536,
     1024
   ],
   "measurement": "Manual source-pixel registration from native Chromium grid inspection of the selected generated image. The mounted black display frame occupies x1226..1290, y257..350.",
-  "restore_source": "office-meeting-open.png",
   "display_polygon": [
     [
       1164,

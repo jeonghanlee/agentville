@@ -1,10 +1,9 @@
-import { FRAMES } from "./office-layout.js";
 import { ARTWORK } from "./layout.js";
 // Branch-specific paintings fill the existing frames; the artwork supplies all four flower arrangements.
 // Choices follow the Branch id, so each Branch looks distinct but stable. No text, logos, or Branch data is drawn.
 const NS = "http://www.w3.org/2000/svg";
 const CELL = 4;
-// Inner edge of each wall frame in office-unified.png pixels: top-left, top-right, bottom-right, bottom-left.
+// Frame coordinates use source-image pixels: top-left, top-right, bottom-right, bottom-left.
 const FLOWER_SPOTS = [];
 const C = {
   cream: "#efe3c8", mat: "#f3ead8", sand: "#e2c9a0", peach: "#eab48a", terracotta: "#c58261", rust: "#a8613f",
@@ -178,15 +177,7 @@ function flower(spot, random) {
 }
 
 export function mountDecor(world) {
-  const walls = FRAMES.map((frame) => {
-    const layer = document.createElementNS(NS, "svg");
-    layer.setAttribute("viewBox", "0 0 1536 1024");
-    layer.setAttribute("class", "wall-art");
-    layer.setAttribute("aria-hidden", "true");
-    layer.style.zIndex = String(frame.depth || 1);
-    world.append(layer);
-    return { frame, layer };
-  });
+  const walls = [];
   const flowers = FLOWER_SPOTS.map((spot) => {
     const layer = document.createElementNS(NS, "svg");
     layer.setAttribute("viewBox", "0 0 1536 1024");

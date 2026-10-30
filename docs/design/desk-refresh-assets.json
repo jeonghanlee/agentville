@@ -1,0 +1,10 @@
+{
+  "tool": "OpenAI built-in image_gen",
+  "intent": "precise-object-edit",
+  "input_composition_sha256": "9a31569730c7fbdc82f4a2b26ab1bce6f7e32f5c52fcd3a38bcef2393e580adb",
+  "prompt": "docs/design/desk-refresh.prompt.txt",
+  "prompt_sha256": "cc0e235db7c7618b598e1ca06e61cdc509fed069ee5ee8ad5df8ed55bd2b50a5",
+  "output": "packages/agentville/hq/web/office-desks-refresh.png",
+  "output_sha256": "f33549ceae5553d739cad0330d5be55338447c6e90f28c138f7bff4b27e375dd",
+  "runtime": "Selected workstation pixels are incorporated into office-modern.png; no separate runtime patch image is loaded."
+}

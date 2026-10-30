@@ -25,6 +25,8 @@ The single floor has 20 desks: three window areas with four places each and a ce
 
 Meeting participants appear at the table on every Project page. Their held desks remain reserved and empty, and their Project filters and colleague details continue to work. Waiting, error, limits, or going off duty ends membership immediately; other non-working states have a 30-second grace period. Meetings are presentation only and do not record collaboration.
 
+Each meeting table has a touch controller, and each wall display has a camera and microphone bar. These are decorations and do not connect to a meeting service. Meeting displays and desk monitors facing the viewer show changing fictional content; reduced motion, replay, and a hidden office pause the changes. A Limited colleague's visible desk monitor stays dark until that state ends.
+
 Fika has 28 places: 16 around two tables, six on two sofas, and six at three high tables. Colleagues fill these places before joining a waiting line. An Error colleague uses a desk and retains the error status; this floor has no infirmary or bed. Live arrivals enter between the sofas and Fika. Colleagues walk between places on the same floor; reduced motion places them directly. `/?demo=seats` and `/?demo=meeting` display all 60 seat ids, including both six-person meetings.
 
 Seated figures keep the proportions of the painted artwork at every zoom level.
@@ -60,7 +62,9 @@ A Codex run that does not use the Codex app-server daemon (e.g. `codex exec`) is
 
 ![Lounge](images/lounge.png)
 
-In the Lounge, colleagues drink, read, and talk to each other with picture bubbles. This is decoration only; it shows no agent data.
+In the Lounge, colleagues drink, read, and talk to each other with picture bubbles. They can visit the coffee machine, water, sink, or refrigerator. During breakfast, lunch, and dinner hours in the Branch time zone, they can collect food from the refrigerator and heat it in the microwave. These activities are decoration; they do not report agent data.
+
+Select Cheese or Pepper in the office to see the cat's name, description, and likes. Each cat roams for about 30 minutes, then returns to its own bed beside the lounge and sleeps for 10 minutes. Food and water bowls are nearby. The cycle pauses when the office is hidden or reduced motion is enabled.
 
 ## Presence
 
@@ -148,6 +152,8 @@ Choose a Branch to see its colleagues with days in that Branch's time zone; "All
 | Demo data | Shown in demo mode (`/?demo=1`): fictional colleagues, HQ data unchanged. "Open live data" returns to HQ. |
 
 The office forecast line shows a condition and Celsius temperature, the forecast issue time, and MET Norway attribution. Unconfigured location, loading, unavailable, and out-of-date data have distinct labels. Expired data does not drive current-weather effects. The forecast is a model result for the configured city, not a local measurement. See [regional forecast setup](install.md#69-configure-regional-forecasts).
+
+A clear daytime forecast gives the view outside a light blue and green tint.
 
 Rain, snow, and cloud effects stay within the painted windows. Reduced motion makes them static. The office artwork, furniture, and colleague proportions remain unchanged. Calendar-season and weather-display choices persist in browser storage when available.
 
